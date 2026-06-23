@@ -30,12 +30,7 @@ const selectedPromptIds = ref<string[]>([])
 const bonusCompetition = ref(false)
 const bonusTeamPromptIds = ref<string[]>([])
 
-onMounted(async () => {
-  await loadConfig()
-  const today = new Date().toISOString().slice(0, 10)
-  startedAt.value = today
-  finishedAt.value = today
-})
+onMounted(loadConfig)
 
 const maxPrompts = computed(() => config.value?.scoringRules.maxPromptsPerBook ?? 5)
 
@@ -102,8 +97,8 @@ async function submit() {
         bookAuthor: bookAuthor.value,
         pageCount: pageCount.value,
         format: format.value,
-        startedAt: startedAt.value,
-        finishedAt: finishedAt.value,
+        startedAt: startedAt.value || null,
+        finishedAt: finishedAt.value || null,
         isReread: isReread.value,
         submissionType: submissionType.value,
         targetTeamId: submissionType.value === 'sabotage' ? targetTeamId.value : undefined,
@@ -188,8 +183,12 @@ function reset() {
               <option value="graphic-novel">Graphic Novel</option>
             </select>
           </label>
-          <label class="field">Started <input v-model="startedAt" type="date" /></label>
-          <label class="field">Finished <input v-model="finishedAt" type="date" /></label>
+          <label class="field">Started <span class="optional">(optional)</span>
+            <input v-model="startedAt" type="date" />
+          </label>
+          <label class="field">Finished <span class="optional">(optional)</span>
+            <input v-model="finishedAt" type="date" />
+          </label>
         </div>
         <label class="checkbox-row">
           <input v-model="isReread" type="checkbox" /> This is a re-read
@@ -382,6 +381,12 @@ h2 {
   color: var(--realm-text-muted);
   font-size: 0.85rem;
   margin-bottom: 1rem;
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--realm-text-muted);
+  font-size: 0.8rem;
 }
 
 .checkbox-row {

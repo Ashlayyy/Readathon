@@ -100,8 +100,8 @@ export type Submission = {
   bookAuthor: string
   pageCount: number
   format: string
-  startedAt: string
-  finishedAt: string
+  startedAt: string | null
+  finishedAt: string | null
   isReread: boolean
   submissionType: 'add' | 'sabotage'
   targetTeamId: string | null

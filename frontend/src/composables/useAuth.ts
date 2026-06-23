@@ -28,12 +28,11 @@ export function useAuth() {
   }
 
   async function login(email: string) {
-    const data = await api<{ user: PublicUser }>('/auth/login', {
+    const data = await api<{ sent: boolean; message: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email }),
     })
-    user.value = data.user
-    return data.user
+    return data
   }
 
   async function logout() {

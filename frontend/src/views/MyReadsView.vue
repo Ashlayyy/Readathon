@@ -89,7 +89,11 @@ onMounted(async () => {
         <p v-if="sub.targetTeamId && config" class="target">
           Attacked {{ config.branding.teams[sub.targetTeamId]?.name }}
         </p>
-        <p class="dates">Read {{ sub.startedAt }} → {{ sub.finishedAt }}</p>
+        <p v-if="sub.startedAt || sub.finishedAt" class="dates">
+          <template v-if="sub.startedAt && sub.finishedAt">Read {{ sub.startedAt }} → {{ sub.finishedAt }}</template>
+          <template v-else-if="sub.startedAt">Started {{ sub.startedAt }}</template>
+          <template v-else>Finished {{ sub.finishedAt }}</template>
+        </p>
         <time>Submitted {{ new Date(sub.createdAt).toLocaleString() }}</time>
       </li>
     </ul>

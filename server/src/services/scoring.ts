@@ -8,14 +8,35 @@ export type SubmissionInput = {
   bookAuthor: string
   pageCount: number
   format: string
-  startedAt: string
-  finishedAt: string
+  startedAt?: string | null
+  finishedAt?: string | null
   isReread: boolean
   submissionType: 'add' | 'sabotage'
   targetTeamId?: string
   promptIds: string[]
   bonusCompetition: boolean
   bonusTeamPromptIds: string[]
+}
+
+function normalizeBook(title: string, author: string) {
+  return {
+    title: title.trim().toLowerCase(),
+    author: author.trim().toLowerCase(),
+  }
+}
+
+export async function findDuplicateSubmission(
+  userId: import('mongoose').Types.ObjectId,
+  bookTitle: string,
+  bookAuthor: string,
+): Promise<boolean> {
+  const { title, author } = normalizeBook(bookTitle, bookAuthor)
+  const existing = await Submission.find({ userId })
+
+  return existing.some((sub) => {
+    const n = normalizeBook(sub.bookTitle, sub.bookAuthor)
+    return n.title === title && n.author === author
+  })
 }
 
 export type ScoreBreakdown = {
@@ -27,13 +48,28 @@ export type ScoreBreakdown = {
   bonusDetails: { id: string; label: string; points: number }[]
 }
 
-export function validateSubmission(user: HydratedDocument<IUser>, input: SubmissionInput): string | null {
+export async function validateSubmission(
+  user: HydratedDocument<IUser>,
+  input: SubmissionInput,
+): Promise<string | null> {
   if (user.status !== 'assigned' || !user.teamId) {
     return 'You must be assigned to a team before submitting.'
   }
 
   if (!input.bookTitle.trim() || !input.bookAuthor.trim()) {
     return 'Book title and author are required.'
+  }
+
+  if (await findDuplicateSubmission(user._id, input.bookTitle, input.bookAuthor)) {
+    return 'You have already submitted this book.'
+  }
+
+  if (input.startedAt?.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(input.startedAt.trim())) {
+    return 'Start date must be YYYY-MM-DD.'
+  }
+
+  if (input.finishedAt?.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(input.finishedAt.trim())) {
+    return 'Finish date must be YYYY-MM-DD.'
   }
 
   if (input.pageCount < 1) {

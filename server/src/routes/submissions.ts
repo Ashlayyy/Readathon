@@ -8,6 +8,11 @@ import {
   type SubmissionInput,
 } from '../services/scoring.js'
 
+function optionalDate(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed || null
+}
+
 export const submissionRoutes = new Hono()
 
 submissionRoutes.get('/mine', async (c) => {
@@ -20,7 +25,7 @@ submissionRoutes.post('/', async (c) => {
   const user = requireAuth(await getSessionUser(c))
   const body = await c.req.json<SubmissionInput>()
 
-  const error = validateSubmission(user, body)
+  const error = await validateSubmission(user, body)
   if (error) return c.json({ error }, 400)
 
   const score = calculateScore(user, body)
@@ -31,8 +36,8 @@ submissionRoutes.post('/', async (c) => {
     bookAuthor: body.bookAuthor.trim(),
     pageCount: body.pageCount,
     format: body.format,
-    startedAt: body.startedAt,
-    finishedAt: body.finishedAt,
+    startedAt: optionalDate(body.startedAt),
+    finishedAt: optionalDate(body.finishedAt),
     isReread: body.isReread,
     submissionType: body.submissionType,
     targetTeamId: body.targetTeamId ?? null,

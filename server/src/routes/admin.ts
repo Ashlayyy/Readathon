@@ -43,20 +43,17 @@ adminRoutes.post('/assign-teams', async (c) => {
 })
 
 adminRoutes.get('/submissions', async (c) => {
-  const rows = await Submission.find()
-    .populate('userId', 'displayName email teamId')
-    .sort({ createdAt: -1 })
-
+  const rows = await Submission.find().sort({ createdAt: -1 })
+  const userIds = [...new Set(rows.map((sub) => sub.userId.toString()))]
+  const users = await User.find({ _id: { $in: userIds } })
+  const userById = new Map(users.map((u) => [u._id.toString(), u]))
   return c.json({
     submissions: rows.map((sub) => {
-      const user = sub.userId as unknown as {
-        displayName?: string
-        email?: string
-        teamId?: string
-      }
+      const user = userById.get(sub.userId.toString())
+
       return {
         ...submissionToPublic(sub),
-        userName: user?.displayName ?? 'Unknown',
+        userName: user?.displayName ?? 'Unknown reader',
         userEmail: user?.email ?? '',
         userTeamId: user?.teamId ?? null,
       }

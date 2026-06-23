@@ -3,7 +3,9 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { sign, verify } from 'hono/jwt'
 import type { Context } from 'hono'
 import { type HydratedDocument } from 'mongoose'
+import { AuthToken } from '../db/models/AuthToken.js'
 import { type IUser, User } from '../db/models/User.js'
+import { generateToken, hashToken, sendMagicLink } from './email.js'
 
 type UserDoc = HydratedDocument<IUser>
 
@@ -22,6 +24,10 @@ function getSessionSecret(): string {
 export function getAdminEmails(): Set<string> {
   const raw = process.env.ADMIN_EMAILS ?? ''
   return new Set(raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean))
+}
+
+export function userIsAdmin(user: IUser): boolean {
+  return getAdminEmails().has(user.email.trim().toLowerCase())
 }
 
 function isAdminEmail(email: string): boolean {
@@ -45,7 +51,7 @@ export function userToPublic(user: IUser) {
     email: user.email,
     teamId: user.teamId,
     status: user.status,
-    isAdmin: Boolean(user.isAdmin),
+    isAdmin: userIsAdmin(user),
   }
 }
 
@@ -87,7 +93,7 @@ export function requireAuth(user: UserDoc | null): UserDoc {
 
 export function requireAdmin(user: UserDoc | null): UserDoc {
   const u = requireAuth(user)
-  if (!u.isAdmin) throw new AuthError('Admin access required')
+  if (!userIsAdmin(u)) throw new AuthError('Admin access required')
   return u
 }
 
@@ -133,12 +139,45 @@ export async function registerWithEmail(displayName: string, email: string): Pro
   return user
 }
 
-export async function loginByEmail(email: string): Promise<UserDoc> {
+export async function loginByEmail(email: string): Promise<void> {
   const normalizedEmail = email.trim().toLowerCase()
   if (!validateEmail(normalizedEmail)) throw new AuthError('Please enter a valid email address')
 
   const user = await User.findOne({ email: normalizedEmail })
-  if (!user) throw new AuthError('No account found with that email. Please sign up first.')
+  if (user) {
+    await requestMagicLink(normalizedEmail)
+  }
+  // Always succeed silently if no account — prevents email enumeration
+}
+
+export async function requestMagicLink(email: string): Promise<void> {
+  const normalizedEmail = email.trim().toLowerCase()
+  const token = generateToken()
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000)
+
+  await AuthToken.deleteMany({ email: normalizedEmail, usedAt: null })
+  await AuthToken.create({
+    email: normalizedEmail,
+    tokenHash: hashToken(token),
+    expiresAt,
+  })
+
+  await sendMagicLink(normalizedEmail, token)
+}
+
+export async function verifyMagicLink(token: string): Promise<UserDoc> {
+  const tokenHash = hashToken(token)
+  const record = await AuthToken.findOne({ tokenHash, usedAt: null })
+
+  if (!record || record.expiresAt < new Date()) {
+    throw new AuthError('This sign-in link is invalid or has expired.')
+  }
+
+  const user = await User.findOne({ email: record.email })
+  if (!user) throw new AuthError('Account not found.')
+
+  record.usedAt = new Date()
+  await record.save()
 
   return applyAdminStatus(user)
 }

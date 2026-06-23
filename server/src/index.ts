@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import { config as loadEnv } from 'dotenv'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { rateLimit } from './middleware/rateLimit.js'
 import { getConfig } from './config.js'
 import { connectDb } from './db/connect.js'
 import { PublishedStandings } from './db/models/PublishedStandings.js'
@@ -26,6 +27,9 @@ app.use(
   }),
 )
 
+const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, keyPrefix: 'write' })
+const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyPrefix: 'admin' })
+
 app.get('/api/health', (c) => c.json({ status: 'ok' }))
 
 app.get('/api/config', (c) => c.json(getConfig()))
@@ -46,9 +50,12 @@ app.get('/api/standings', async (c) => {
 })
 
 app.route('/api/auth', authRoutes)
+app.use('/api/submissions/*', writeLimiter)
 app.route('/api/submissions', submissionRoutes)
+app.use('/api/questions/*', writeLimiter)
 app.route('/api/questions', questionRoutes)
 app.route('/api/profile', profileRoutes)
+app.use('/api/admin/*', adminLimiter)
 app.route('/api/admin', adminRoutes)
 
 const port = Number(process.env.PORT ?? 3001)

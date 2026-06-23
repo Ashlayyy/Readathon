@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { generateCodeVerifier, generateState } from 'arctic'
 import { getCookie, setCookie } from 'hono/cookie'
+import { rateLimit } from '../middleware/rateLimit.js'
 import {
   AuthError,
   clearSession,
@@ -8,9 +9,10 @@ import {
   findOrCreateGoogleUser,
   getGoogleClient,
   getSessionUser,
-  loginByEmail,
   registerWithEmail,
+  loginByEmail,
   userToPublic,
+  verifyMagicLink,
 } from '../services/auth.js'
 import { Question } from '../db/models/Question.js'
 
@@ -18,6 +20,9 @@ const OAUTH_STATE_COOKIE = 'oauth_state'
 const OAUTH_VERIFIER_COOKIE = 'oauth_verifier'
 
 export const authRoutes = new Hono()
+
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'auth' })
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, keyPrefix: 'login' })
 
 authRoutes.get('/me', async (c) => {
   const user = await getSessionUser(c)
@@ -37,7 +42,7 @@ authRoutes.get('/me', async (c) => {
   })
 })
 
-authRoutes.post('/register', async (c) => {
+authRoutes.post('/register', authLimiter, async (c) => {
   try {
     const { displayName, email } = await c.req.json<{ displayName: string; email: string }>()
     const user = await registerWithEmail(displayName, email)
@@ -49,15 +54,34 @@ authRoutes.post('/register', async (c) => {
   }
 })
 
-authRoutes.post('/login', async (c) => {
+authRoutes.post('/login', loginLimiter, async (c) => {
   try {
     const { email } = await c.req.json<{ email: string }>()
-    const user = await loginByEmail(email)
-    await createSession(c, user._id.toString())
-    return c.json({ user: userToPublic(user) })
+    await loginByEmail(email)
+    return c.json({
+      sent: true,
+      message: 'If an account exists for that email, we sent a sign-in link. It expires in 15 minutes.',
+    })
   } catch (e) {
     if (e instanceof AuthError) return c.json({ error: e.message }, 400)
     throw e
+  }
+})
+
+authRoutes.get('/verify', async (c) => {
+  const frontend = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+  const token = c.req.query('token')
+
+  if (!token) {
+    return c.redirect(`${frontend}/login?error=invalid_link`)
+  }
+
+  try {
+    const user = await verifyMagicLink(token)
+    await createSession(c, user._id.toString())
+    return c.redirect(`${frontend}/`)
+  } catch {
+    return c.redirect(`${frontend}/login?error=invalid_link`)
   }
 })
 

@@ -59,10 +59,15 @@ npm run dev
 
 ## Auth
 
-- **Email signup:** name + email → enters pending pool
-- **Email login:** email only (no password — honor system for the readathon)
+- **Email signup:** name + email → enters pending pool (instant session)
+- **Email login:** magic link sent to your inbox (15 min, single-use) — no password
 - **Google:** OAuth, linked by email
-- **Admins:** set via `ADMIN_EMAILS` in `.env` (comma-separated)
+- **Admins:** `ADMIN_EMAILS` in `.env` — checked on every admin request
+
+### Magic-link email (production)
+
+Set `RESEND_API_KEY` and `EMAIL_FROM` in `server/.env`.  
+Without it, sign-in links are printed to the **server console** during development.
 
 ## User flow
 
