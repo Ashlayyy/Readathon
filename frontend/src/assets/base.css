@@ -1,0 +1,8 @@
+/* Minimal reset — theme lives in main.css */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}

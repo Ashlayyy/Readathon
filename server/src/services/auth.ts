@@ -1,0 +1,192 @@
+import { Google } from 'arctic'
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { sign, verify } from 'hono/jwt'
+import type { Context } from 'hono'
+import { type HydratedDocument } from 'mongoose'
+import { type IUser, User } from '../db/models/User.js'
+
+type UserDoc = HydratedDocument<IUser>
+
+const SESSION_COOKIE = 'realm_session'
+const SESSION_MAX_AGE = 60 * 60 * 24 * 30
+
+export type SessionPayload = {
+  userId: string
+  exp: number
+}
+
+function getSessionSecret(): string {
+  return process.env.SESSION_SECRET ?? 'dev-secret-change-in-production'
+}
+
+export function getAdminEmails(): Set<string> {
+  const raw = process.env.ADMIN_EMAILS ?? ''
+  return new Set(raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean))
+}
+
+function isAdminEmail(email: string): boolean {
+  return getAdminEmails().has(email.trim().toLowerCase())
+}
+
+export function getGoogleClient() {
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI ?? 'http://localhost:3001/api/auth/google/callback'
+
+  if (!clientId || !clientSecret) return null
+
+  return new Google(clientId, clientSecret, redirectUri)
+}
+
+export function userToPublic(user: IUser) {
+  return {
+    id: user._id.toString(),
+    displayName: user.displayName,
+    email: user.email,
+    teamId: user.teamId,
+    status: user.status,
+    isAdmin: Boolean(user.isAdmin),
+  }
+}
+
+export async function createSession(c: Context, userId: string) {
+  const token = await sign(
+    { userId, exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE },
+    getSessionSecret(),
+    'HS256',
+  )
+  setCookie(c, SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: SESSION_MAX_AGE,
+  })
+}
+
+export function clearSession(c: Context) {
+  deleteCookie(c, SESSION_COOKIE, { path: '/' })
+}
+
+export async function getSessionUser(c: Context): Promise<UserDoc | null> {
+  const token = getCookie(c, SESSION_COOKIE)
+  if (!token) return null
+
+  try {
+    const payload = (await verify(token, getSessionSecret(), 'HS256')) as SessionPayload
+    return User.findById(payload.userId)
+  } catch {
+    return null
+  }
+}
+
+export function requireAuth(user: UserDoc | null): UserDoc {
+  if (!user) throw new AuthError('Not authenticated')
+  return user
+}
+
+export function requireAdmin(user: UserDoc | null): UserDoc {
+  const u = requireAuth(user)
+  if (!u.isAdmin) throw new AuthError('Admin access required')
+  return u
+}
+
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AuthError'
+  }
+}
+
+function validateEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+}
+
+async function applyAdminStatus(user: UserDoc): Promise<UserDoc> {
+  const shouldBeAdmin = isAdminEmail(user.email)
+  if (user.isAdmin !== shouldBeAdmin) {
+    user.isAdmin = shouldBeAdmin
+    await user.save()
+  }
+  return user
+}
+
+export async function registerWithEmail(displayName: string, email: string): Promise<UserDoc> {
+  const trimmedName = displayName.trim()
+  const normalizedEmail = email.trim().toLowerCase()
+
+  if (trimmedName.length < 2) throw new AuthError('Name must be at least 2 characters')
+  if (!validateEmail(normalizedEmail)) throw new AuthError('Please enter a valid email address')
+
+  const existing = await User.findOne({ email: normalizedEmail })
+  if (existing) {
+    throw new AuthError('An account with this email already exists. Try logging in instead.')
+  }
+
+  const user = await User.create({
+    displayName: trimmedName,
+    email: normalizedEmail,
+    isAdmin: isAdminEmail(normalizedEmail),
+    status: 'pending',
+  })
+
+  return user
+}
+
+export async function loginByEmail(email: string): Promise<UserDoc> {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!validateEmail(normalizedEmail)) throw new AuthError('Please enter a valid email address')
+
+  const user = await User.findOne({ email: normalizedEmail })
+  if (!user) throw new AuthError('No account found with that email. Please sign up first.')
+
+  return applyAdminStatus(user)
+}
+
+export async function findOrCreateGoogleUser(
+  googleId: string,
+  displayName: string,
+  email: string,
+): Promise<UserDoc> {
+  const normalizedEmail = email.trim().toLowerCase()
+
+  const byGoogle = await User.findOne({ googleId })
+  if (byGoogle) return applyAdminStatus(byGoogle)
+
+  const byEmail = await User.findOne({ email: normalizedEmail })
+  if (byEmail) {
+    byEmail.googleId = googleId
+    if (!byEmail.displayName && displayName) byEmail.displayName = displayName
+    await byEmail.save()
+    return applyAdminStatus(byEmail)
+  }
+
+  const user = await User.create({
+    displayName: displayName.trim() || normalizedEmail.split('@')[0],
+    email: normalizedEmail,
+    googleId,
+    isAdmin: isAdminEmail(normalizedEmail),
+    status: 'pending',
+  })
+
+  return user
+}
+
+export async function assignTeamsRandomly(): Promise<{ assigned: number }> {
+  const pending = await User.find({ status: 'pending' })
+  if (pending.length === 0) return { assigned: 0 }
+
+  const teamIds = ['clerics', 'mages', 'paladins', 'rogues']
+  const shuffled = [...pending].sort(() => Math.random() - 0.5)
+
+  await Promise.all(
+    shuffled.map((user, i) =>
+      User.findByIdAndUpdate(user._id, {
+        teamId: teamIds[i % teamIds.length],
+        status: 'assigned',
+      }),
+    ),
+  )
+
+  return { assigned: shuffled.length }
+}

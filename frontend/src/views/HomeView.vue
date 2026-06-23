@@ -1,0 +1,177 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
+import { api, type TeamStanding } from '../lib/api'
+import { useAuth } from '../composables/useAuth'
+import { useConfig } from '../composables/useConfig'
+import StandingsPanel from '../components/StandingsPanel.vue'
+
+const { config, loadConfig } = useConfig()
+const { user } = useAuth()
+const standings = ref<TeamStanding[] | null>(null)
+const standingsSvg = ref<string | null>(null)
+const publishedAt = ref<string | null>(null)
+
+onMounted(async () => {
+  await loadConfig()
+  try {
+    const data = await api<{
+      published: boolean
+      standings?: TeamStanding[]
+      svg?: string
+      publishedAt?: string
+    }>('/standings')
+    if (data.published) {
+      standings.value = data.standings ?? null
+      standingsSvg.value = data.svg ?? null
+      publishedAt.value = data.publishedAt ?? null
+    }
+  } catch {
+    /* no published standings yet */
+  }
+})
+</script>
+
+<template>
+  <main v-if="config" class="page">
+    <section class="hero">
+      <p class="eyebrow">{{ config.event.subtitle }}</p>
+      <h1>{{ config.event.name }}</h1>
+      <p class="tagline">{{ config.event.tagline }}</p>
+      <p class="schedule">
+        {{ config.event.month }} · {{ config.event.timezoneNote }}
+      </p>
+      <div class="hero-actions">
+        <RouterLink v-if="!user" to="/login" class="btn btn-primary">Enter The Crucible</RouterLink>
+        <RouterLink v-else-if="user.status === 'assigned'" to="/submit" class="btn btn-primary">
+          Submit a Book
+        </RouterLink>
+        <RouterLink to="/how-it-works" class="btn btn-secondary">How It Works</RouterLink>
+      </div>
+    </section>
+
+    <section class="lore card">
+      <h2>The Story So Far</h2>
+      <p v-for="(para, i) in config.event.lore" :key="i">{{ para }}</p>
+      <p class="note">{{ config.event.characterCreationNote }}</p>
+    </section>
+
+    <StandingsPanel
+      v-if="standings"
+      :standings="standings"
+      :svg="standingsSvg"
+      :published-at="publishedAt"
+    />
+
+    <section class="quick-links">
+      <RouterLink to="/teams" class="link-card card">
+        <h3>Four Realms</h3>
+        <p>Meet the Clerics, Mages, Paladins, and Rogues.</p>
+      </RouterLink>
+      <RouterLink to="/prompts" class="link-card card">
+        <h3>30 Prompts</h3>
+        <p>Add XP or sabotage rival teams.</p>
+      </RouterLink>
+      <RouterLink to="/faq" class="link-card card">
+        <h3>FAQ</h3>
+        <p>Everything you need to know.</p>
+      </RouterLink>
+    </section>
+  </main>
+</template>
+
+<style scoped>
+.hero {
+  text-align: center;
+  padding: 2rem 0 3rem;
+}
+
+.eyebrow {
+  color: var(--realm-accent);
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  color: var(--realm-text);
+  margin-bottom: 0.75rem;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 40px rgba(212, 99, 74, 0.25);
+}
+
+.tagline {
+  font-size: 1.15rem;
+  color: var(--realm-text-muted);
+  max-width: 32rem;
+  margin: 0 auto 0.5rem;
+}
+
+.schedule {
+  color: var(--realm-text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.lore h2 {
+  color: var(--realm-text);
+  margin-bottom: 1rem;
+  font-family: var(--font-display);
+}
+
+.lore p {
+  color: var(--realm-text-muted);
+  margin-bottom: 0.75rem;
+  line-height: 1.7;
+}
+
+.note {
+  font-style: italic;
+  opacity: 0.85;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--realm-border);
+}
+
+.quick-links {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+@media (min-width: 768px) {
+  .quick-links {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.link-card {
+  transition: border-color 0.2s, transform 0.15s;
+}
+
+.link-card:hover {
+  border-color: var(--realm-accent);
+  transform: translateY(-2px);
+}
+
+.link-card h3 {
+  color: var(--realm-text);
+  margin-bottom: 0.35rem;
+}
+
+.link-card p {
+  color: var(--realm-text-muted);
+  font-size: 0.9rem;
+}
+</style>
