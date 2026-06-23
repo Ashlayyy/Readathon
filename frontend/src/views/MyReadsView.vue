@@ -6,7 +6,7 @@ import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
 
 const { user } = useAuth()
-const { config, loadConfig, teamBrand } = useConfig()
+const { config, loadConfig, getTeam } = useConfig()
 
 const submissions = ref<Submission[]>([])
 const loading = ref(true)
@@ -33,8 +33,8 @@ onMounted(async () => {
         <h1 class="page-title">My Reads</h1>
         <p class="page-lead">Your submission history. These cannot be edited — double-check before submitting.</p>
       </div>
-      <div v-if="user?.teamId && config" class="team-pill" :style="{ '--c': teamBrand(user.teamId)?.color }">
-        {{ teamBrand(user.teamId)?.icon }} {{ teamBrand(user.teamId)?.name }}
+      <div v-if="user?.teamId && config" class="team-pill" :style="{ '--c': getTeam(user.teamId)?.color }">
+        {{ getTeam(user.teamId)?.icon }} {{ getTeam(user.teamId)?.name }}
       </div>
     </header>
 
@@ -87,7 +87,7 @@ onMounted(async () => {
         </div>
 
         <p v-if="sub.targetTeamId && config" class="target">
-          Attacked {{ config.branding.teams[sub.targetTeamId]?.name }}
+          Attacked {{ getTeam(sub.targetTeamId!)?.name }}
         </p>
         <p v-if="sub.startedAt || sub.finishedAt" class="dates">
           <template v-if="sub.startedAt && sub.finishedAt">Read {{ sub.startedAt }} → {{ sub.finishedAt }}</template>

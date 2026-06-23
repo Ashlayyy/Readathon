@@ -1,40 +1,57 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { api } from './lib/api'
 import { useAuth } from './composables/useAuth'
 import { useConfig } from './composables/useConfig'
 
-const { user, loaded, fetchUser, logout } = useAuth()
-const { loadConfig } = useConfig()
+const { user, logout } = useAuth()
+const { config } = useConfig()
 const route = useRoute()
 const router = useRouter()
 const unreadQuestions = ref(0)
 const menuOpen = ref(false)
+let unreadPromise: Promise<void> | null = null
 
-onMounted(async () => {
-  await Promise.all([fetchUser(), loadConfig()])
-  if (user.value?.isAdmin) await loadUnreadCount()
-})
+watch(
+  () => user.value?.isAdmin,
+  async (isAdmin) => {
+    if (isAdmin) await loadUnreadCount()
+    else unreadQuestions.value = 0
+  },
+  { immediate: true },
+)
 
-watch(user, async (u) => {
-  if (u?.isAdmin) await loadUnreadCount()
-  else unreadQuestions.value = 0
-})
+watch(
+  () => route.path,
+  (path) => {
+    menuOpen.value = false
+    if (user.value?.isAdmin && path.startsWith('/admin')) {
+      loadUnreadCount()
+    }
+  },
+)
 
-watch(() => route.path, async () => {
-  menuOpen.value = false
-  if (user.value?.isAdmin) await loadUnreadCount()
-  if (user.value) await fetchUser()
+watch(config, (c) => {
+  if (c) document.title = `${c.event.name} — ${c.event.subtitle}`
 })
 
 async function loadUnreadCount() {
-  try {
-    const data = await api<{ unread: number }>('/admin/questions/unread-count')
-    unreadQuestions.value = data.unread
-  } catch {
-    unreadQuestions.value = 0
-  }
+  if (!user.value?.isAdmin) return
+  if (unreadPromise) return unreadPromise
+
+  unreadPromise = (async () => {
+    try {
+      const data = await api<{ unread: number }>('/admin/questions/unread-count')
+      unreadQuestions.value = data.unread
+    } catch {
+      unreadQuestions.value = 0
+    } finally {
+      unreadPromise = null
+    }
+  })()
+
+  return unreadPromise
 }
 
 async function handleLogout() {
@@ -55,7 +72,8 @@ function closeMenu() {
         <div class="header-top">
           <RouterLink to="/" class="brand" @click="closeMenu">
             <span class="brand-icon">⚔</span>
-            <span class="brand-text">Readathon <em>2026</em></span>
+            <span v-if="config" class="brand-text">{{ config.event.name }}</span>
+            <span v-else class="brand-text">Readathon</span>
           </RouterLink>
 
           <button
@@ -76,12 +94,12 @@ function closeMenu() {
           :class="{ open: menuOpen }"
           aria-label="Main"
         >
-          <RouterLink to="/" @click="closeMenu">Home</RouterLink>
-          <RouterLink to="/how-it-works" @click="closeMenu">How It Works</RouterLink>
-          <RouterLink to="/teams" @click="closeMenu">Teams</RouterLink>
-          <RouterLink to="/prompts" @click="closeMenu">Prompts</RouterLink>
-          <RouterLink to="/faq" @click="closeMenu">FAQ</RouterLink>
-          <RouterLink to="/standings" @click="closeMenu">Standings</RouterLink>
+          <RouterLink to="/" @click="closeMenu">{{ config?.copy.nav.home ?? 'Home' }}</RouterLink>
+          <RouterLink to="/how-it-works" @click="closeMenu">{{ config?.copy.nav.howItWorks ?? 'How It Works' }}</RouterLink>
+          <RouterLink to="/teams" @click="closeMenu">{{ config?.copy.nav.teams ?? 'Teams' }}</RouterLink>
+          <RouterLink to="/prompts" @click="closeMenu">{{ config?.copy.nav.prompts ?? 'Prompts' }}</RouterLink>
+          <RouterLink to="/faq" @click="closeMenu">{{ config?.copy.nav.faq ?? 'FAQ' }}</RouterLink>
+          <RouterLink to="/standings" @click="closeMenu">{{ config?.copy.nav.standings ?? 'Standings' }}</RouterLink>
         </nav>
 
         <div class="header-actions" :class="{ open: menuOpen }">
@@ -92,7 +110,7 @@ function closeMenu() {
               class="btn btn-secondary btn-sm action-btn"
               @click="closeMenu"
             >
-              Submit
+              {{ config?.copy.submitNav ?? 'Submit' }}
             </RouterLink>
             <RouterLink
               v-if="user.isAdmin"
@@ -100,7 +118,7 @@ function closeMenu() {
               class="btn btn-secondary btn-sm action-btn"
               @click="closeMenu"
             >
-              Admin
+              {{ config?.copy.adminNav ?? 'Admin' }}
               <span v-if="unreadQuestions > 0" class="inbox-badge">{{ unreadQuestions }}</span>
             </RouterLink>
           </div>
@@ -117,11 +135,11 @@ function closeMenu() {
               </span>
             </RouterLink>
             <button type="button" class="btn btn-ghost btn-sm logout-btn" @click="handleLogout">
-              Log out
+              {{ config?.copy.logoutCta ?? 'Log out' }}
             </button>
           </template>
           <RouterLink v-else-if="loaded" to="/login" class="btn btn-primary btn-sm join-btn" @click="closeMenu">
-            Join
+            {{ config?.copy.joinCta ?? 'Join' }}
           </RouterLink>
         </div>
       </div>
@@ -131,14 +149,14 @@ function closeMenu() {
 
     <div class="app-content">
       <div v-if="user?.status === 'pending'" class="alert alert-warning status-banner">
-        <strong>Awaiting assignment.</strong> You're in the pool — an admin will sort you into a realm soon.
+        <strong>Awaiting assignment.</strong> {{ config?.copy.pendingBanner }}
       </div>
 
       <RouterView />
     </div>
 
-    <footer class="site-footer">
-      <p>Readathon 2026 — <em>The Crucible</em></p>
+    <footer v-if="config" class="site-footer">
+      <p>{{ config.event.name }} — <em>{{ config.event.subtitle }}</em></p>
     </footer>
   </div>
 </template>

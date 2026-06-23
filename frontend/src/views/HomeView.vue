@@ -4,10 +4,12 @@ import { RouterLink } from 'vue-router'
 import { api, type TeamStanding } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
+import { useCopy } from '../composables/useCopy'
 import StandingsPanel from '../components/StandingsPanel.vue'
 
 const { config, loadConfig } = useConfig()
 const { user } = useAuth()
+const { t } = useCopy()
 const standings = ref<TeamStanding[] | null>(null)
 const standingsSvg = ref<string | null>(null)
 const publishedAt = ref<string | null>(null)
@@ -38,21 +40,19 @@ onMounted(async () => {
       <p class="eyebrow">{{ config.event.subtitle }}</p>
       <h1>{{ config.event.name }}</h1>
       <p class="tagline">{{ config.event.tagline }}</p>
-      <p class="schedule">
-        {{ config.event.month }}
-      </p>
+      <p class="schedule">{{ config.event.month }}</p>
       <div class="hero-actions">
-        <RouterLink v-if="!user" to="/login" class="btn btn-primary">Enter The Crucible</RouterLink>
+        <RouterLink v-if="!user" to="/login" class="btn btn-primary">{{ config.copy.enterCta }}</RouterLink>
         <RouterLink v-else-if="user.status === 'assigned'" to="/submit" class="btn btn-primary">
-          Submit a Book
+          {{ config.copy.submitCta }}
         </RouterLink>
-        <RouterLink to="/how-it-works" class="btn btn-secondary">How It Works</RouterLink>
+        <RouterLink to="/how-it-works" class="btn btn-secondary">{{ config.copy.howItWorksCta }}</RouterLink>
       </div>
     </section>
 
     <section class="lore card">
-      <h2>The Story So Far</h2>
-      <p v-for="(para, i) in config.event.lore" :key="i">{{ para }}</p>
+      <h2>{{ config.event.loreTitle }}</h2>
+      <p v-for="(para, i) in config.event.lore" :key="i">{{ t(para) }}</p>
       <p class="note">{{ config.event.characterCreationNote }}</p>
     </section>
 
@@ -65,16 +65,16 @@ onMounted(async () => {
 
     <section class="quick-links">
       <RouterLink to="/teams" class="link-card card">
-        <h3>Four Realms</h3>
-        <p>Meet the Clerics, Mages, Paladins, and Rogues.</p>
+        <h3>{{ t(config.copy.homeQuickLinks.teamsTitle) }}</h3>
+        <p>{{ config.copy.homeQuickLinks.teamsDescription }}</p>
       </RouterLink>
       <RouterLink to="/prompts" class="link-card card">
-        <h3>30 Prompts</h3>
-        <p>Add XP or sabotage rival teams.</p>
+        <h3>{{ t(config.copy.homeQuickLinks.promptsTitle) }}</h3>
+        <p>{{ config.copy.homeQuickLinks.promptsDescription }}</p>
       </RouterLink>
       <RouterLink to="/faq" class="link-card card">
-        <h3>FAQ</h3>
-        <p>Everything you need to know.</p>
+        <h3>{{ config.copy.homeQuickLinks.faqTitle }}</h3>
+        <p>{{ config.copy.homeQuickLinks.faqDescription }}</p>
       </RouterLink>
     </section>
   </main>

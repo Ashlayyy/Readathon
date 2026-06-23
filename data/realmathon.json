@@ -4,23 +4,117 @@
     "subtitle": "The Crucible",
     "tagline": "Your character class against every other. Books — and glory — on the line.",
     "month": "July - December",
+    "loreTitle": "The Story So Far",
+    "characterCreationNote": "Ready? Sign up and wait for your realm assignment.",
     "lore": [
       "Welcome to the Readathon 2026. All the realms have been destroyed — you are being forced into The Crucible, a deadly competition where it's your character class against every other character class.",
       "The strongest will put their books (and lives) on the line to gain XP, leveling themselves and their team up while sabotaging the XP of other teams.",
-      "First things first: you'll need a team before you're shipped off to the competition. Once accepted, you'll be sorted into one of four realms."
+      "First things first: you'll need a team before you're shipped off to the competition. Once accepted, you'll be sorted into one of {teamCount} realms."
     ]
+  },
+  "copy": {
+    "enterCta": "Enter The Crucible",
+    "submitCta": "Submit a Book",
+    "howItWorksCta": "How It Works",
+    "joinCta": "Join",
+    "logoutCta": "Log out",
+    "submitNav": "Submit",
+    "adminNav": "Admin",
+    "pendingBanner": "You're in the pool — an admin will sort you into a realm soon.",
+    "loginTitle": "Enter The Crucible",
+    "loginRegisterLead": "Sign up with your name and email, or continue with Google.",
+    "loginMagicLinkLead": "We'll email you a one-time sign-in link — no password needed.",
+    "loginRegisterTab": "New Recruit",
+    "loginSignInTab": "Returning Reader",
+    "loginDisplayNameLabel": "Display Name",
+    "loginDisplayNamePlaceholder": "Your reader name",
+    "loginEmailLabel": "Email",
+    "loginEmailPlaceholder": "you@example.com",
+    "loginRegisterButton": "Join the Pool",
+    "loginMagicLinkButton": "Email me a sign-in link",
+    "loginGoogleButton": "Continue with Google",
+    "loginDivider": "or",
+    "loginFinePrintRegister": "After signing up you'll wait in the unassigned pool until an admin sorts you into a realm.",
+    "loginFinePrintMagicLink": "Check your inbox (and spam folder). Links expire after 15 minutes.",
+    "faqLoginToAsk": "Log in to Ask",
+    "teamsPageTitle": "The Realms",
+    "teamsPageLead": "Once accepted, you'll be randomly sorted into one of {teamCount} realms. Each has optional bonus prompts worth ±10 XP.",
+    "howItWorksLead": "A team-based reading competition across {teamCount} realms. Here's how to survive it.",
+    "promptsLead": "{positiveCount} ways to add XP. {negativeCount} ways to sabotage. Pick up to {maxPrompts} per book.",
+    "promptsAddTab": "Add XP (+)",
+    "promptsSabotageTab": "Sabotage (-)",
+    "promptsSearchPlaceholder": "Search prompts…",
+    "faqPageLead": "Common questions about the readathon.",
+    "faqAskTitle": "Still have questions?",
+    "faqAskBody": "Can't find what you need? Send a message to the admins.",
+    "faqAskButton": "Ask the Admins",
+    "faqModalTitle": "Ask the Admins",
+    "faqModalHint": "Send one message with your question. We'll see it in our inbox.",
+    "faqModalPlaceholder": "What would you like to know?",
+    "faqModalSend": "Send Message",
+    "faqModalCancel": "Cancel",
+    "faqModalDone": "Done",
+    "standingsUnpublished": "Standings haven't been published yet. Check back once the hosts release them!",
+    "profileBooksTab": "My Books",
+    "profileQuestionsTab": "My Questions",
+    "profileSettingsTab": "Notifications",
+    "profileSettingsTitle": "Notification preferences",
+    "profileSettingsLead": "Choose what you'd like to be emailed about. Requires RESEND_API_KEY on the server.",
+    "profileNotifyStandings": "Standings published",
+    "profileNotifyStandingsHint": "Email when admins publish new weekly standings",
+    "profileNotifyAnswers": "Question answered",
+    "profileNotifyAnswersHint": "Email when an admin replies to a question you asked",
+    "profileSaveSettings": "Save Settings",
+    "profileSaving": "Saving…",
+    "adminTitle": "Admin Panel",
+    "adminLead": "Manage participants, inbox, and standings.",
+    "adminTabInbox": "Inbox",
+    "adminTabTeams": "Teams",
+    "adminTabStandings": "Standings",
+    "adminTabParticipants": "Participants",
+    "adminTabSubmissions": "Submissions",
+    "adminAssignTeams": "Randomly Assign Teams",
+    "adminAssigning": "Assigning…",
+    "adminTeamAssignmentTitle": "Team Assignment",
+    "adminTeamAssignmentLead": "{pending} users waiting in the pool",
+    "adminParticipantsTitle": "Participants",
+    "adminTeamColumn": "Team",
+    "adminUnassignedOption": "— Unassigned —",
+    "adminSavingTeam": "Saving…",
+    "scoringSummary": [
+      "Up to {maxPrompts} prompts per book — all positive OR all negative",
+      "Bonus prompts layer on top (team prompts, page count, competition/trials)",
+      "Page-count bonus always goes to your team",
+      "One book = add XP or sabotage — never both",
+      "Standings use average XP per member for fairness"
+    ],
+    "homeQuickLinks": {
+      "teamsTitle": "{teamsLabel}",
+      "teamsDescription": "Meet the realms and their bonus prompts.",
+      "promptsTitle": "{promptsLabel}",
+      "promptsDescription": "Add XP or sabotage rival teams.",
+      "faqTitle": "FAQ",
+      "faqDescription": "Everything you need to know."
+    },
+    "notifications": {
+      "answerSubject": "Your question was answered — {eventName}",
+      "standingsSubject": "New standings published — {weekLabel}",
+      "standingsIntro": "Weekly standings for {weekLabel} are now live on the site."
+    },
+    "nav": {
+      "home": "Home",
+      "howItWorks": "How It Works",
+      "teams": "Teams",
+      "prompts": "Prompts",
+      "faq": "FAQ",
+      "standings": "Standings"
+    }
   },
   "schedule": {
     "readathonStart": "July 1",
     "readathonEnd": "December 31"
   },
   "branding": {
-    "teams": {
-      "clerics": { "name": "The Clerics", "color": "#c9a227", "accent": "#f5e6b8", "icon": "✦" },
-      "mages": { "name": "The Mages", "color": "#9b7ed9", "accent": "#e8dff5", "icon": "◈" },
-      "paladins": { "name": "The Paladins", "color": "#5ba4b8", "accent": "#d4eaf0", "icon": "⛨" },
-      "rogues": { "name": "The Rogues", "color": "#4a8f62", "accent": "#d4edda", "icon": "†" }
-    },
     "theme": {
       "background": "#08070b",
       "surface": "#12101a",
@@ -36,6 +130,9 @@
     {
       "id": "clerics",
       "name": "The Clerics",
+      "color": "#c9a227",
+      "accent": "#f5e6b8",
+      "icon": "✦",
       "leads": [],
       "bonusPrompts": [
         { "id": "clerics-comfort", "label": "A guilty pleasure — a book that provides comfort to you", "points": 10 },
@@ -45,6 +142,9 @@
     {
       "id": "mages",
       "name": "The Mages",
+      "color": "#9b7ed9",
+      "accent": "#e8dff5",
+      "icon": "◈",
       "leads": [],
       "bonusPrompts": [
         { "id": "mages-school", "label": "A book with a school/academic setting", "points": 10 },
@@ -54,6 +154,9 @@
     {
       "id": "paladins",
       "name": "The Paladins",
+      "color": "#5ba4b8",
+      "accent": "#d4eaf0",
+      "icon": "⛨",
       "leads": [],
       "bonusPrompts": [
         { "id": "paladins-injustice", "label": "A character overcomes/fights injustice", "points": 10 },
@@ -63,6 +166,9 @@
     {
       "id": "rogues",
       "name": "The Rogues",
+      "color": "#4a8f62",
+      "accent": "#d4edda",
+      "icon": "†",
       "leads": [],
       "bonusPrompts": [
         { "id": "rogues-mystery", "label": "A book with a mystery element", "points": 10 },
@@ -123,10 +229,10 @@
   },
   "howItWorks": [
     { "step": 1, "title": "Join the Crucible", "body": "Sign up with your name and email. You'll wait in the pool until teams are assigned." },
-    { "step": 2, "title": "Get sorted into a realm", "body": "Once accepted, you'll be randomly placed on one of four teams." },
-    { "step": 3, "title": "Read & submit", "body": "Finish a book, then use the submission form. Pick up to 5 prompts — all positive OR all negative per book." },
+    { "step": 2, "title": "Get sorted into a realm", "body": "Once accepted, you'll be randomly placed on one of {teamCount} teams." },
+    { "step": 3, "title": "Read & submit", "body": "Finish a book, then use the submission form. Pick up to {maxPrompts} prompts — all positive OR all negative per book." },
     { "step": 4, "title": "Add or sabotage", "body": "Help your team's XP or attack another realm. One book can only do one — not both." },
-    { "step": 5, "title": "Layer bonuses", "body": "Team prompts, page-count bonuses, and competition/trials stack on top of your 5 prompts." },
+    { "step": 5, "title": "Layer bonuses", "body": "Team prompts, page-count bonuses, and competition/trials stack on top of your {maxPrompts} prompts." },
     { "step": 6, "title": "Double-check", "body": "Submissions cannot be edited. Review carefully before you submit!" }
   ],
   "scoringRules": {
@@ -137,10 +243,10 @@
     "oneAttackTargetPerBook": true
   },
   "faq": [
-    { "q": "Can I use more than one prompt?", "a": "Yes — up to five prompts per book, not including bonus prompts. They must all be increasing OR all decreasing." },
+    { "q": "Can I use more than one prompt?", "a": "Yes — up to {maxPrompts} prompts per book, not including bonus prompts. They must all be increasing OR all decreasing." },
     { "q": "Does this book count?", "a": "If you think it counts, count it. If you think it doesn't, don't." },
     { "q": "Do I have to read my realm's bonus prompts?", "a": "No — they're optional extras for people who want them." },
-    { "q": "How long is the readathon?", "a": "The whole month of March." },
+    { "q": "How long is the readathon?", "a": "July through December." },
     { "q": "How do I track my reads?", "a": "Use the submission form on this site after your team is assigned." },
     { "q": "How many times can bonus prompts be used?", "a": "As many times as you like." },
     { "q": "Can prompts be reused?", "a": "Yes — use them as much as you want." },
@@ -155,6 +261,6 @@
     { "q": "Audiobooks — what page count?", "a": "Use Goodreads page count. If none, use 40 pages per hour." },
     { "q": "Manga/graphic novels — series or volumes?", "a": "Be fair about what you'd accept from others. A five-page short story probably isn't fair." },
     { "q": "Can I change a submission?", "a": "No — double-check before submitting." },
-    { "q": "Do bonus prompts count toward the five?", "a": "No — you get 5 prompts, then bonuses layer on top." }
+    { "q": "Do bonus prompts count toward the five?", "a": "No — you get {maxPrompts} prompts, then bonuses layer on top." }
   ]
 }

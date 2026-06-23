@@ -1,6 +1,8 @@
+import { getConfig } from '../config.js'
 import type { TeamStanding } from './scoring.js'
 
-export function generateStandingsSvg(standings: TeamStanding[], title = 'REALMATHON 5.0 — Standings'): string {
+export function generateStandingsSvg(standings: TeamStanding[], title?: string): string {
+  const resolvedTitle = title ?? `${getConfig().event.name as string} — Standings`
   const width = 800
   const rowHeight = 72
   const headerHeight = 100
@@ -25,7 +27,7 @@ export function generateStandingsSvg(standings: TeamStanding[], title = 'REALMAT
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="#0f0e14"/>
-  <text x="400" y="45" fill="#c45c3e" font-size="26" font-weight="bold" text-anchor="middle" font-family="Georgia, serif">${escapeXml(title)}</text>
+  <text x="400" y="45" fill="#c45c3e" font-size="26" font-weight="bold" text-anchor="middle" font-family="Georgia, serif">${escapeXml(resolvedTitle)}</text>
   <text x="400" y="72" fill="#a89f94" font-size="13" text-anchor="middle" font-family="system-ui, sans-serif">Ranked by average XP per member</text>
   ${rows}
 </svg>`

@@ -16,12 +16,16 @@ export type Prompt = {
 export type Team = {
   id: string
   name: string
+  color: string
+  accent: string
+  icon: string
   leads: string[]
   bonusPrompts: { id: string; label: string; points: number }[]
 }
 
 export type RealmathonConfig = {
   event: Record<string, unknown>
+  copy: Record<string, unknown>
   schedule: Record<string, unknown>
   branding: Record<string, unknown>
   teams: Team[]

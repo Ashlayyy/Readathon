@@ -10,7 +10,7 @@ type Tab = 'books' | 'questions' | 'settings'
 const route = useRoute()
 const router = useRouter()
 const { user, fetchUser } = useAuth()
-const { config, loadConfig, teamBrand } = useConfig()
+const { config, loadConfig, getTeam } = useConfig()
 
 const activeTab = ref<Tab>('books')
 const submissions = ref<Submission[]>([])
@@ -77,7 +77,7 @@ async function markUnseenAnswersRead() {
     unseen.map((q) => api(`/profile/questions/${q.id}/seen`, { method: 'POST' })),
   )
   for (const q of unseen) q.answerSeen = true
-  await fetchUser()
+  await fetchUser(true)
 }
 
 async function saveSettings() {
@@ -101,15 +101,15 @@ async function saveSettings() {
 </script>
 
 <template>
-  <main class="page profile-page">
+  <main v-if="config" class="page profile-page">
     <header class="profile-header card">
       <div class="profile-identity">
         <div class="avatar">{{ user?.displayName?.charAt(0)?.toUpperCase() ?? '?' }}</div>
         <div>
           <h1 class="page-title">{{ user?.displayName }}</h1>
           <p class="profile-email">{{ user?.email }}</p>
-          <div v-if="user?.teamId && config" class="team-pill" :style="{ '--c': teamBrand(user.teamId)?.color }">
-            {{ teamBrand(user.teamId)?.icon }} {{ teamBrand(user.teamId)?.name }}
+          <div v-if="user?.teamId && config" class="team-pill" :style="{ '--c': getTeam(user.teamId)?.color }">
+            {{ getTeam(user.teamId)?.icon }} {{ getTeam(user.teamId)?.name }}
           </div>
           <p v-else-if="user?.status === 'pending'" class="status-note">Awaiting team assignment</p>
         </div>
@@ -118,15 +118,15 @@ async function saveSettings() {
 
     <nav class="profile-tabs" aria-label="Profile sections">
       <button type="button" :class="{ active: activeTab === 'books' }" @click="setTab('books')">
-        My Books
+        {{ config.copy.profileBooksTab }}
         <span v-if="submissions.length" class="tab-count">{{ submissions.length }}</span>
       </button>
       <button type="button" :class="{ active: activeTab === 'questions' }" @click="setTab('questions')">
-        My Questions
+        {{ config.copy.profileQuestionsTab }}
         <span v-if="questions.length" class="tab-count">{{ questions.length }}</span>
       </button>
       <button type="button" :class="{ active: activeTab === 'settings' }" @click="setTab('settings')">
-        Notifications
+        {{ config.copy.profileSettingsTab }}
       </button>
     </nav>
 
@@ -182,7 +182,7 @@ async function saveSettings() {
             </div>
           </div>
           <p v-if="sub.targetTeamId && config" class="target">
-            Attacked {{ config.branding.teams[sub.targetTeamId]?.name }}
+            Attacked {{ getTeam(sub.targetTeamId!)?.name }}
           </p>
           <p v-if="sub.startedAt || sub.finishedAt" class="dates">
           <template v-if="sub.startedAt && sub.finishedAt">Read {{ sub.startedAt }} → {{ sub.finishedAt }}</template>
@@ -224,8 +224,8 @@ async function saveSettings() {
 
     <!-- Settings -->
     <section v-else class="card settings-card">
-      <h2>Notification preferences</h2>
-      <p class="section-desc">Choose what you'd like to be notified about. (Email delivery can be wired up later.)</p>
+      <h2>{{ config.copy.profileSettingsTitle }}</h2>
+      <p class="section-desc">{{ config.copy.profileSettingsLead }}</p>
 
       <div v-if="message" class="alert" :class="message.includes('saved') ? 'alert-success' : 'alert-error'">
         {{ message }}
@@ -234,21 +234,21 @@ async function saveSettings() {
       <label class="setting-row">
         <input v-model="notifyStandings" type="checkbox" />
         <div>
-          <strong>Standings published</strong>
-          <span>When admins publish new weekly standings</span>
+          <strong>{{ config.copy.profileNotifyStandings }}</strong>
+          <span>{{ config.copy.profileNotifyStandingsHint }}</span>
         </div>
       </label>
 
       <label class="setting-row">
         <input v-model="notifyAnswers" type="checkbox" />
         <div>
-          <strong>Question answered</strong>
-          <span>When an admin replies to a question you asked</span>
+          <strong>{{ config.copy.profileNotifyAnswers }}</strong>
+          <span>{{ config.copy.profileNotifyAnswersHint }}</span>
         </div>
       </label>
 
       <button type="button" class="btn btn-primary" :disabled="saving" @click="saveSettings">
-        {{ saving ? 'Saving…' : 'Save Settings' }}
+        {{ saving ? config.copy.profileSaving : config.copy.profileSaveSettings }}
       </button>
     </section>
   </main>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useConfig } from '../composables/useConfig'
+import { useCopy } from '../composables/useCopy'
 import PromptCard from '../components/PromptCard.vue'
 
 const { config, loadConfig } = useConfig()
+const { t } = useCopy()
 const tab = ref<'positive' | 'negative'>('positive')
 const search = ref('')
 
@@ -26,14 +28,14 @@ const prompts = computed(() => {
 <template>
   <main v-if="config" class="page">
     <h1 class="page-title">Prompts</h1>
-    <p class="page-lead">15 ways to add XP. 15 ways to sabotage. Pick up to 5 per book.</p>
+    <p class="page-lead">{{ t(config.copy.promptsLead) }}</p>
 
     <div class="toolbar">
       <div class="tabs">
-        <button :class="{ active: tab === 'positive' }" @click="tab = 'positive'">Add XP (+)</button>
-        <button :class="{ active: tab === 'negative' }" @click="tab = 'negative'">Sabotage (-)</button>
+        <button :class="{ active: tab === 'positive' }" @click="tab = 'positive'">{{ config.copy.promptsAddTab }}</button>
+        <button :class="{ active: tab === 'negative' }" @click="tab = 'negative'">{{ config.copy.promptsSabotageTab }}</button>
       </div>
-      <input v-model="search" type="search" placeholder="Search prompts…" />
+      <input v-model="search" type="search" :placeholder="String(config.copy.promptsSearchPlaceholder)" />
     </div>
 
     <div class="grid">

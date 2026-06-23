@@ -178,9 +178,6 @@ export type TeamStanding = {
 
 export async function calculateStandings(): Promise<TeamStanding[]> {
   const config = getConfig()
-  const branding = config.branding as {
-    teams: Record<string, { name: string; color: string; icon: string }>
-  }
 
   const assignedUsers = await User.find({ status: 'assigned', teamId: { $ne: null } })
   const memberCounts = new Map<string, number>()
@@ -218,7 +215,6 @@ export async function calculateStandings(): Promise<TeamStanding[]> {
       const xpGained = gained.get(team.id) ?? 0
       const xpLost = lost.get(team.id) ?? 0
       const netXp = xpGained - xpLost
-      const brand = branding.teams[team.id]
       return {
         teamId: team.id,
         teamName: team.name,
@@ -227,8 +223,8 @@ export async function calculateStandings(): Promise<TeamStanding[]> {
         xpLost,
         netXp,
         averagePerMember: members > 0 ? Math.round((netXp / members) * 10) / 10 : 0,
-        color: brand?.color ?? '#888',
-        icon: brand?.icon ?? '◆',
+        color: team.color ?? '#888',
+        icon: team.icon ?? '◆',
       }
     })
     .sort((a, b) => b.averagePerMember - a.averagePerMember)

@@ -7,7 +7,7 @@ import { useConfig } from '../composables/useConfig'
 import type { Prompt } from '../lib/api'
 
 const { user } = useAuth()
-const { config, loadConfig } = useConfig()
+const { config, loadConfig, getTeam } = useConfig()
 const router = useRouter()
 
 const STEPS = [
@@ -88,10 +88,6 @@ const estimatedPromptPoints = computed(() => {
 const bonusCount = computed(
   () => bonusTeamPromptIds.value.length + (bonusCompetition.value ? 1 : 0),
 )
-
-function teamBrand(teamId: string) {
-  return config.value?.branding.teams[teamId]
-}
 
 function isPromptSelected(id: string) {
   return selectedPromptIds.value.includes(id)
@@ -208,8 +204,8 @@ function reset() {
     <h1 class="page-title">Submit a Book</h1>
     <p class="page-lead">
       Team:
-      <strong :style="{ color: config.branding.teams[user.teamId!]?.color }">
-        {{ config.branding.teams[user.teamId!]?.name }}
+      <strong :style="{ color: getTeam(user.teamId!)?.color }">
+        {{ getTeam(user.teamId!)?.name }}
       </strong>
     </p>
 
@@ -316,14 +312,14 @@ function reset() {
               type="button"
               class="target-team-btn"
               :class="{ selected: targetTeamId === t.id }"
-              :style="{ '--team-color': teamBrand(t.id)?.color ?? '#888' }"
+              :style="{ '--team-color': getTeam(t.id)?.color ?? '#888' }"
               :aria-pressed="targetTeamId === t.id"
               @click="targetTeamId = t.id"
             >
               <span class="target-team-accent" aria-hidden="true" />
-              <span class="target-team-icon" aria-hidden="true">{{ teamBrand(t.id)?.icon }}</span>
+              <span class="target-team-icon" aria-hidden="true">{{ getTeam(t.id)?.icon }}</span>
               <span class="target-team-body">
-                <span class="target-team-name">{{ teamBrand(t.id)?.name ?? t.name }}</span>
+                <span class="target-team-name">{{ getTeam(t.id)?.name ?? t.name }}</span>
                 <span class="target-team-hint" :class="{ visible: targetTeamId === t.id }">Selected target</span>
               </span>
               <span class="target-team-radio" aria-hidden="true">
@@ -459,9 +455,9 @@ function reset() {
                 <strong
                   v-if="targetTeamId"
                   class="target-team-inline"
-                  :style="{ color: teamBrand(targetTeamId)?.color }"
+                  :style="{ color: getTeam(targetTeamId)?.color }"
                 >
-                  {{ teamBrand(targetTeamId)?.name }}
+                  {{ getTeam(targetTeamId)?.name }}
                 </strong>
                 <template v-else>another team</template>
               </dd>

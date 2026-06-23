@@ -4,9 +4,11 @@ import { RouterLink } from 'vue-router'
 import { api } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
+import { useCopy } from '../composables/useCopy'
 
 const { config, loadConfig } = useConfig()
 const { user } = useAuth()
+const { t } = useCopy()
 
 const openIndex = ref<number | null>(0)
 const showModal = ref(false)
@@ -56,31 +58,31 @@ async function submitQuestion() {
     <header class="page-header">
       <div>
         <h1 class="page-title">FAQ</h1>
-        <p class="page-lead">If you think it counts, count it. When in doubt, check here.</p>
+        <p class="page-lead">{{ config.copy.faqPageLead }}</p>
       </div>
     </header>
 
     <div class="faq-list">
       <div v-for="(item, i) in config.faq" :key="i" class="faq-item card">
         <button type="button" class="faq-q" @click="toggle(i)">
-          <span class="faq-q-text">{{ item.q }}</span>
+          <span class="faq-q-text">{{ t(item.q) }}</span>
           <span class="faq-toggle" aria-hidden="true">{{ openIndex === i ? '−' : '+' }}</span>
         </button>
-        <p v-if="openIndex === i" class="faq-a">{{ item.a }}</p>
+        <p v-if="openIndex === i" class="faq-a">{{ t(item.a) }}</p>
       </div>
     </div>
 
     <section class="ask-cta card">
       <div class="ask-cta-content">
-        <h2>Still have a question?</h2>
-        <p>Can't find what you're looking for? Send a message straight to the admins.</p>
+        <h2>{{ config.copy.faqAskTitle }}</h2>
+        <p>{{ config.copy.faqAskBody }}</p>
       </div>
       <div class="ask-cta-actions">
         <button v-if="user" type="button" class="btn btn-primary" @click="openAsk">
-          Ask the Admins
+          {{ config.copy.faqAskButton }}
         </button>
         <RouterLink v-else to="/login" class="btn btn-primary">
-          Log in to Ask
+          {{ config.copy.faqLoginToAsk }}
         </RouterLink>
       </div>
     </section>
@@ -91,7 +93,7 @@ async function submitQuestion() {
     <div v-if="showModal" class="modal-backdrop" @click.self="closeModal">
       <div class="modal card" role="dialog" aria-labelledby="ask-title">
         <header class="modal-header">
-          <h2 id="ask-title">Ask the Admins</h2>
+          <h2 id="ask-title">{{ config.copy.faqModalTitle }}</h2>
           <button type="button" class="modal-close" aria-label="Close" @click="closeModal">×</button>
         </header>
 
@@ -99,20 +101,18 @@ async function submitQuestion() {
           <div class="alert alert-success">
             Your message was sent! Check <RouterLink to="/profile?tab=questions">your profile</RouterLink> for replies.
           </div>
-          <button type="button" class="btn btn-primary full" @click="closeModal">Done</button>
+          <button type="button" class="btn btn-primary full" @click="closeModal">{{ config.copy.faqModalDone }}</button>
         </div>
 
         <form v-else class="modal-body" @submit.prevent="submitQuestion">
-          <p class="modal-hint">
-            Send one message with your question. We'll see it in our inbox.
-          </p>
+          <p class="modal-hint">{{ config.copy.faqModalHint }}</p>
           <div v-if="error" class="alert alert-error">{{ error }}</div>
           <label class="field">
             Your question
             <textarea
               v-model="questionText"
               rows="5"
-              placeholder="What would you like to know?"
+              :placeholder="String(config.copy.faqModalPlaceholder)"
               required
               minlength="10"
               maxlength="2000"
@@ -120,9 +120,9 @@ async function submitQuestion() {
           </label>
           <p class="char-count">{{ questionText.length }} / 2000</p>
           <div class="modal-actions">
-            <button type="button" class="btn btn-ghost" @click="closeModal">Cancel</button>
+            <button type="button" class="btn btn-ghost" @click="closeModal">{{ config.copy.faqModalCancel }}</button>
             <button type="submit" class="btn btn-primary" :disabled="sending || questionText.trim().length < 10">
-              {{ sending ? 'Sending…' : 'Send Message' }}
+              {{ sending ? config.copy.loginWaiting : config.copy.faqModalSend }}
             </button>
           </div>
         </form>

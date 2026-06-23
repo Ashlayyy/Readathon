@@ -54,8 +54,19 @@ export type Prompt = {
 export type TeamConfig = {
   id: string
   name: string
+  color: string
+  accent: string
+  icon: string
   leads: string[]
   bonusPrompts: { id: string; label: string; points: number }[]
+}
+
+export type SiteCopy = {
+  [key: string]: string | string[] | Record<string, string> | undefined
+  scoringSummary: string[]
+  homeQuickLinks: Record<string, string>
+  nav: Record<string, string>
+  notifications: Record<string, string>
 }
 
 export type RealmathonConfig = {
@@ -64,13 +75,13 @@ export type RealmathonConfig = {
     subtitle: string
     tagline: string
     month: string
-    timezoneNote: string
+    loreTitle: string
     lore: string[]
     characterCreationNote: string
   }
+  copy: SiteCopy
   schedule: Record<string, unknown>
   branding: {
-    teams: Record<string, { name: string; color: string; accent: string; icon: string }>
     theme: Record<string, string>
   }
   teams: TeamConfig[]

@@ -1,22 +1,31 @@
 import { ref } from 'vue'
-import { api, type RealmathonConfig } from '../lib/api'
+import { api, type RealmathonConfig, type TeamConfig } from '../lib/api'
 
 const config = ref<RealmathonConfig | null>(null)
+let loadPromise: Promise<RealmathonConfig | null> | null = null
 
 export function useConfig() {
-  async function loadConfig() {
-    if (config.value) return config.value
-    try {
-      config.value = await api<RealmathonConfig>('/config')
-    } catch (e) {
-      console.error('Failed to load config:', e)
-    }
-    return config.value
+  async function loadConfig(force = false): Promise<RealmathonConfig | null> {
+    if (!force && config.value) return config.value
+    if (!force && loadPromise) return loadPromise
+
+    loadPromise = (async () => {
+      try {
+        config.value = await api<RealmathonConfig>('/config')
+      } catch (e) {
+        console.error('Failed to load config:', e)
+      } finally {
+        loadPromise = null
+      }
+      return config.value
+    })()
+
+    return loadPromise
   }
 
-  function teamBrand(teamId: string) {
-    return config.value?.branding.teams[teamId]
+  function getTeam(teamId: string): TeamConfig | undefined {
+    return config.value?.teams.find((t) => t.id === teamId)
   }
 
-  return { config, loadConfig, teamBrand }
+  return { config, loadConfig, getTeam }
 }

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { reloadConfig } from '../config.js'
+import { getTeamById, reloadConfig, getConfig } from '../config.js'
 import { Question, questionToAdminPublic } from '../db/models/Question.js'
 import { PublishedStandings } from '../db/models/PublishedStandings.js'
 import { StandingsEvent } from '../db/models/StandingsEvent.js'
@@ -14,6 +14,7 @@ import {
 } from '../services/auth.js'
 import { calculateStandings, submissionToPublic } from '../services/scoring.js'
 import { generateStandingsSvg } from '../services/standings-image.js'
+import { maybeNotifyQuestionAnswered, notifyStandingsPublished } from '../services/notifications.js'
 import { getWeekInfo } from '../utils/week.js'
 
 export const adminRoutes = new Hono()
@@ -40,6 +41,26 @@ adminRoutes.get('/users', async (c) => {
 adminRoutes.post('/assign-teams', async (c) => {
   const result = await assignTeamsRandomly()
   return c.json(result)
+})
+
+adminRoutes.patch('/users/:id/team', async (c) => {
+  const body = await c.req.json<{ teamId?: string | null }>()
+  const user = await User.findById(c.req.param('id'))
+  if (!user) return c.json({ error: 'User not found' }, 404)
+
+  const teamId = body.teamId?.trim() || null
+
+  if (teamId === null) {
+    user.teamId = null
+    user.status = 'pending'
+  } else {
+    if (!getTeamById(teamId)) return c.json({ error: 'Invalid team' }, 400)
+    user.teamId = teamId
+    user.status = 'assigned'
+  }
+
+  await user.save()
+  return c.json({ user: userToPublic(user) })
 })
 
 adminRoutes.get('/submissions', async (c) => {
@@ -124,7 +145,8 @@ adminRoutes.post('/standings/publish', async (c) => {
   const { weekKey, weekLabel } = getWeekInfo()
 
   const standings = await calculateStandings()
-  const svg = generateStandingsSvg(standings, `REALMATHON 5.0 — ${weekLabel}`)
+  const eventName = getConfig().event.name as string
+  const svg = generateStandingsSvg(standings, `${eventName} — ${weekLabel}`)
 
   await PublishedStandings.updateMany({ isActive: true }, { isActive: false, unpublishedAt: new Date() })
 
@@ -147,12 +169,19 @@ adminRoutes.post('/standings/publish', async (c) => {
     publicationId: doc._id,
   })
 
+  const emailResult = await notifyStandingsPublished(weekLabel).catch((e) => {
+    console.error('[notifications] Standings emails failed:', e)
+    return { sent: 0, skipped: 0 }
+  })
+
   return c.json({
     id: doc._id.toString(),
     weekKey,
     weekLabel,
     publishedAt: doc.createdAt,
     standings,
+    emailsSent: emailResult.sent,
+    emailsSkipped: emailResult.skipped,
   })
 })
 
@@ -238,6 +267,8 @@ adminRoutes.post('/questions/:id/answer', async (c) => {
     { new: true },
   )
   if (!question) return c.json({ error: 'Question not found' }, 404)
+
+  await maybeNotifyQuestionAnswered(question.userId, question.message, trimmed, admin.displayName)
 
   return c.json({ question: questionToAdminPublic(question) })
 })

@@ -1,19 +1,16 @@
 <script setup lang="ts">
 import type { TeamConfig } from '../lib/api'
 
-defineProps<{
-  team: TeamConfig
-  brand?: { name: string; color: string; accent: string; icon: string }
-}>()
+defineProps<{ team: TeamConfig }>()
 </script>
 
 <template>
-  <article class="team-card card" :style="{ '--team-color': brand?.color ?? '#888' }">
+  <article class="team-card card" :style="{ '--team-color': team.color }">
     <header>
-      <span class="icon">{{ brand?.icon }}</span>
+      <span class="icon">{{ team.icon }}</span>
       <h3>{{ team.name }}</h3>
     </header>
-    <p class="leads"><strong>Team Leads:</strong> {{ team.leads.join(', ') }}</p>
+    <p v-if="team.leads.length" class="leads"><strong>Team Leads:</strong> {{ team.leads.join(', ') }}</p>
     <div class="bonus">
       <h4>Bonus Prompts <span class="badge badge-positive">±10 each</span></h4>
       <ul>

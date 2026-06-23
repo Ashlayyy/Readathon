@@ -12,7 +12,11 @@ import {
   type TeamStanding,
 } from '../lib/api'
 import StandingsPanel from '../components/StandingsPanel.vue'
+import { useConfig } from '../composables/useConfig'
+import { useCopy } from '../composables/useCopy'
 
+const { config } = useConfig()
+const { t } = useCopy()
 const users = ref<PublicUser[]>([])
 const pending = ref(0)
 const submissions = ref<AdminSubmission[]>([])
@@ -75,6 +79,23 @@ async function assignTeams() {
     await loadAll()
   } catch (e) {
     message.value = e instanceof Error ? e.message : 'Failed'
+  } finally {
+    loading.value = ''
+  }
+}
+
+async function setUserTeam(userId: string, teamId: string) {
+  loading.value = `team-${userId}`
+  message.value = ''
+  try {
+    await api(`/admin/users/${userId}/team`, {
+      method: 'PATCH',
+      body: JSON.stringify({ teamId: teamId || null }),
+    })
+    message.value = 'Team updated.'
+    await loadAll()
+  } catch (e) {
+    message.value = e instanceof Error ? e.message : 'Failed to update team'
   } finally {
     loading.value = ''
   }
@@ -148,8 +169,9 @@ async function publishThisWeek() {
   loading.value = 'publish'
   message.value = ''
   try {
-    const result = await api<{ weekLabel: string }>('/admin/standings/publish', { method: 'POST' })
-    message.value = `Published ${result.weekLabel} to the site!`
+    const result = await api<{ weekLabel: string; emailsSent?: number }>('/admin/standings/publish', { method: 'POST' })
+    const emailNote = result.emailsSent ? ` (${result.emailsSent} notification emails sent)` : ''
+    message.value = `Published ${result.weekLabel} to the site!${emailNote}`
     await loadStandings()
   } catch (e) {
     message.value = e instanceof Error ? e.message : 'Failed'
@@ -198,11 +220,11 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 </script>
 
 <template>
-  <main class="page admin-page">
+  <main v-if="config" class="page admin-page">
     <header class="admin-header">
       <div>
-        <h1 class="page-title">Admin Panel</h1>
-        <p class="page-lead">Manage participants, inbox, and standings.</p>
+        <h1 class="page-title">{{ config.copy.adminTitle }}</h1>
+        <p class="page-lead">{{ config.copy.adminLead }}</p>
       </div>
     </header>
 
@@ -214,20 +236,20 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
         :class="{ active: activeTab === 'inbox' }"
         @click="activeTab = 'inbox'"
       >
-        Inbox
+        {{ config.copy.adminTabInbox }}
         <span v-if="unreadQuestions > 0" class="tab-badge">{{ unreadQuestions }}</span>
       </button>
       <button type="button" :class="{ active: activeTab === 'teams' }" @click="activeTab = 'teams'">
-        Teams
+        {{ config.copy.adminTabTeams }}
       </button>
       <button type="button" :class="{ active: activeTab === 'standings' }" @click="activeTab = 'standings'">
-        Standings
+        {{ config.copy.adminTabStandings }}
       </button>
       <button type="button" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">
-        Participants
+        {{ config.copy.adminTabParticipants }}
       </button>
       <button type="button" :class="{ active: activeTab === 'submissions' }" @click="activeTab = 'submissions'">
-        Submissions
+        {{ config.copy.adminTabSubmissions }}
       </button>
     </nav>
 
@@ -349,10 +371,10 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     <!-- Teams -->
     <section v-show="activeTab === 'teams'" class="admin-grid">
       <section class="card admin-section">
-        <h2>Team Assignment</h2>
-        <p class="stat-line"><strong>{{ pending }}</strong> users waiting in the pool</p>
+        <h2>{{ config.copy.adminTeamAssignmentTitle }}</h2>
+        <p class="stat-line">{{ t(String(config.copy.adminTeamAssignmentLead), { pending }) }}</p>
         <button class="btn btn-primary" :disabled="loading === 'assign' || pending === 0" @click="assignTeams">
-          {{ loading === 'assign' ? 'Assigning…' : 'Randomly Assign Teams' }}
+          {{ loading === 'assign' ? config.copy.adminAssigning : config.copy.adminAssignTeams }}
         </button>
       </section>
 
@@ -469,14 +491,14 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
     <!-- Participants -->
     <section v-show="activeTab === 'users'" class="card admin-section">
-      <h2>Participants</h2>
+      <h2>{{ config.copy.adminParticipantsTitle }}</h2>
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
               <th>Name</th>
               <th>Email</th>
-              <th>Team</th>
+              <th>{{ config.copy.adminTeamColumn }}</th>
               <th>Status</th>
               <th>Admin</th>
             </tr>
@@ -485,7 +507,19 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             <tr v-for="u in users" :key="u.id">
               <td>{{ u.displayName }}</td>
               <td>{{ u.email }}</td>
-              <td>{{ u.teamId ?? '—' }}</td>
+              <td>
+                <select
+                  class="team-select"
+                  :value="u.teamId ?? ''"
+                  :disabled="loading === `team-${u.id}`"
+                  @change="setUserTeam(u.id, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">{{ config.copy.adminUnassignedOption }}</option>
+                  <option v-for="team in config.teams" :key="team.id" :value="team.id">
+                    {{ team.icon }} {{ team.name }}
+                  </option>
+                </select>
+              </td>
               <td>
                 <span class="badge" :class="u.status === 'assigned' ? 'badge-positive' : 'badge-negative'">
                   {{ u.status }}
@@ -921,6 +955,12 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
   margin-top: 1rem;
   font-size: 0.85rem;
   color: var(--realm-text-muted);
+}
+
+.team-select {
+  min-width: 10rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.85rem;
 }
 
 code {

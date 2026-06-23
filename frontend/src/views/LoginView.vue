@@ -2,8 +2,10 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
+import { useConfig } from '../composables/useConfig'
 
 const { register, login, googleLoginUrl } = useAuth()
+const { config, loadConfig } = useConfig()
 const router = useRouter()
 const route = useRoute()
 
@@ -13,6 +15,8 @@ const email = ref('')
 const error = ref('')
 const success = ref('')
 const loading = ref(false)
+
+loadConfig()
 
 if (route.query.error === 'oauth_failed') {
   error.value = 'Google sign-in failed. Please try again.'
@@ -44,14 +48,12 @@ async function submit() {
 
 <template>
   <main class="page login-page">
-    <div class="login-card card">
+    <div v-if="config" class="login-card card">
       <div class="login-header">
         <span class="login-icon">⚔</span>
-        <h1>Enter The Crucible</h1>
+        <h1>{{ config.copy.loginTitle }}</h1>
         <p class="lead">
-          {{ mode === 'register'
-            ? 'Sign up with your name and email, or continue with Google.'
-            : 'We\'ll email you a one-time sign-in link — no password needed.' }}
+          {{ mode === 'register' ? config.copy.loginRegisterLead : config.copy.loginMagicLinkLead }}
         </p>
       </div>
 
@@ -60,29 +62,29 @@ async function submit() {
 
       <div v-if="!success" class="mode-toggle">
         <button type="button" :class="{ active: mode === 'register' }" @click="mode = 'register'">
-          New Recruit
+          {{ config.copy.loginRegisterTab }}
         </button>
         <button type="button" :class="{ active: mode === 'login' }" @click="mode = 'login'">
-          Returning Reader
+          {{ config.copy.loginSignInTab }}
         </button>
       </div>
 
       <form v-if="!success" @submit.prevent="submit">
         <label v-if="mode === 'register'" class="field">
-          Display Name
-          <input v-model="displayName" type="text" placeholder="Your reader name" required minlength="2" />
+          {{ config.copy.loginDisplayNameLabel }}
+          <input v-model="displayName" type="text" :placeholder="String(config.copy.loginDisplayNamePlaceholder)" required minlength="2" />
         </label>
         <label class="field">
-          Email
-          <input v-model="email" type="email" placeholder="you@example.com" required autocomplete="email" />
+          {{ config.copy.loginEmailLabel }}
+          <input v-model="email" type="email" :placeholder="String(config.copy.loginEmailPlaceholder)" required autocomplete="email" />
         </label>
         <button type="submit" class="btn btn-primary full" :disabled="loading">
-          {{ loading ? 'Please wait…' : mode === 'register' ? 'Join the Pool' : 'Email me a sign-in link' }}
+          {{ loading ? config.copy.loginWaiting : mode === 'register' ? config.copy.loginRegisterButton : config.copy.loginMagicLinkButton }}
         </button>
       </form>
 
       <template v-if="!success">
-        <div class="divider"><span>or</span></div>
+        <div class="divider"><span>{{ config.copy.loginDivider }}</span></div>
 
         <a :href="googleLoginUrl()" class="btn btn-secondary full google-btn">
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -91,16 +93,16 @@ async function submit() {
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
           </svg>
-          Continue with Google
+          {{ config.copy.loginGoogleButton }}
         </a>
       </template>
 
       <p class="fine-print">
         <template v-if="mode === 'register' || success">
-          After signing up you'll wait in the unassigned pool until an admin sorts you into a realm.
+          {{ config.copy.loginFinePrintRegister }}
         </template>
         <template v-else>
-          Check your inbox (and spam folder). Links expire after 15 minutes.
+          {{ config.copy.loginFinePrintMagicLink }}
         </template>
       </p>
     </div>

@@ -1,22 +1,24 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useConfig } from '../composables/useConfig'
+import { useCopy } from '../composables/useCopy'
 
 const { config, loadConfig } = useConfig()
+const { t } = useCopy()
 onMounted(loadConfig)
 </script>
 
 <template>
   <main v-if="config" class="page">
     <h1 class="page-title">How It Works</h1>
-    <p class="page-lead">The Crucible is a team-based reading competition. Here's how to survive it.</p>
+    <p class="page-lead">{{ t(config.copy.howItWorksLead) }}</p>
 
     <ol class="steps">
       <li v-for="step in config.howItWorks" :key="step.step" class="step card">
         <span class="step-num">{{ step.step }}</span>
         <div>
           <h3>{{ step.title }}</h3>
-          <p>{{ step.body }}</p>
+          <p>{{ t(step.body) }}</p>
         </div>
       </li>
     </ol>
@@ -24,11 +26,7 @@ onMounted(loadConfig)
     <section class="card rules-box">
       <h2>Scoring at a Glance</h2>
       <ul>
-        <li>Up to <strong>5 prompts per book</strong> — all positive OR all negative</li>
-        <li><strong>Bonus prompts</strong> layer on top (team prompts, page count, competition/trials)</li>
-        <li>Page-count bonus always goes to <strong>your team</strong></li>
-        <li>One book = add XP <em>or</em> sabotage — never both</li>
-        <li>Standings use <strong>average XP per member</strong> for fairness</li>
+        <li v-for="(rule, i) in config.copy.scoringSummary" :key="i">{{ t(rule) }}</li>
       </ul>
 
       <h3>Page Count Bonuses</h3>
