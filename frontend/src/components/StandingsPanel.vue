@@ -60,7 +60,9 @@ h2 {
 
 .svg-wrap {
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
 
 .svg-wrap :deep(svg) {
@@ -126,5 +128,41 @@ h2 {
 .score small {
   color: var(--realm-text-muted);
   font-size: 0.7rem;
+}
+
+@media (max-width: 600px) {
+  .standing-row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .info {
+    flex: 1 1 calc(100% - 4rem);
+    min-width: 0;
+  }
+
+  .info span {
+    font-size: 0.75rem;
+  }
+
+  .score {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--realm-border);
+  }
+
+  .score strong {
+    display: inline;
+    font-size: 1.1rem;
+  }
+
+  .score small {
+    display: inline;
+    margin-left: 0.35rem;
+  }
 }
 </style>

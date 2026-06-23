@@ -105,4 +105,17 @@ onMounted(loadConfig)
   padding-left: 1.25rem;
   line-height: 1.9;
 }
+
+@media (max-width: 768px) {
+  .step {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .step-num {
+    width: 2.25rem;
+    height: 2.25rem;
+    font-size: 0.9rem;
+  }
+}
 </style>

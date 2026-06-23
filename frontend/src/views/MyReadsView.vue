@@ -233,4 +233,28 @@ time {
   color: var(--realm-text-muted);
   opacity: 0.7;
 }
+
+@media (max-width: 768px) {
+  .reads-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .team-pill {
+    align-self: flex-start;
+  }
+
+  .read-header {
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .scores {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .empty-state .btn {
+    width: 100%;
+  }
+}
 </style>

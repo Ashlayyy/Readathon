@@ -89,4 +89,27 @@ const prompts = computed(() => {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tabs {
+    width: 100%;
+  }
+
+  .tabs button {
+    flex: 1;
+    min-height: 2.75rem;
+    padding: 0.65rem 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .toolbar input {
+    min-width: 0;
+    width: 100%;
+  }
+}
 </style>

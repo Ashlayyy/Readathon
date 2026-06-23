@@ -291,4 +291,46 @@ async function submitQuestion() {
 .full {
   width: 100%;
 }
+
+@media (max-width: 768px) {
+  .faq-q {
+    font-size: 0.95rem;
+    min-height: 2.75rem;
+  }
+
+  .ask-cta {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .ask-cta-actions {
+    width: 100%;
+  }
+
+  .ask-cta-actions .btn {
+    width: 100%;
+  }
+
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    max-height: 92vh;
+    overflow-y: auto;
+    border-radius: 12px 12px 0 0;
+    max-width: 100%;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 </style>

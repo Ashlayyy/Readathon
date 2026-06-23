@@ -48,5 +48,8 @@ a {
   display: inline-block;
   margin-top: 0.5rem;
   font-size: 0.85rem;
+  padding: 0.35rem 0;
+  min-height: 2.75rem;
+  line-height: 2rem;
 }
 </style>

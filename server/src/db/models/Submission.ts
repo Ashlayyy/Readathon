@@ -9,7 +9,6 @@ const submissionSchema = new Schema(
     format: { type: String, required: true },
     startedAt: { type: String, default: null },
     finishedAt: { type: String, default: null },
-    isReread: { type: Boolean, default: false },
     submissionType: { type: String, enum: ['add', 'sabotage'], required: true },
     targetTeamId: { type: String, default: null },
     promptIds: { type: [String], required: true },

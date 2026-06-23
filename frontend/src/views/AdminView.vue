@@ -931,4 +931,92 @@ small {
   color: var(--realm-text-muted);
   font-size: 0.78rem;
 }
+
+@media (max-width: 768px) {
+  .admin-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
+    gap: 0.4rem;
+  }
+
+  .admin-tabs button {
+    flex-shrink: 0;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.82rem;
+  }
+
+  .standings-actions-top {
+    flex-direction: column;
+  }
+
+  .standings-actions-top .btn-row {
+    width: 100%;
+  }
+
+  .standings-actions-top .btn-row .btn {
+    flex: 1;
+    min-width: calc(50% - 0.4rem);
+  }
+
+  .btn-row .btn {
+    flex: 1;
+    min-width: fit-content;
+  }
+
+  .inbox-header {
+    flex-direction: column;
+  }
+
+  .inbox-filters {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .inbox-filters button {
+    flex: 1;
+    text-align: center;
+    padding: 0.55rem 0.5rem;
+  }
+
+  .inbox-actions {
+    flex-direction: column;
+  }
+
+  .inbox-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .week-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .week-item .btn {
+    width: 100%;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .modal-backdrop {
+    padding: 1rem;
+    align-items: flex-end;
+  }
+
+  .modal {
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: 12px 12px 0 0;
+  }
+}
 </style>

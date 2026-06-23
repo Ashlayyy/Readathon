@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { api } from './lib/api'
 import { useAuth } from './composables/useAuth'
 import { useConfig } from './composables/useConfig'
@@ -8,7 +8,9 @@ import { useConfig } from './composables/useConfig'
 const { user, loaded, fetchUser, logout } = useAuth()
 const { loadConfig } = useConfig()
 const route = useRoute()
+const router = useRouter()
 const unreadQuestions = ref(0)
+const menuOpen = ref(false)
 
 onMounted(async () => {
   await Promise.all([fetchUser(), loadConfig()])
@@ -21,6 +23,7 @@ watch(user, async (u) => {
 })
 
 watch(() => route.path, async () => {
+  menuOpen.value = false
   if (user.value?.isAdmin) await loadUnreadCount()
   if (user.value) await fetchUser()
 })
@@ -36,6 +39,12 @@ async function loadUnreadCount() {
 
 async function handleLogout() {
   await logout()
+  menuOpen.value = false
+  await router.push('/')
+}
+
+function closeMenu() {
+  menuOpen.value = false
 }
 </script>
 
@@ -43,26 +52,45 @@ async function handleLogout() {
   <div class="app-shell">
     <header class="site-header">
       <div class="header-inner">
-        <RouterLink to="/" class="brand">
-          <span class="brand-icon">⚔</span>
-          <span class="brand-text">REALMATHON <em>5.0</em></span>
-        </RouterLink>
+        <div class="header-top">
+          <RouterLink to="/" class="brand" @click="closeMenu">
+            <span class="brand-icon">⚔</span>
+            <span class="brand-text">Readathon <em>2026</em></span>
+          </RouterLink>
 
-        <nav class="main-nav" aria-label="Main">
-          <RouterLink to="/">Home</RouterLink>
-          <RouterLink to="/how-it-works">How It Works</RouterLink>
-          <RouterLink to="/teams">Teams</RouterLink>
-          <RouterLink to="/prompts">Prompts</RouterLink>
-          <RouterLink to="/faq">FAQ</RouterLink>
-          <RouterLink to="/standings">Standings</RouterLink>
+          <button
+            type="button"
+            class="menu-toggle"
+            :aria-expanded="menuOpen"
+            aria-controls="main-navigation"
+            @click="menuOpen = !menuOpen"
+          >
+            <span class="sr-only">{{ menuOpen ? 'Close menu' : 'Open menu' }}</span>
+            <span class="menu-bar" :class="{ open: menuOpen }" />
+          </button>
+        </div>
+
+        <nav
+          id="main-navigation"
+          class="main-nav"
+          :class="{ open: menuOpen }"
+          aria-label="Main"
+        >
+          <RouterLink to="/" @click="closeMenu">Home</RouterLink>
+          <RouterLink to="/how-it-works" @click="closeMenu">How It Works</RouterLink>
+          <RouterLink to="/teams" @click="closeMenu">Teams</RouterLink>
+          <RouterLink to="/prompts" @click="closeMenu">Prompts</RouterLink>
+          <RouterLink to="/faq" @click="closeMenu">FAQ</RouterLink>
+          <RouterLink to="/standings" @click="closeMenu">Standings</RouterLink>
         </nav>
 
-        <div class="header-actions">
+        <div class="header-actions" :class="{ open: menuOpen }">
           <div v-if="user" class="action-buttons">
             <RouterLink
               v-if="user.status === 'assigned'"
               to="/submit"
               class="btn btn-secondary btn-sm action-btn"
+              @click="closeMenu"
             >
               Submit
             </RouterLink>
@@ -70,6 +98,7 @@ async function handleLogout() {
               v-if="user.isAdmin"
               to="/admin"
               class="btn btn-secondary btn-sm action-btn"
+              @click="closeMenu"
             >
               Admin
               <span v-if="unreadQuestions > 0" class="inbox-badge">{{ unreadQuestions }}</span>
@@ -77,7 +106,7 @@ async function handleLogout() {
           </div>
 
           <template v-if="user">
-            <RouterLink to="/profile" class="btn btn-secondary btn-sm profile-btn">
+            <RouterLink to="/profile" class="btn btn-secondary btn-sm profile-btn" @click="closeMenu">
               <span class="profile-avatar">{{ user.displayName.charAt(0).toUpperCase() }}</span>
               <span class="profile-text">
                 <span class="profile-name">
@@ -87,12 +116,18 @@ async function handleLogout() {
                 <span class="profile-email">{{ user.email }}</span>
               </span>
             </RouterLink>
-            <button type="button" class="btn btn-ghost btn-sm" @click="handleLogout">Log out</button>
+            <button type="button" class="btn btn-ghost btn-sm logout-btn" @click="handleLogout">
+              Log out
+            </button>
           </template>
-          <RouterLink v-else-if="loaded" to="/login" class="btn btn-primary btn-sm">Join</RouterLink>
+          <RouterLink v-else-if="loaded" to="/login" class="btn btn-primary btn-sm join-btn" @click="closeMenu">
+            Join
+          </RouterLink>
         </div>
       </div>
     </header>
+
+    <div v-if="menuOpen" class="menu-backdrop" @click="closeMenu" />
 
     <div class="app-content">
       <div v-if="user?.status === 'pending'" class="alert alert-warning status-banner">
@@ -103,7 +138,7 @@ async function handleLogout() {
     </div>
 
     <footer class="site-footer">
-      <p>REALMATHON 5.0 — <em>The Crucible</em></p>
+      <p>Readathon 2026 — <em>The Crucible</em></p>
     </footer>
   </div>
 </template>
@@ -117,22 +152,27 @@ async function handleLogout() {
 
 .site-header {
   border-bottom: 1px solid var(--realm-border);
-  background: rgba(8, 7, 11, 0.85);
+  background: rgba(8, 7, 11, 0.92);
   backdrop-filter: blur(8px);
   position: sticky;
   top: 0;
-  z-index: 100;
-  margin: 0 calc(-1 * var(--page-gutter)) 2rem;
-  padding: 0 var(--page-gutter);
+  z-index: 200;
+  margin: 0 calc(-1 * var(--page-gutter) - var(--safe-left)) 1.5rem;
+  margin-right: calc(-1 * var(--page-gutter) - var(--safe-right));
+  padding: var(--safe-top) calc(var(--page-gutter) + var(--safe-right)) 0 calc(var(--page-gutter) + var(--safe-left));
 }
 
 .header-inner {
   display: flex;
   align-items: center;
-  gap: 2rem;
-  padding: 1rem 0;
+  gap: 1.25rem;
+  padding: 0.75rem 0;
   max-width: var(--page-max);
   margin: 0 auto;
+}
+
+.header-top {
+  display: contents;
 }
 
 .brand {
@@ -151,9 +191,9 @@ async function handleLogout() {
 
 .brand-text {
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: clamp(0.95rem, 3.5vw, 1.15rem);
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
 }
 
 .brand-text em {
@@ -162,10 +202,79 @@ async function handleLogout() {
   font-size: 0.85em;
 }
 
+.menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 1px solid var(--realm-border);
+  border-radius: var(--radius);
+  background: var(--realm-surface);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.menu-bar,
+.menu-bar::before,
+.menu-bar::after {
+  display: block;
+  width: 1.15rem;
+  height: 2px;
+  background: var(--realm-text);
+  border-radius: 1px;
+  transition: transform 0.2s, opacity 0.2s;
+}
+
+.menu-bar {
+  position: relative;
+}
+
+.menu-bar::before,
+.menu-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+}
+
+.menu-bar::before {
+  top: -6px;
+}
+
+.menu-bar::after {
+  top: 6px;
+}
+
+.menu-bar.open {
+  background: transparent;
+}
+
+.menu-bar.open::before {
+  top: 0;
+  transform: rotate(45deg);
+}
+
+.menu-bar.open::after {
+  top: 0;
+  transform: rotate(-45deg);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
 .main-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1.5rem;
+  gap: 0.25rem 1.25rem;
   flex: 1;
   justify-content: center;
 }
@@ -174,7 +283,10 @@ async function handleLogout() {
   color: var(--realm-text-muted);
   font-size: 0.92rem;
   font-weight: 500;
-  padding: 0.35rem 0;
+  padding: 0.5rem 0;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
   border-bottom: 2px solid transparent;
   transition: color 0.2s, border-color 0.2s;
   white-space: nowrap;
@@ -187,9 +299,25 @@ async function handleLogout() {
   border-bottom-color: var(--realm-accent);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.65rem;
+  border-right: 1px solid var(--realm-border);
+}
+
 .action-buttons :deep(a.action-btn) {
   position: relative;
   text-decoration: none;
+  min-height: 2.75rem;
 }
 
 .action-buttons :deep(a.action-btn:hover),
@@ -207,6 +335,7 @@ async function handleLogout() {
   text-align: left;
   text-decoration: none;
   max-width: 14rem;
+  min-height: 2.75rem;
   padding: 0.4rem 0.85rem 0.4rem 0.45rem;
 }
 
@@ -260,25 +389,6 @@ async function handleLogout() {
   text-overflow: ellipsis;
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  flex-shrink: 0;
-}
-
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding-right: 0.85rem;
-  border-right: 1px solid var(--realm-border);
-}
-
-.action-btn {
-  white-space: nowrap;
-}
-
 .inbox-badge {
   display: inline-flex;
   align-items: center;
@@ -309,21 +419,27 @@ async function handleLogout() {
 }
 
 .btn-sm {
-  padding: 0.45rem 0.9rem;
+  padding: 0.5rem 0.9rem;
   font-size: 0.85rem;
+  min-height: 2.75rem;
+}
+
+.menu-backdrop {
+  display: none;
 }
 
 .app-content {
   flex: 1;
+  min-width: 0;
 }
 
 .status-banner {
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.25rem;
 }
 
 .site-footer {
-  margin-top: 3rem;
-  padding-top: 2rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
   text-align: center;
   color: var(--realm-text-muted);
   font-size: 0.85rem;
@@ -335,16 +451,17 @@ async function handleLogout() {
   font-style: normal;
 }
 
-@media (max-width: 1100px) {
+/* Tablet */
+@media (max-width: 1024px) {
   .header-inner {
     flex-wrap: wrap;
-    gap: 1rem;
   }
 
   .main-nav {
     order: 3;
     width: 100%;
     justify-content: flex-start;
+    gap: 0.15rem 1rem;
   }
 
   .header-actions {
@@ -352,41 +469,111 @@ async function handleLogout() {
   }
 }
 
-@media (max-width: 700px) {
+/* Mobile */
+@media (max-width: 768px) {
+  .site-header {
+    margin-bottom: 1rem;
+  }
+
   .header-inner {
     flex-direction: column;
     align-items: stretch;
+    gap: 0;
+    padding: 0.65rem 0;
   }
 
-  .brand {
-    justify-content: center;
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 0;
+  }
+
+  .menu-toggle {
+    display: flex;
+  }
+
+  .menu-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 150;
+  }
+
+  .main-nav {
+    display: none;
+    order: unset;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--realm-border);
+    margin-top: 0.65rem;
+  }
+
+  .main-nav.open {
+    display: flex;
+  }
+
+  .main-nav a {
+    padding: 0.85rem 0.5rem;
+    border-bottom: 1px solid var(--realm-border);
+    width: 100%;
+    font-size: 1rem;
+  }
+
+  .main-nav a:last-child {
+    border-bottom: none;
   }
 
   .header-actions {
-    flex-wrap: wrap;
-    justify-content: center;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+    width: 100%;
     margin-left: 0;
+    padding: 0.75rem 0 0.25rem;
+    border-top: 1px solid var(--realm-border);
+  }
+
+  .header-actions.open {
+    display: flex;
   }
 
   .action-buttons {
     border-right: none;
     padding-right: 0;
     width: 100%;
-    justify-content: center;
     flex-wrap: wrap;
+  }
+
+  .action-buttons :deep(a.action-btn) {
+    flex: 1;
+    justify-content: center;
   }
 
   .profile-btn {
     max-width: 100%;
-    justify-content: center;
+    width: 100%;
   }
 
-  .profile-text {
-    align-items: center;
+  .logout-btn,
+  .join-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .profile-email {
+    display: none;
   }
 
-  .main-nav {
-    justify-content: center;
+  .profile-btn {
+    justify-content: flex-start;
   }
 }
 </style>

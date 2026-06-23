@@ -38,7 +38,6 @@ submissionRoutes.post('/', async (c) => {
     format: body.format,
     startedAt: optionalDate(body.startedAt),
     finishedAt: optionalDate(body.finishedAt),
-    isReread: body.isReread,
     submissionType: body.submissionType,
     targetTeamId: body.targetTeamId ?? null,
     promptIds: body.promptIds,

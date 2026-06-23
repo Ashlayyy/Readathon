@@ -39,7 +39,7 @@ onMounted(async () => {
       <h1>{{ config.event.name }}</h1>
       <p class="tagline">{{ config.event.tagline }}</p>
       <p class="schedule">
-        {{ config.event.month }} · {{ config.event.timezoneNote }}
+        {{ config.event.month }}
       </p>
       <div class="hero-actions">
         <RouterLink v-if="!user" to="/login" class="btn btn-primary">Enter The Crucible</RouterLink>
@@ -112,7 +112,7 @@ onMounted(async () => {
 }
 
 .schedule {
-  color: var(--realm-text-muted);
+  color: var(--realm-accent);
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
 }
@@ -173,5 +173,25 @@ onMounted(async () => {
 .link-card p {
   color: var(--realm-text-muted);
   font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .hero {
+    padding: 1.25rem 0 2rem;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-actions .btn {
+    width: 100%;
+  }
+
+  .tagline {
+    font-size: 1rem;
+    padding: 0 0.5rem;
+  }
 }
 </style>

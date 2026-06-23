@@ -548,4 +548,51 @@ time {
   font-size: 0.85rem;
   color: var(--realm-text-muted);
 }
+
+@media (max-width: 768px) {
+  .profile-header {
+    margin-bottom: 1rem;
+  }
+
+  .profile-identity {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .profile-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.25rem;
+  }
+
+  .profile-tabs button {
+    flex-shrink: 0;
+  }
+
+  .read-header {
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .scores {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .settings-card .btn {
+    width: 100%;
+  }
+
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .empty-state .btn {
+    width: 100%;
+  }
+
+  .question-meta {
+    flex-wrap: wrap;
+  }
+}
 </style>

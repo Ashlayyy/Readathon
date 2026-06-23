@@ -10,7 +10,6 @@ export type SubmissionInput = {
   format: string
   startedAt?: string | null
   finishedAt?: string | null
-  isReread: boolean
   submissionType: 'add' | 'sabotage'
   targetTeamId?: string
   promptIds: string[]
@@ -244,7 +243,6 @@ export function submissionToPublic(sub: ISubmission & { createdAt?: Date }) {
     format: sub.format,
     startedAt: sub.startedAt,
     finishedAt: sub.finishedAt,
-    isReread: sub.isReread,
     submissionType: sub.submissionType,
     targetTeamId: sub.targetTeamId,
     promptIds: sub.promptIds,

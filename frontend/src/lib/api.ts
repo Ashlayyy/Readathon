@@ -102,7 +102,6 @@ export type Submission = {
   format: string
   startedAt: string | null
   finishedAt: string | null
-  isReread: boolean
   submissionType: 'add' | 'sabotage'
   targetTeamId: string | null
   promptIds: string[]

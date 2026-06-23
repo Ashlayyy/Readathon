@@ -206,4 +206,18 @@ form {
   text-align: center;
   line-height: 1.55;
 }
+
+@media (max-width: 768px) {
+  .login-page {
+    padding: 1rem 0;
+  }
+
+  .login-card {
+    max-width: 100%;
+  }
+
+  .mode-toggle button {
+    min-height: 2.75rem;
+  }
+}
 </style>
