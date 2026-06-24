@@ -20,14 +20,12 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const { useAuth } = await import('../composables/useAuth')
   const { useConfig } = await import('../composables/useConfig')
-  const { user, loaded, fetchUser } = useAuth()
+  const { user, fetchUser } = useAuth()
   const { loadConfig } = useConfig()
 
-  await Promise.all([
-    loaded.value ? Promise.resolve() : fetchUser(),
-    loadConfig(),
-  ])
+  await Promise.all([fetchUser(), loadConfig()])
 
+  if (to.name === 'login' && user.value) return '/'
   if (to.meta.requiresAdmin && !user.value?.isAdmin) return '/'
   if (to.meta.requiresAuth && !user.value) return '/login'
   if (to.meta.requiresAssigned && user.value?.status !== 'assigned') {

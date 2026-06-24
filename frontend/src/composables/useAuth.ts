@@ -7,7 +7,6 @@ let fetchPromise: Promise<PublicUser | null> | null = null
 
 export function useAuth() {
   async function fetchUser(force = false): Promise<PublicUser | null> {
-    if (!force && loaded.value) return user.value
     if (!force && fetchPromise) return fetchPromise
 
     fetchPromise = (async () => {

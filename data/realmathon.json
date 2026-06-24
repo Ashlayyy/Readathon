@@ -1,266 +1,515 @@
 {
-  "event": {
-    "name": "Readathon 2026",
-    "subtitle": "The Crucible",
-    "tagline": "Your character class against every other. Books — and glory — on the line.",
-    "month": "July - December",
-    "loreTitle": "The Story So Far",
-    "characterCreationNote": "Ready? Sign up and wait for your realm assignment.",
-    "lore": [
-      "Welcome to the Readathon 2026. All the realms have been destroyed — you are being forced into The Crucible, a deadly competition where it's your character class against every other character class.",
-      "The strongest will put their books (and lives) on the line to gain XP, leveling themselves and their team up while sabotaging the XP of other teams.",
-      "First things first: you'll need a team before you're shipped off to the competition. Once accepted, you'll be sorted into one of {teamCount} realms."
-    ]
-  },
-  "copy": {
-    "enterCta": "Enter The Crucible",
-    "submitCta": "Submit a Book",
-    "howItWorksCta": "How It Works",
-    "joinCta": "Join",
-    "logoutCta": "Log out",
-    "submitNav": "Submit",
-    "adminNav": "Admin",
-    "pendingBanner": "You're in the pool — an admin will sort you into a realm soon.",
-    "loginTitle": "Enter The Crucible",
-    "loginRegisterLead": "Sign up with your name and email, or continue with Google.",
-    "loginMagicLinkLead": "We'll email you a one-time sign-in link — no password needed.",
-    "loginRegisterTab": "New Recruit",
-    "loginSignInTab": "Returning Reader",
-    "loginDisplayNameLabel": "Display Name",
-    "loginDisplayNamePlaceholder": "Your reader name",
-    "loginEmailLabel": "Email",
-    "loginEmailPlaceholder": "you@example.com",
-    "loginRegisterButton": "Join the Pool",
-    "loginMagicLinkButton": "Email me a sign-in link",
-    "loginGoogleButton": "Continue with Google",
-    "loginDivider": "or",
-    "loginFinePrintRegister": "After signing up you'll wait in the unassigned pool until an admin sorts you into a realm.",
-    "loginFinePrintMagicLink": "Check your inbox (and spam folder). Links expire after 15 minutes.",
-    "faqLoginToAsk": "Log in to Ask",
-    "teamsPageTitle": "The Realms",
-    "teamsPageLead": "Once accepted, you'll be randomly sorted into one of {teamCount} realms. Each has optional bonus prompts worth ±10 XP.",
-    "howItWorksLead": "A team-based reading competition across {teamCount} realms. Here's how to survive it.",
-    "promptsLead": "{positiveCount} ways to add XP. {negativeCount} ways to sabotage. Pick up to {maxPrompts} per book.",
-    "promptsAddTab": "Add XP (+)",
-    "promptsSabotageTab": "Sabotage (-)",
-    "promptsSearchPlaceholder": "Search prompts…",
-    "faqPageLead": "Common questions about the readathon.",
-    "faqAskTitle": "Still have questions?",
-    "faqAskBody": "Can't find what you need? Send a message to the admins.",
-    "faqAskButton": "Ask the Admins",
-    "faqModalTitle": "Ask the Admins",
-    "faqModalHint": "Send one message with your question. We'll see it in our inbox.",
-    "faqModalPlaceholder": "What would you like to know?",
-    "faqModalSend": "Send Message",
-    "faqModalCancel": "Cancel",
-    "faqModalDone": "Done",
-    "standingsUnpublished": "Standings haven't been published yet. Check back once the hosts release them!",
-    "profileBooksTab": "My Books",
-    "profileQuestionsTab": "My Questions",
-    "profileSettingsTab": "Notifications",
-    "profileSettingsTitle": "Notification preferences",
-    "profileSettingsLead": "Choose what you'd like to be emailed about. Requires RESEND_API_KEY on the server.",
-    "profileNotifyStandings": "Standings published",
-    "profileNotifyStandingsHint": "Email when admins publish new weekly standings",
-    "profileNotifyAnswers": "Question answered",
-    "profileNotifyAnswersHint": "Email when an admin replies to a question you asked",
-    "profileSaveSettings": "Save Settings",
-    "profileSaving": "Saving…",
-    "adminTitle": "Admin Panel",
-    "adminLead": "Manage participants, inbox, and standings.",
-    "adminTabInbox": "Inbox",
-    "adminTabTeams": "Teams",
-    "adminTabStandings": "Standings",
-    "adminTabParticipants": "Participants",
-    "adminTabSubmissions": "Submissions",
-    "adminAssignTeams": "Randomly Assign Teams",
-    "adminAssigning": "Assigning…",
-    "adminTeamAssignmentTitle": "Team Assignment",
-    "adminTeamAssignmentLead": "{pending} users waiting in the pool",
-    "adminParticipantsTitle": "Participants",
-    "adminTeamColumn": "Team",
-    "adminUnassignedOption": "— Unassigned —",
-    "adminSavingTeam": "Saving…",
-    "scoringSummary": [
-      "Up to {maxPrompts} prompts per book — all positive OR all negative",
-      "Bonus prompts layer on top (team prompts, page count, competition/trials)",
-      "Page-count bonus always goes to your team",
-      "One book = add XP or sabotage — never both",
-      "Standings use average XP per member for fairness"
-    ],
-    "homeQuickLinks": {
-      "teamsTitle": "{teamsLabel}",
-      "teamsDescription": "Meet the realms and their bonus prompts.",
-      "promptsTitle": "{promptsLabel}",
-      "promptsDescription": "Add XP or sabotage rival teams.",
-      "faqTitle": "FAQ",
-      "faqDescription": "Everything you need to know."
-    },
-    "notifications": {
-      "answerSubject": "Your question was answered — {eventName}",
-      "standingsSubject": "New standings published — {weekLabel}",
-      "standingsIntro": "Weekly standings for {weekLabel} are now live on the site."
-    },
-    "nav": {
-      "home": "Home",
-      "howItWorks": "How It Works",
-      "teams": "Teams",
-      "prompts": "Prompts",
-      "faq": "FAQ",
-      "standings": "Standings"
-    }
-  },
-  "schedule": {
-    "readathonStart": "July 1",
-    "readathonEnd": "December 31"
-  },
-  "branding": {
-    "theme": {
-      "background": "#08070b",
-      "surface": "#12101a",
-      "surfaceAlt": "#1c1928",
-      "text": "#f4efe8",
-      "textMuted": "#9a9188",
-      "accent": "#d4634a",
-      "accentGlow": "#ff8a6a",
-      "border": "#2e2a3d"
-    }
-  },
-  "teams": [
-    {
-      "id": "clerics",
-      "name": "The Clerics",
-      "color": "#c9a227",
-      "accent": "#f5e6b8",
-      "icon": "✦",
-      "leads": [],
-      "bonusPrompts": [
-        { "id": "clerics-comfort", "label": "A guilty pleasure — a book that provides comfort to you", "points": 10 },
-        { "id": "clerics-good-evil", "label": "A story centred around good vs evil", "points": 10 }
-      ]
-    },
-    {
-      "id": "mages",
-      "name": "The Mages",
-      "color": "#9b7ed9",
-      "accent": "#e8dff5",
-      "icon": "◈",
-      "leads": [],
-      "bonusPrompts": [
-        { "id": "mages-school", "label": "A book with a school/academic setting", "points": 10 },
-        { "id": "mages-foil", "label": "A book with foiling on the cover", "points": 10 }
-      ]
-    },
-    {
-      "id": "paladins",
-      "name": "The Paladins",
-      "color": "#5ba4b8",
-      "accent": "#d4eaf0",
-      "icon": "⛨",
-      "leads": [],
-      "bonusPrompts": [
-        { "id": "paladins-injustice", "label": "A character overcomes/fights injustice", "points": 10 },
-        { "id": "paladins-reread-author", "label": "An author you've read from before", "points": 10 }
-      ]
-    },
-    {
-      "id": "rogues",
-      "name": "The Rogues",
-      "color": "#4a8f62",
-      "accent": "#d4edda",
-      "icon": "†",
-      "leads": [],
-      "bonusPrompts": [
-        { "id": "rogues-mystery", "label": "A book with a mystery element", "points": 10 },
-        { "id": "rogues-steal-tbr", "label": "Steal a book from someone's March TBR that is not your team", "points": 10 }
-      ]
-    }
-  ],
-  "pageCountBonuses": [
-    { "min": 0, "max": 200, "points": 0, "label": "Less than 200 pages" },
-    { "min": 201, "max": 400, "points": 20, "label": "201–400 pages" },
-    { "min": 401, "max": 600, "points": 40, "label": "401–600 pages" },
-    { "min": 601, "max": 800, "points": 60, "label": "601–800 pages" },
-    { "min": 801, "max": null, "points": 80, "label": "801+ pages" }
-  ],
-  "globalBonuses": [
-    {
-      "id": "competition-trials",
-      "label": "Competition / trials in the book",
-      "description": "The story involves a competition or trials.",
-      "points": 10
-    }
-  ],
-  "prompts": {
-    "positive": [
-      { "id": "loot-box", "gameName": "Open A Loot Box", "label": "A book you didn't buy", "description": "You didn't purchase this — e.g. library, KU (book returns after). Not an Audible credit where you keep it forever.", "points": 1 },
-      { "id": "parry", "gameName": "Successfully Parry An Attack", "label": "A fast-paced read", "description": "Your interpretation of a story that moves quickly.", "points": 1 },
-      { "id": "shield", "gameName": "Shield Yourself", "label": "Read a sequel", "description": "A sequel to a previous book.", "points": 1 },
-      { "id": "armor-class", "gameName": "Upgrade Your Armor Class", "label": "Multiple POVs", "description": "A book with more than one point of view.", "points": 2 },
-      { "id": "buff", "gameName": "Get A Buff", "label": "Different format than your last book", "description": "If you read an ebook for your last book, this must be audio or physical (and vice versa).", "points": 2 },
-      { "id": "explore-map", "gameName": "Explore The Map", "label": "Read an author's backlist", "description": "Not the author's most recent release. Even if it came out 20 years ago, if it's their most recent book published it doesn't count. Any other book by that author counts.", "points": 2 },
-      { "id": "boss", "gameName": "Take Down A Boss", "label": "Dystopian", "description": "A dystopian book.", "points": 3 },
-      { "id": "farm-xp", "gameName": "Farm XP", "label": "Randomize your TBR with a die", "description": "Randomize which book you pick — titles to numbers, shelves to numbers, etc.", "points": 3, "link": "https://rolladie.net/" },
-      { "id": "expose-trap", "gameName": "Expose A Trap", "label": "Structural openings on the cover", "description": "A door, window, gate, etc. on the cover.", "points": 3 },
-      { "id": "repair", "gameName": "Repair Equipment", "label": "Second chances", "description": "Reread a book, retry an author/book, or a second chance romance.", "points": 4 },
-      { "id": "npc", "gameName": "Befriend An NPC", "label": "Author's name is two lines on the cover", "description": "Author's name is two lines — NOT one — on the cover.", "points": 4 },
-      { "id": "checkpoint", "gameName": "Check Point", "label": "A book with parts", "description": "The book is split up into parts.", "points": 4 },
-      { "id": "heal", "gameName": "Heal Your Teammates", "label": "Read a host's 5-star read", "description": "Does not have to be your team's host — any of the 9 hosts.", "points": 5 },
-      { "id": "ally", "gameName": "Make An Ally", "label": "Own voices", "description": "An author from a marginalized group writing from their lived experience.", "points": 5 },
-      { "id": "stat-boost", "gameName": "Get A Stat Boost", "label": "Symbols in the title", "description": "Things like & or ' in the title.", "points": 5 }
-    ],
-    "negative": [
-      { "id": "trap", "gameName": "Set A Trap", "label": "Read a pretty book", "description": "Whatever this means to you.", "points": -1 },
-      { "id": "glitch", "gameName": "Exploit A Glitch", "label": "Read using electronics", "description": "Ebook or audiobook.", "points": -1 },
-      { "id": "aoe", "gameName": "AoE", "label": "Start a series", "description": "First book in a series, not a sequel.", "points": -1 },
-      { "id": "betray", "gameName": "Betray An Alliance", "label": "Read a recent haul instead of your TBR", "description": "A book you recently acquired, not from your planned TBR.", "points": -2 },
-      { "id": "resource-drain", "gameName": "Resource Drain", "label": "More pages than your last book", "description": "Must have more pages than the book you just finished.", "points": -2 },
-      { "id": "random-encounter", "gameName": "Random Encounter", "label": "Book outside your comfort zone", "description": "Whatever this means to you.", "points": -2 },
-      { "id": "glass-cannon", "gameName": "Glass Canon", "label": "A 5-star prediction", "description": "A book you think you might give 5 stars.", "points": -3 },
-      { "id": "poison-dart", "gameName": "Poison Dart", "label": "A character has a hidden identity", "description": "Character is hiding who they are or a secret from the reader or other characters.", "points": -3 },
-      { "id": "critical-hit", "gameName": "Critical Hit", "label": "Read a book in one sitting", "description": "Finished in a single sitting.", "points": -3 },
-      { "id": "elemental", "gameName": "Elemental Attack", "label": "Author writes in multiple genres", "description": "The author writes across multiple genres.", "points": -4 },
-      { "id": "close-quarters", "gameName": "Close Quarters", "label": "No \"THE\" anywhere in the title", "description": "Including as the first word — no \"the\" anywhere.", "points": -4 },
-      { "id": "magic-missile", "gameName": "Magic Missile", "label": "Roll a D6 for words in the title", "description": "Whatever the die lands on is how many words your title must have.", "points": -4, "link": "https://rolladie.net/" },
-      { "id": "reinforcements", "gameName": "Call Reinforcements", "label": "POC author", "description": "The author is a person of colour.", "points": -5 },
-      { "id": "chain-attack", "gameName": "Chain Attack", "label": "Interconnected world/series", "description": "Another series exists in the same world (e.g. Cosmere). Interconnected standalones within the same series do NOT count.", "points": -5 },
-      { "id": "1v1", "gameName": "1v1", "label": "Icon between title and author on spine", "description": "There is an icon between the title and author on the spine.", "points": -5 }
-    ]
-  },
-  "howItWorks": [
-    { "step": 1, "title": "Join the Crucible", "body": "Sign up with your name and email. You'll wait in the pool until teams are assigned." },
-    { "step": 2, "title": "Get sorted into a realm", "body": "Once accepted, you'll be randomly placed on one of {teamCount} teams." },
-    { "step": 3, "title": "Read & submit", "body": "Finish a book, then use the submission form. Pick up to {maxPrompts} prompts — all positive OR all negative per book." },
-    { "step": 4, "title": "Add or sabotage", "body": "Help your team's XP or attack another realm. One book can only do one — not both." },
-    { "step": 5, "title": "Layer bonuses", "body": "Team prompts, page-count bonuses, and competition/trials stack on top of your {maxPrompts} prompts." },
-    { "step": 6, "title": "Double-check", "body": "Submissions cannot be edited. Review carefully before you submit!" }
-  ],
-  "scoringRules": {
-    "maxPromptsPerBook": 5,
-    "promptsMustBeSameSign": true,
-    "pageBonusAlwaysPositiveToOwnTeam": true,
-    "standingsUseAveragePerMember": true,
-    "oneAttackTargetPerBook": true
-  },
-  "faq": [
-    { "q": "Can I use more than one prompt?", "a": "Yes — up to {maxPrompts} prompts per book, not including bonus prompts. They must all be increasing OR all decreasing." },
-    { "q": "Does this book count?", "a": "If you think it counts, count it. If you think it doesn't, don't." },
-    { "q": "Do I have to read my realm's bonus prompts?", "a": "No — they're optional extras for people who want them." },
-    { "q": "How long is the readathon?", "a": "July through December." },
-    { "q": "How do I track my reads?", "a": "Use the submission form on this site after your team is assigned." },
-    { "q": "How many times can bonus prompts be used?", "a": "As many times as you like." },
-    { "q": "Can prompts be reused?", "a": "Yes — use them as much as you want." },
-    { "q": "Can I attack multiple realms?", "a": "One book attacks one realm. Your next book can target a different realm." },
-    { "q": "Can one book both increase and decrease?", "a": "No — one book does one or the other." },
-    { "q": "How is it fair if one realm has more members?", "a": "Points are averaged per person on the team." },
-    { "q": "Is there a minimum number of prompts?", "a": "Nope — do as many or as few as you'd like." },
-    { "q": "Do manga or graphic novels count?", "a": "Yes — any form of reading counts." },
-    { "q": "Can a book started in February but finished in March count?", "a": "Use your discretion. If you only read 10 pages in March, probably not. A good chunk in March — sure." },
-    { "q": "Can a book be a re-read?", "a": "Yes." },
-    { "q": "Do DNFs count?", "a": "Use your discretion — if you read a good chunk in March, sure." },
-    { "q": "Audiobooks — what page count?", "a": "Use Goodreads page count. If none, use 40 pages per hour." },
-    { "q": "Manga/graphic novels — series or volumes?", "a": "Be fair about what you'd accept from others. A five-page short story probably isn't fair." },
-    { "q": "Can I change a submission?", "a": "No — double-check before submitting." },
-    { "q": "Do bonus prompts count toward the five?", "a": "No — you get {maxPrompts} prompts, then bonuses layer on top." }
-  ]
+	"event": {
+		"name": "Readathon 2026",
+		"subtitle": "The Crucible",
+		"tagline": "Welcome to Whoreland",
+		"month": "July - December",
+		"loreTitle": "The Story So Far",
+		"characterCreationNote": "Ready? Sign up and wait for your realm assignment.",
+		"lore": [
+			"Welcome to the Readathon 2026. All the realms have been destroyed — you are being forced into The Crucible, a deadly competition where it's your character class against every other character class.",
+			"The strongest will put their books (and lives) on the line to gain XP, leveling themselves and their team up while sabotaging the XP of other teams.",
+			"First things first: you'll need a team before you're shipped off to the competition. Once accepted, you'll be sorted into one of {teamCount} realms."
+		]
+	},
+	"copy": {
+		"enterCta": "Click to enter Whoreland",
+		"submitCta": "Submit a Book",
+		"howItWorksCta": "How It Works",
+		"joinCta": "Join",
+		"logoutCta": "Log out",
+		"submitNav": "Submit",
+		"adminNav": "Admin",
+		"pendingBanner": "You're in the pool — an admin will sort you into a realm soon.",
+		"loginTitle": "Enter The Crucible",
+		"loginRegisterLead": "Sign up with your name and email, or continue with Google.",
+		"loginMagicLinkLead": "We'll email you a one-time sign-in link — no password needed.",
+		"loginRegisterTab": "New Recruit",
+		"loginSignInTab": "Returning Reader",
+		"loginDisplayNameLabel": "Display Name",
+		"loginDisplayNamePlaceholder": "Your reader name",
+		"loginEmailLabel": "Email",
+		"loginEmailPlaceholder": "you@example.com",
+		"loginRegisterButton": "Join the Pool",
+		"loginMagicLinkButton": "Email me a sign-in link",
+		"loginGoogleButton": "Continue with Google",
+		"loginDivider": "or",
+		"loginFinePrintRegister": "After signing up you'll wait in the unassigned pool until an admin sorts you into a realm.",
+		"loginFinePrintMagicLink": "Check your inbox (and spam folder). Links expire after 15 minutes.",
+		"faqLoginToAsk": "Log in to ask",
+		"teamsPageTitle": "The Realms",
+		"teamsPageLead": "Once accepted, you'll be randomly sorted into one of {teamCount} realms. Each has optional bonus prompts worth ±10 XP.",
+		"howItWorksLead": "A team-based reading competition across {teamCount} realms. Here's how to survive it.",
+		"promptsLead": "{positiveCount} ways to add XP. {negativeCount} ways to sabotage. Pick up to {maxPrompts} per book.",
+		"promptsAddTab": "Add XP (+)",
+		"promptsSabotageTab": "Sabotage (-)",
+		"promptsSearchPlaceholder": "Search prompts…",
+		"faqPageLead": "Common questions about the readathon.",
+		"faqAskTitle": "Still have questions?",
+		"faqAskBody": "Can't find what you need? Send a message to the admins.",
+		"faqAskButton": "Ask the Admins",
+		"faqModalTitle": "Ask the Admins",
+		"faqModalHint": "Send one message with your question. We'll see it in our inbox.",
+		"faqModalPlaceholder": "What would you like to know?",
+		"faqModalSend": "Send Message",
+		"faqModalCancel": "Cancel",
+		"faqModalDone": "Done",
+		"standingsUnpublished": "Standings haven't been published yet. Check back once the hosts release them!",
+		"profileBooksTab": "My Books",
+		"profileQuestionsTab": "My Questions",
+		"profileSettingsTab": "Notifications",
+		"profileSettingsTitle": "Notification preferences",
+		"profileSettingsLead": "Choose what you'd like to be emailed about. Requires RESEND_API_KEY on the server.",
+		"profileNotifyStandings": "Standings published",
+		"profileNotifyStandingsHint": "Email when admins publish new weekly standings",
+		"profileNotifyAnswers": "Question answered",
+		"profileNotifyAnswersHint": "Email when an admin replies to a question you asked",
+		"profileSaveSettings": "Save Settings",
+		"profileSaving": "Saving…",
+		"adminTitle": "Admin Panel",
+		"adminLead": "Manage participants, inbox, and standings.",
+		"adminTabInbox": "Inbox",
+		"adminTabTeams": "Teams",
+		"adminTabStandings": "Standings",
+		"adminTabParticipants": "Participants",
+		"adminTabSubmissions": "Submissions",
+		"adminAssignTeams": "Randomly Assign Teams",
+		"adminAssigning": "Assigning…",
+		"adminTeamAssignmentTitle": "Team Assignment",
+		"adminTeamAssignmentLead": "{pending} users waiting in the pool",
+		"adminParticipantsTitle": "Participants",
+		"adminTeamColumn": "Team",
+		"adminUnassignedOption": "— Unassigned —",
+		"adminSavingTeam": "Saving…",
+		"scoringSummary": [
+			"Up to {maxPrompts} prompts per book — all positive OR all negative",
+			"Bonus prompts layer on top (team prompts, page count, competition/trials)",
+			"Page-count bonus always goes to your team",
+			"One book = add XP or sabotage — never both",
+			"Standings use average XP per member for fairness"
+		],
+		"homeQuickLinks": {
+			"teamsTitle": "{teamsLabel}",
+			"teamsDescription": "Meet the realms and their bonus prompts.",
+			"promptsTitle": "{promptsLabel}",
+			"promptsDescription": "Add XP or sabotage rival teams.",
+			"faqTitle": "FAQ",
+			"faqDescription": "Everything you need to know."
+		},
+		"notifications": {
+			"answerSubject": "Your question was answered — {eventName}",
+			"standingsSubject": "New standings published — {weekLabel}",
+			"standingsIntro": "Weekly standings for {weekLabel} are now live on the site."
+		},
+		"nav": {
+			"home": "Home",
+			"howItWorks": "How It Works",
+			"teams": "Teams",
+			"prompts": "Prompts",
+			"faq": "FAQ",
+			"standings": "Standings"
+		}
+	},
+	"schedule": {
+		"readathonStart": "July 1",
+		"readathonEnd": "December 31"
+	},
+	"branding": {
+		"theme": {
+			"background": "#08070b",
+			"surface": "#12101a",
+			"surfaceAlt": "#1c1928",
+			"text": "#f4efe8",
+			"textMuted": "#9a9188",
+			"accent": "#d4634a",
+			"accentGlow": "#ff8a6a",
+			"border": "#2e2a3d"
+		}
+	},
+	"teams": [
+		{
+			"id": "clerics",
+			"name": "Sun",
+			"color": "#c9a227",
+			"accent": "#f5e6b8",
+			"icon": "✦",
+			"leads": [],
+			"bonusPrompts": [
+				{
+					"id": "clerics-comfort",
+					"label": "A guilty pleasure — a book that provides comfort to you",
+					"points": 10
+				},
+				{
+					"id": "clerics-good-evil",
+					"label": "A story centred around good vs evil",
+					"points": 10
+				}
+			]
+		},
+		{
+			"id": "rogues",
+			"name": "Moon",
+			"color": "#4a8f62",
+			"accent": "#d4edda",
+			"icon": "†",
+			"leads": [],
+			"bonusPrompts": [
+				{
+					"id": "rogues-mystery",
+					"label": "A book with a mystery element",
+					"points": 10
+				},
+				{
+					"id": "rogues-steal-tbr",
+					"label": "Steal a book from someone's March TBR that is not your team",
+					"points": 10
+				}
+			]
+		}
+	],
+	"pageCountBonuses": [
+		{ "min": 0, "max": 200, "points": 0, "label": "Less than 200 pages" },
+		{ "min": 201, "max": 400, "points": 20, "label": "201–400 pages" },
+		{ "min": 401, "max": 600, "points": 40, "label": "401–600 pages" },
+		{ "min": 601, "max": 800, "points": 60, "label": "601–800 pages" },
+		{ "min": 801, "max": null, "points": 80, "label": "801+ pages" }
+	],
+	"globalBonuses": [
+		{
+			"id": "competition-trials",
+			"label": "Competition / trials in the book",
+			"description": "The story involves a competition or trials.",
+			"points": 10
+		}
+	],
+	"prompts": {
+		"positive": [
+			{
+				"id": "loot-box",
+				"gameName": "Open A Loot Box",
+				"label": "A book you didn't buy",
+				"description": "You didn't purchase this — e.g. library, KU (book returns after). Not an Audible credit where you keep it forever.",
+				"points": 1
+			},
+			{
+				"id": "parry",
+				"gameName": "Successfully Parry An Attack",
+				"label": "A fast-paced read",
+				"description": "Your interpretation of a story that moves quickly.",
+				"points": 1
+			},
+			{
+				"id": "shield",
+				"gameName": "Shield Yourself",
+				"label": "Read a sequel",
+				"description": "A sequel to a previous book.",
+				"points": 1
+			},
+			{
+				"id": "armor-class",
+				"gameName": "Upgrade Your Armor Class",
+				"label": "Multiple POVs",
+				"description": "A book with more than one point of view.",
+				"points": 2
+			},
+			{
+				"id": "buff",
+				"gameName": "Get A Buff",
+				"label": "Different format than your last book",
+				"description": "If you read an ebook for your last book, this must be audio or physical (and vice versa).",
+				"points": 2
+			},
+			{
+				"id": "explore-map",
+				"gameName": "Explore The Map",
+				"label": "Read an author's backlist",
+				"description": "Not the author's most recent release. Even if it came out 20 years ago, if it's their most recent book published it doesn't count. Any other book by that author counts.",
+				"points": 2
+			},
+			{
+				"id": "boss",
+				"gameName": "Take Down A Boss",
+				"label": "Dystopian",
+				"description": "A dystopian book.",
+				"points": 3
+			},
+			{
+				"id": "farm-xp",
+				"gameName": "Farm XP",
+				"label": "Randomize your TBR with a die",
+				"description": "Randomize which book you pick — titles to numbers, shelves to numbers, etc.",
+				"points": 3,
+				"link": "https://rolladie.net/"
+			},
+			{
+				"id": "expose-trap",
+				"gameName": "Expose A Trap",
+				"label": "Structural openings on the cover",
+				"description": "A door, window, gate, etc. on the cover.",
+				"points": 3
+			},
+			{
+				"id": "repair",
+				"gameName": "Repair Equipment",
+				"label": "Second chances",
+				"description": "Reread a book, retry an author/book, or a second chance romance.",
+				"points": 4
+			},
+			{
+				"id": "npc",
+				"gameName": "Befriend An NPC",
+				"label": "Author's name is two lines on the cover",
+				"description": "Author's name is two lines — NOT one — on the cover.",
+				"points": 4
+			},
+			{
+				"id": "checkpoint",
+				"gameName": "Check Point",
+				"label": "A book with parts",
+				"description": "The book is split up into parts.",
+				"points": 4
+			},
+			{
+				"id": "heal",
+				"gameName": "Heal Your Teammates",
+				"label": "Read a host's 5-star read",
+				"description": "Does not have to be your team's host — any of the 9 hosts.",
+				"points": 5
+			},
+			{
+				"id": "ally",
+				"gameName": "Make An Ally",
+				"label": "Own voices",
+				"description": "An author from a marginalized group writing from their lived experience.",
+				"points": 5
+			},
+			{
+				"id": "stat-boost",
+				"gameName": "Get A Stat Boost",
+				"label": "Symbols in the title",
+				"description": "Things like & or ' in the title.",
+				"points": 5
+			}
+		],
+		"negative": [
+			{
+				"id": "trap",
+				"gameName": "Set A Trap",
+				"label": "Read a pretty book",
+				"description": "Whatever this means to you.",
+				"points": -1
+			},
+			{
+				"id": "glitch",
+				"gameName": "Exploit A Glitch",
+				"label": "Read using electronics",
+				"description": "Ebook or audiobook.",
+				"points": -1
+			},
+			{
+				"id": "aoe",
+				"gameName": "AoE",
+				"label": "Start a series",
+				"description": "First book in a series, not a sequel.",
+				"points": -1
+			},
+			{
+				"id": "betray",
+				"gameName": "Betray An Alliance",
+				"label": "Read a recent haul instead of your TBR",
+				"description": "A book you recently acquired, not from your planned TBR.",
+				"points": -2
+			},
+			{
+				"id": "resource-drain",
+				"gameName": "Resource Drain",
+				"label": "More pages than your last book",
+				"description": "Must have more pages than the book you just finished.",
+				"points": -2
+			},
+			{
+				"id": "random-encounter",
+				"gameName": "Random Encounter",
+				"label": "Book outside your comfort zone",
+				"description": "Whatever this means to you.",
+				"points": -2
+			},
+			{
+				"id": "glass-cannon",
+				"gameName": "Glass Canon",
+				"label": "A 5-star prediction",
+				"description": "A book you think you might give 5 stars.",
+				"points": -3
+			},
+			{
+				"id": "poison-dart",
+				"gameName": "Poison Dart",
+				"label": "A character has a hidden identity",
+				"description": "Character is hiding who they are or a secret from the reader or other characters.",
+				"points": -3
+			},
+			{
+				"id": "critical-hit",
+				"gameName": "Critical Hit",
+				"label": "Read a book in one sitting",
+				"description": "Finished in a single sitting.",
+				"points": -3
+			},
+			{
+				"id": "elemental",
+				"gameName": "Elemental Attack",
+				"label": "Author writes in multiple genres",
+				"description": "The author writes across multiple genres.",
+				"points": -4
+			},
+			{
+				"id": "close-quarters",
+				"gameName": "Close Quarters",
+				"label": "No \"THE\" anywhere in the title",
+				"description": "Including as the first word — no \"the\" anywhere.",
+				"points": -4
+			},
+			{
+				"id": "magic-missile",
+				"gameName": "Magic Missile",
+				"label": "Roll a D6 for words in the title",
+				"description": "Whatever the die lands on is how many words your title must have.",
+				"points": -4,
+				"link": "https://rolladie.net/"
+			},
+			{
+				"id": "reinforcements",
+				"gameName": "Call Reinforcements",
+				"label": "POC author",
+				"description": "The author is a person of colour.",
+				"points": -5
+			},
+			{
+				"id": "chain-attack",
+				"gameName": "Chain Attack",
+				"label": "Interconnected world/series",
+				"description": "Another series exists in the same world (e.g. Cosmere). Interconnected standalones within the same series do NOT count.",
+				"points": -5
+			},
+			{
+				"id": "1v1",
+				"gameName": "1v1",
+				"label": "Icon between title and author on spine",
+				"description": "There is an icon between the title and author on the spine.",
+				"points": -5
+			}
+		]
+	},
+	"howItWorks": [
+		{
+			"step": 1,
+			"title": "Join the Crucible",
+			"body": "Sign up with your name and email. You'll wait in the pool until teams are assigned."
+		},
+		{
+			"step": 2,
+			"title": "Get sorted into a realm",
+			"body": "Once accepted, you'll be randomly placed on one of {teamCount} teams."
+		},
+		{
+			"step": 3,
+			"title": "Read & submit",
+			"body": "Finish a book, then use the submission form. Pick up to {maxPrompts} prompts — all positive OR all negative per book."
+		},
+		{
+			"step": 4,
+			"title": "Add or sabotage",
+			"body": "Help your team's XP or attack another realm. One book can only do one — not both."
+		},
+		{
+			"step": 5,
+			"title": "Layer bonuses",
+			"body": "Team prompts, page-count bonuses, and competition/trials stack on top of your {maxPrompts} prompts."
+		},
+		{
+			"step": 6,
+			"title": "Double-check",
+			"body": "Submissions cannot be edited. Review carefully before you submit!"
+		}
+	],
+	"scoringRules": {
+		"maxPromptsPerBook": 5,
+		"promptsMustBeSameSign": true,
+		"pageBonusAlwaysPositiveToOwnTeam": true,
+		"standingsUseAveragePerMember": true,
+		"oneAttackTargetPerBook": true
+	},
+	"faq": [
+		{
+			"q": "Can I use more than one prompt?",
+			"a": "Yes — up to {maxPrompts} prompts per book, not including bonus prompts. They must all be increasing OR all decreasing."
+		},
+		{
+			"q": "Does this book count?",
+			"a": "If you think it counts, count it. If you think it doesn't, don't."
+		},
+		{
+			"q": "Do I have to read my realm's bonus prompts?",
+			"a": "No — they're optional extras for people who want them."
+		},
+		{ "q": "How long is the readathon?", "a": "July through December." },
+		{
+			"q": "How do I track my reads?",
+			"a": "Use the submission form on this site after your team is assigned."
+		},
+		{
+			"q": "How many times can bonus prompts be used?",
+			"a": "As many times as you like."
+		},
+		{
+			"q": "Can prompts be reused?",
+			"a": "Yes — use them as much as you want."
+		},
+		{
+			"q": "Can I attack multiple realms?",
+			"a": "One book attacks one realm. Your next book can target a different realm."
+		},
+		{
+			"q": "Can one book both increase and decrease?",
+			"a": "No — one book does one or the other."
+		},
+		{
+			"q": "How is it fair if one realm has more members?",
+			"a": "Points are averaged per person on the team."
+		},
+		{
+			"q": "Is there a minimum number of prompts?",
+			"a": "Nope — do as many or as few as you'd like."
+		},
+		{
+			"q": "Do manga or graphic novels count?",
+			"a": "Yes — any form of reading counts."
+		},
+		{
+			"q": "Can a book started in February but finished in March count?",
+			"a": "Use your discretion. If you only read 10 pages in March, probably not. A good chunk in March — sure."
+		},
+		{ "q": "Can a book be a re-read?", "a": "Yes." },
+		{
+			"q": "Do DNFs count?",
+			"a": "Use your discretion — if you read a good chunk in March, sure."
+		},
+		{
+			"q": "Audiobooks — what page count?",
+			"a": "Use Goodreads page count. If none, use 40 pages per hour."
+		},
+		{
+			"q": "Manga/graphic novels — series or volumes?",
+			"a": "Be fair about what you'd accept from others. A five-page short story probably isn't fair."
+		},
+		{
+			"q": "Can I change a submission?",
+			"a": "No — double-check before submitting."
+		},
+		{
+			"q": "Do bonus prompts count toward the five?",
+			"a": "No — you get {maxPrompts} prompts, then bonuses layer on top."
+		}
+	]
 }

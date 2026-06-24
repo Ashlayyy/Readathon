@@ -46,6 +46,7 @@ onMounted(async () => {
         <RouterLink v-else-if="user.status === 'assigned'" to="/submit" class="btn btn-primary">
           {{ config.copy.submitCta }}
         </RouterLink>
+        <RouterLink v-else to="/profile" class="btn btn-primary">{{ config.copy.profileBooksTab }}</RouterLink>
         <RouterLink to="/how-it-works" class="btn btn-secondary">{{ config.copy.howItWorksCta }}</RouterLink>
       </div>
     </section>
