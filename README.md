@@ -7,6 +7,7 @@ Vue frontend + Hono API + MongoDB for the Realmathon readathon.
 ```
 Readathon/
 ├── data/realmathon.json   # Static content (teams, prompts, FAQ, branding)
+├── ecosystem.config.cjs   # PM2 — API + frontend (2 processes)
 ├── frontend/              # Vue 3 + Vite + TypeScript
 ├── server/                # Hono + Mongoose + MongoDB
 └── package.json
@@ -78,11 +79,66 @@ Without it, sign-in links are printed to the **server console** during developme
 5. View submissions on **My Reads**
 6. Admin publishes standings when ready
 
-## VPS deployment
+## PM2 (Linux server)
+
+Runs the API and frontend as two separate PM2 processes on the same machine.
+
+```bash
+npm install -g pm2
+npm install
+npm install --prefix frontend
+npm install --prefix server
+cp server/.env.example server/.env
+# edit server/.env — set FRONTEND_URL to your public URL (e.g. http://your-server:5173)
+docker compose up -d   # or use MongoDB Atlas
+```
+
+**Production** (builds frontend, then starts API + Vite preview on port 5173):
+
+```bash
+npm run pm2:start
+```
+
+**Development** on the server (hot reload):
+
+```bash
+npm run pm2:start:dev
+```
+
+Other commands:
+
+```bash
+npm run pm2:logs      # tail both processes
+npm run pm2:restart   # after code/config changes
+npm run pm2:stop
+npm run pm2:delete    # remove from PM2
+```
+
+After a frontend change in production, rebuild and restart:
+
+```bash
+npm run build --prefix frontend && npm run pm2:restart
+```
+
+Keep PM2 running after reboot:
+
+```bash
+pm2 startup systemd -u $USER --hp $HOME
+pm2 save
+```
+
+| Process          | Port | Role                          |
+|------------------|------|-------------------------------|
+| `realmathon-api` | 3001 | Hono API                      |
+| `realmathon-web` | 5173 | Vite dev or preview (proxies `/api`) |
+
+Logs are written to `logs/` in the project root.
+
+## VPS deployment (nginx)
+
+For a public domain with HTTPS, put nginx/caddy in front:
 
 1. Run MongoDB (or use MongoDB Atlas)
-2. `cd frontend && npm run build`
-3. Serve `frontend/dist` via nginx/caddy
-4. Run `cd server && npm start` with pm2
-5. Proxy `/api` to the Hono server
-6. Set `FRONTEND_URL`, `MONGODB_URI`, `SESSION_SECRET`, `ADMIN_EMAILS`
+2. `npm run pm2:start` (or build + PM2 as above)
+3. Proxy `/api` to `http://127.0.0.1:3001` and `/` to `http://127.0.0.1:5173`
+4. Set `FRONTEND_URL` to your public HTTPS URL in `server/.env`
