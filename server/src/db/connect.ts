@@ -10,8 +10,11 @@ export async function connectDb(): Promise<void> {
     console.log('Connected to MongoDB')
   } catch (err) {
     console.error('MongoDB connection failed. Is the database running?')
-    console.error('  Local: docker compose up -d')
-    console.error(`  URI: ${uri}`)
+    console.error(`  URI: ${uri.replace(/\/\/([^:]+):([^@]+)@/, '//***:***@')}`)
     throw err
   }
+}
+
+export async function disconnectDb(): Promise<void> {
+  await mongoose.disconnect()
 }

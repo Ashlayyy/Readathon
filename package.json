@@ -17,7 +17,8 @@
     "pm2:restart": "pm2 restart ecosystem.config.cjs",
     "pm2:logs": "pm2 logs",
     "pm2:delete": "pm2 delete ecosystem.config.cjs",
-    "test": "npm run test --prefix server"
+    "test": "npm run test --prefix server",
+    "test:security": "npm run test:security --prefix server"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
