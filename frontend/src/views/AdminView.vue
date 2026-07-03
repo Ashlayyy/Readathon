@@ -27,6 +27,20 @@ const standingsSvg = ref<string | null>(null)
 const activeWeeks = ref<PublishedWeek[]>([])
 const standingsHistory = ref<StandingsHistoryEntry[]>([])
 const answerModal = ref<AdminQuestion | null>(null)
+const editSubmission = ref<AdminSubmission | null>(null)
+const editDraft = ref({
+  bookTitle: '',
+  bookAuthor: '',
+  pageCount: 1,
+  format: 'ebook',
+  startedAt: '',
+  finishedAt: '',
+  submissionType: 'add' as 'add' | 'sabotage',
+  targetTeamId: '',
+  promptIds: [] as string[],
+  bonusCompetition: false,
+  bonusTeamPromptIds: [] as string[],
+})
 const modalDraft = ref('')
 const inboxFilter = ref<'unread' | 'read' | 'all'>('unread')
 const message = ref('')
@@ -147,6 +161,68 @@ async function submitModalAnswer() {
     await loadAll()
   } catch (e) {
     message.value = e instanceof Error ? e.message : 'Failed to send reply'
+  } finally {
+    loading.value = ''
+  }
+}
+
+function openEditSubmission(s: AdminSubmission) {
+  editSubmission.value = s
+  editDraft.value = {
+    bookTitle: s.bookTitle,
+    bookAuthor: s.bookAuthor,
+    pageCount: s.pageCount,
+    format: s.format,
+    startedAt: s.startedAt ?? '',
+    finishedAt: s.finishedAt ?? '',
+    submissionType: s.submissionType,
+    targetTeamId: s.targetTeamId ?? '',
+    promptIds: [...s.promptIds],
+    bonusCompetition: s.bonusCompetition,
+    bonusTeamPromptIds: [...s.bonusTeamPromptIds],
+  }
+}
+
+function closeEditSubmission() {
+  editSubmission.value = null
+}
+
+async function saveEditSubmission() {
+  if (!editSubmission.value) return
+  loading.value = `edit-sub-${editSubmission.value.id}`
+  message.value = ''
+  try {
+    await api(`/admin/submissions/${editSubmission.value.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        ...editDraft.value,
+        targetTeamId:
+          editDraft.value.submissionType === 'sabotage' ? editDraft.value.targetTeamId : undefined,
+        startedAt: editDraft.value.startedAt || null,
+        finishedAt: editDraft.value.finishedAt || null,
+      }),
+    })
+    message.value = 'Submission updated.'
+    closeEditSubmission()
+    await loadAll()
+  } catch (e) {
+    message.value = e instanceof Error ? e.message : 'Failed to update submission'
+  } finally {
+    loading.value = ''
+  }
+}
+
+async function deleteSubmission(id: string, title: string) {
+  if (!confirm(`Delete submission "${title}"? This cannot be undone.`)) return
+  loading.value = `del-sub-${id}`
+  message.value = ''
+  try {
+    await api(`/admin/submissions/${id}`, { method: 'DELETE' })
+    message.value = 'Submission deleted.'
+    if (editSubmission.value?.id === id) closeEditSubmission()
+    await loadAll()
+  } catch (e) {
+    message.value = e instanceof Error ? e.message : 'Failed to delete submission'
   } finally {
     loading.value = ''
   }
@@ -544,6 +620,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               <th>Type</th>
               <th>Impact</th>
               <th>Date</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -565,12 +642,87 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               </td>
               <td>{{ s.totalImpact > 0 ? '+' : '' }}{{ s.totalImpact }}</td>
               <td>{{ new Date(s.createdAt).toLocaleDateString() }}</td>
+              <td class="row-actions">
+                <button type="button" class="btn btn-secondary btn-sm" @click="openEditSubmission(s)">
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm danger"
+                  :disabled="loading === `del-sub-${s.id}`"
+                  @click="deleteSubmission(s.id, s.bookTitle)"
+                >
+                  Delete
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="hint">Edit prompts & rules in <code>data/realmathon.json</code>, then restart the server.</p>
+      <p class="hint">Edit prompts & rules in <code>data/realmathon.json</code>, then reload config or restart the server.</p>
     </section>
+
+    <!-- Edit submission modal -->
+    <div v-if="editSubmission" class="modal-backdrop" @click.self="closeEditSubmission">
+      <div class="modal card edit-sub-modal">
+        <h2>Edit submission</h2>
+        <p class="section-desc">
+          {{ editSubmission.userName }} — prompts and bonuses are kept; update book details and type.
+        </p>
+        <form class="edit-sub-form" @submit.prevent="saveEditSubmission">
+          <label>
+            Title
+            <input v-model="editDraft.bookTitle" type="text" required />
+          </label>
+          <label>
+            Author
+            <input v-model="editDraft.bookAuthor" type="text" required />
+          </label>
+          <label>
+            Pages
+            <input v-model.number="editDraft.pageCount" type="number" min="1" required />
+          </label>
+          <label>
+            Format
+            <select v-model="editDraft.format">
+              <option value="ebook">Ebook</option>
+              <option value="audiobook">Audiobook</option>
+              <option value="physical">Physical</option>
+            </select>
+          </label>
+          <label>
+            Type
+            <select v-model="editDraft.submissionType">
+              <option value="add">Add XP</option>
+              <option value="sabotage">Sabotage</option>
+            </select>
+          </label>
+          <label v-if="editDraft.submissionType === 'sabotage'">
+            Target team
+            <select v-model="editDraft.targetTeamId" required>
+              <option v-for="team in config?.teams" :key="team.id" :value="team.id">
+                {{ team.name }}
+              </option>
+            </select>
+          </label>
+          <label>
+            Started (optional)
+            <input v-model="editDraft.startedAt" type="date" />
+          </label>
+          <label>
+            Finished (optional)
+            <input v-model="editDraft.finishedAt" type="date" />
+          </label>
+          <p class="prompt-note">{{ editDraft.promptIds.length }} prompts selected (unchanged)</p>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" @click="closeEditSubmission">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="loading.startsWith('edit-sub-')">
+              Save changes
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -1058,5 +1210,40 @@ small {
     overflow-y: auto;
     border-radius: 12px 12px 0 0;
   }
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.row-actions .danger {
+  color: #f08080;
+}
+
+.edit-sub-modal {
+  max-width: 28rem;
+  width: 100%;
+}
+
+.edit-sub-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.edit-sub-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  color: var(--realm-text-muted);
+}
+
+.prompt-note {
+  font-size: 0.85rem;
+  color: var(--realm-text-muted);
+  margin: 0;
 }
 </style>

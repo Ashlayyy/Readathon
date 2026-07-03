@@ -32,6 +32,7 @@
 		"loginEmailPlaceholder": "you@example.com",
 		"loginRegisterButton": "Join the Pool",
 		"loginMagicLinkButton": "Email me a sign-in link",
+		"loginWaiting": "Sending…",
 		"loginGoogleButton": "Continue with Google",
 		"loginDivider": "or",
 		"loginFinePrintRegister": "After signing up you'll wait in the unassigned pool until an admin sorts you into a realm.",
@@ -162,7 +163,7 @@
 				},
 				{
 					"id": "rogues-steal-tbr",
-					"label": "Steal a book from someone's March TBR that is not your team",
+					"label": "Steal a book from someone's TBR that is not your team",
 					"points": 10
 				}
 			]
@@ -274,7 +275,7 @@
 				"id": "heal",
 				"gameName": "Heal Your Teammates",
 				"label": "Read a host's 5-star read",
-				"description": "Does not have to be your team's host — any of the 9 hosts.",
+				"description": "Does not have to be your team's host — any readathon host.",
 				"points": 5
 			},
 			{
@@ -430,7 +431,7 @@
 		{
 			"step": 6,
 			"title": "Double-check",
-			"body": "Submissions cannot be edited. Review carefully before you submit!"
+			"body": "Submissions cannot be edited by readers. Review carefully before you submit — admins can fix mistakes if needed."
 		}
 	],
 	"scoringRules": {
@@ -487,13 +488,13 @@
 			"a": "Yes — any form of reading counts."
 		},
 		{
-			"q": "Can a book started in February but finished in March count?",
-			"a": "Use your discretion. If you only read 10 pages in March, probably not. A good chunk in March — sure."
+			"q": "Can a book started in the first month, but finished in another month count?",
+			"a": "Use your discretion. If you only read 10 pages in another month, probably not. A good chunk in that specific month — sure."
 		},
 		{ "q": "Can a book be a re-read?", "a": "Yes." },
 		{
 			"q": "Do DNFs count?",
-			"a": "Use your discretion — if you read a good chunk in March, sure."
+			"a": "Use your discretion — if you read a good chunk of that book, sure."
 		},
 		{
 			"q": "Audiobooks — what page count?",
@@ -505,7 +506,7 @@
 		},
 		{
 			"q": "Can I change a submission?",
-			"a": "No — double-check before submitting."
+			"a": "Readers can't edit after submitting — double-check first. If something's wrong, ask an admin to fix or remove it."
 		},
 		{
 			"q": "Do bonus prompts count toward the five?",

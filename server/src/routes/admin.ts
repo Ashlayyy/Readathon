@@ -12,7 +12,13 @@ import {
   requireAdmin,
   userToPublic,
 } from '../services/auth.js'
-import { calculateStandings, submissionToPublic } from '../services/scoring.js'
+import {
+  calculateScore,
+  calculateStandings,
+  submissionToPublic,
+  validateSubmission,
+  type SubmissionInput,
+} from '../services/scoring.js'
 import { generateStandingsSvg } from '../services/standings-image.js'
 import { maybeNotifyQuestionAnswered, notifyStandingsPublished } from '../services/notifications.js'
 import { getWeekInfo } from '../utils/week.js'
@@ -80,6 +86,62 @@ adminRoutes.get('/submissions', async (c) => {
       }
     }),
   })
+})
+
+function optionalDate(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed || null
+}
+
+adminRoutes.patch('/submissions/:id', async (c) => {
+  const body = await c.req.json<SubmissionInput>()
+  const submission = await Submission.findById(c.req.param('id'))
+  if (!submission) return c.json({ error: 'Submission not found' }, 404)
+
+  const owner = await User.findById(submission.userId)
+  if (!owner) return c.json({ error: 'Submission owner not found' }, 404)
+
+  const error = await validateSubmission(owner, body, {
+    excludeSubmissionId: submission._id.toString(),
+  })
+  if (error) return c.json({ error }, 400)
+
+  const score = calculateScore(owner, body)
+
+  submission.bookTitle = body.bookTitle.trim()
+  submission.bookAuthor = body.bookAuthor.trim()
+  submission.pageCount = body.pageCount
+  submission.format = body.format
+  submission.startedAt = optionalDate(body.startedAt)
+  submission.finishedAt = optionalDate(body.finishedAt)
+  submission.submissionType = body.submissionType
+  submission.targetTeamId = body.submissionType === 'sabotage' ? (body.targetTeamId ?? null) : null
+  submission.promptIds = body.promptIds
+  submission.bonusCompetition = body.bonusCompetition
+  submission.bonusTeamPromptIds = body.bonusTeamPromptIds
+  submission.pageBonus = score.pageBonus
+  submission.promptPoints = score.promptPoints
+  submission.bonusPoints = score.bonusPoints
+  submission.totalImpact = score.totalImpact
+
+  await submission.save()
+
+  const user = owner
+  return c.json({
+    submission: {
+      ...submissionToPublic(submission),
+      userName: user.displayName,
+      userEmail: user.email,
+      userTeamId: user.teamId ?? null,
+    },
+    breakdown: score,
+  })
+})
+
+adminRoutes.delete('/submissions/:id', async (c) => {
+  const submission = await Submission.findByIdAndDelete(c.req.param('id'))
+  if (!submission) return c.json({ error: 'Submission not found' }, 404)
+  return c.json({ ok: true })
 })
 
 function svgAttachment(c: Context, filename: string, svg: string) {

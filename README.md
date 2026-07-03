@@ -1,13 +1,15 @@
-# REALMATHON 5.0 — The Crucible
+# Readathon 2026 — The Crucible
 
-Vue frontend + Hono API + MongoDB for the Realmathon readathon.
+Vue frontend + Hono API + MongoDB for the Readathon 2026 community readathon.
+
+Event name, copy, teams, and prompts live in `data/realmathon.json` — the site reads the title from there at runtime.
 
 ## Structure
 
 ```
 Readathon/
-├── data/realmathon.json   # Static content (teams, prompts, FAQ, branding)
-├── ecosystem.config.cjs   # PM2 — API + frontend (2 processes)
+├── data/realmathon.json   # Event content (teams, prompts, FAQ, branding)
+├── ecosystem.config.cjs   # PM2 process config
 ├── frontend/              # Vue 3 + Vite + TypeScript
 ├── server/                # Hono + Mongoose + MongoDB
 └── package.json
@@ -15,38 +17,27 @@ Readathon/
 
 ## Requirements
 
-- Node.js **22.18+** or **24.12+**
-- **MongoDB** — local via Docker, or MongoDB Atlas
-
-### Start MongoDB (Docker)
-
-```bash
-docker compose up -d
-```
+- Node.js **22.18+** or **24.12+** (see `.nvmrc`)
+- **MongoDB Atlas** (or any MongoDB URI)
 
 ## Setup
 
 ```bash
 npm install
-cd frontend && npm install
-cd ../server && npm install
+npm install --prefix frontend
+npm install --prefix server
 cp server/.env.example server/.env
 ```
 
-Edit `server/.env`:
+Edit `server/.env` — at minimum:
 
 ```env
-MONGODB_URI=mongodb://127.0.0.1:27017/realmathon
-SESSION_SECRET=your-long-random-secret
-ADMIN_EMAILS=you@example.com
-```
-
-Optional Google OAuth:
-
-```env
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:3001/api/auth/google/callback
+MONGODB_URI=mongodb+srv://...
+SESSION_SECRET=long-random-secret
+FRONTEND_URL=https://your-domain.com
+ADMIN_EMAILS=you@email.com
+RESEND_API_KEY=...
+EMAIL_FROM=Readathon <you@yourdomain.com>
 ```
 
 ## Development
@@ -55,66 +46,40 @@ GOOGLE_REDIRECT_URI=http://localhost:3001/api/auth/google/callback
 npm run dev
 ```
 
-- Frontend: http://localhost:5173
+- Frontend: http://localhost:5173 (proxies `/api` to the server)
 - API: http://localhost:3001
 
-## Auth
-
-- **Email signup:** name + email → enters pending pool (instant session)
-- **Email login:** magic link sent to your inbox (15 min, single-use) — no password
-- **Google:** OAuth, linked by email
-- **Admins:** `ADMIN_EMAILS` in `.env` — checked on every admin request
-
-### Magic-link email (production)
-
-Set `RESEND_API_KEY` and `EMAIL_FROM` in `server/.env`.  
-Without it, sign-in links are printed to the **server console** during development.
-
-## User flow
-
-1. Sign up (email or Google)
-2. Wait in unassigned pool
-3. Admin assigns teams randomly
-4. Submit books via the wizard
-5. View submissions on **My Reads**
-6. Admin publishes standings when ready
-
-## PM2 (Linux server)
-
-Runs the API and frontend as two separate PM2 processes on the same machine.
-
-```bash
-npm install -g pm2
-npm install
-npm install --prefix frontend
-npm install --prefix server
-cp server/.env.example server/.env
-# edit server/.env — set FRONTEND_URL to your public URL (e.g. http://your-server:5173)
-docker compose up -d   # or use MongoDB Atlas
-```
-
-**Production** (builds frontend, then starts API + Vite preview on port 5173):
-
-```bash
-npm run pm2:start
-```
-
-**Development** on the server (hot reload):
+Or with PM2 (two processes, hot reload):
 
 ```bash
 npm run pm2:start:dev
 ```
 
-Other commands:
+## Production (Linux server)
+
+Production builds the frontend and runs **one** PM2 process. The API serves both `/api` and the built `frontend/dist` on the same port — no nginx required.
 
 ```bash
-npm run pm2:logs      # tail both processes
-npm run pm2:restart   # after code/config changes
-npm run pm2:stop
-npm run pm2:delete    # remove from PM2
+npm run pm2:start
 ```
 
-After a frontend change in production, rebuild and restart:
+What `pm2:start` does:
+
+1. `npm run build --prefix frontend` — outputs to `frontend/dist`
+2. Starts the API with `NODE_ENV=production`
+3. Hono serves static files from `frontend/dist` and falls back to `index.html` for client routes
+
+Set `FRONTEND_URL` to the URL users actually visit, e.g. `https://your-domain.com` or `http://your-server-ip:3001`.
+
+| Variable | Production value |
+|----------|------------------|
+| `NODE_ENV` | `production` (set automatically by `npm run start` in server) |
+| `PORT` | `3001` (or your choice) |
+| `FRONTEND_URL` | Same origin users use in the browser |
+| `MONGODB_URI` | Atlas connection string |
+| `SESSION_SECRET` | Strong random string (server **exits** if missing/default in production) |
+
+After code changes:
 
 ```bash
 npm run build --prefix frontend && npm run pm2:restart
@@ -127,18 +92,34 @@ pm2 startup systemd -u $USER --hp $HOME
 pm2 save
 ```
 
-| Process          | Port | Role                          |
-|------------------|------|-------------------------------|
-| `realmathon-api` | 3001 | Hono API                      |
-| `realmathon-web` | 5173 | Vite dev or preview (proxies `/api`) |
+Logs: `logs/` in the project root.
 
-Logs are written to `logs/` in the project root.
+## Auth
 
-## VPS deployment (nginx)
+- **Email signup:** name + email → pending pool (instant session)
+- **Email login:** magic link via Resend (15 min, single-use)
+- **Google:** optional OAuth
+- **Admins:** `ADMIN_EMAILS` in `.env`
 
-For a public domain with HTTPS, put nginx/caddy in front:
+Without `RESEND_API_KEY`, sign-in links print to the server console (dev only).
 
-1. Run MongoDB (or use MongoDB Atlas)
-2. `npm run pm2:start` (or build + PM2 as above)
-3. Proxy `/api` to `http://127.0.0.1:3001` and `/` to `http://127.0.0.1:5173`
-4. Set `FRONTEND_URL` to your public HTTPS URL in `server/.env`
+## User flow
+
+1. Sign up
+2. Wait in the unassigned pool (2 teams: Sun & Moon)
+3. Admin assigns teams
+4. Submit books
+5. View reads on **Profile**
+6. Admin publishes standings
+
+## Tests
+
+```bash
+npm test
+```
+
+Basic scoring tests live in `server/src/services/scoring.test.ts`.
+
+## MongoDB Atlas backups
+
+Atlas **M0 free tier** includes daily snapshots (limited retention). Paid tiers get continuous backup and point-in-time restore. Enable **Cloud Backup** in your Atlas cluster settings — worth doing before real participant data accumulates.

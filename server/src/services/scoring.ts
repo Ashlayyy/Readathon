@@ -28,11 +28,13 @@ export async function findDuplicateSubmission(
   userId: import('mongoose').Types.ObjectId,
   bookTitle: string,
   bookAuthor: string,
+  excludeSubmissionId?: string,
 ): Promise<boolean> {
   const { title, author } = normalizeBook(bookTitle, bookAuthor)
   const existing = await Submission.find({ userId })
 
   return existing.some((sub) => {
+    if (excludeSubmissionId && sub._id.toString() === excludeSubmissionId) return false
     const n = normalizeBook(sub.bookTitle, sub.bookAuthor)
     return n.title === title && n.author === author
   })
@@ -50,6 +52,7 @@ export type ScoreBreakdown = {
 export async function validateSubmission(
   user: HydratedDocument<IUser>,
   input: SubmissionInput,
+  options?: { excludeSubmissionId?: string },
 ): Promise<string | null> {
   if (user.status !== 'assigned' || !user.teamId) {
     return 'You must be assigned to a team before submitting.'
@@ -59,7 +62,14 @@ export async function validateSubmission(
     return 'Book title and author are required.'
   }
 
-  if (await findDuplicateSubmission(user._id, input.bookTitle, input.bookAuthor)) {
+  if (
+    await findDuplicateSubmission(
+      user._id,
+      input.bookTitle,
+      input.bookAuthor,
+      options?.excludeSubmissionId,
+    )
+  ) {
     return 'You have already submitted this book.'
   }
 

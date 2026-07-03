@@ -1,7 +1,9 @@
 import { serve } from '@hono/node-server'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { config as loadEnv } from 'dotenv'
+import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { rateLimit } from './middleware/rateLimit.js'
@@ -58,12 +60,38 @@ app.route('/api/profile', profileRoutes)
 app.use('/api/admin/*', adminLimiter)
 app.route('/api/admin', adminRoutes)
 
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const distPath = join(__dirname, '../../frontend/dist')
+const isProduction = process.env.NODE_ENV === 'production'
+
+if (isProduction && existsSync(distPath)) {
+  app.use('*', async (c, next) => {
+    if (c.req.path.startsWith('/api')) return next()
+    return serveStatic({ root: distPath })(c, next)
+  })
+  app.get('*', async (c, next) => {
+    if (c.req.path.startsWith('/api')) return next()
+    return serveStatic({ root: distPath, path: 'index.html' })(c, next)
+  })
+}
+
 const port = Number(process.env.PORT ?? 3001)
 
 async function main() {
+  if (isProduction && !existsSync(distPath)) {
+    console.warn(
+      `Warning: frontend/dist not found at ${distPath}. Run "npm run build --prefix frontend" before starting in production.`,
+    )
+  }
+  if (isProduction && !process.env.MONGODB_URI) {
+    console.error('FATAL: Set MONGODB_URI in server/.env for production (e.g. MongoDB Atlas).')
+    process.exit(1)
+  }
+
   await connectDb()
   serve({ fetch: app.fetch, port }, () => {
-    console.log(`Server running at http://localhost:${port}`)
+    const mode = isProduction ? 'production' : 'development'
+    console.log(`Server running (${mode}) at http://localhost:${port}`)
   })
 }
 

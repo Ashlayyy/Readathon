@@ -19,7 +19,15 @@ export type SessionPayload = {
 }
 
 function getSessionSecret(): string {
-  return process.env.SESSION_SECRET ?? 'dev-secret-change-in-production'
+  const secret = process.env.SESSION_SECRET ?? 'dev-secret-change-in-production'
+  if (
+    process.env.NODE_ENV === 'production' &&
+    (!process.env.SESSION_SECRET || secret === 'dev-secret-change-in-production')
+  ) {
+    console.error('FATAL: Set a strong SESSION_SECRET in server/.env before running in production.')
+    process.exit(1)
+  }
+  return secret
 }
 
 export function getAdminEmails(): Set<string> {

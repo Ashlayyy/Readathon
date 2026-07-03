@@ -8,8 +8,11 @@ export function useCopy() {
 
   const vars = computed(() => buildCopyVars(config.value))
 
-  function t(template: string | undefined | null, extra?: CopyVars): string {
-    if (!template) return ''
+  function t(
+    template: string | string[] | Record<string, string> | undefined | null,
+    extra?: CopyVars,
+  ): string {
+    if (!template || typeof template !== 'string') return ''
     return formatCopy(template, { ...vars.value, ...extra })
   }
 

@@ -77,7 +77,7 @@ function closeMenu() {
 						<span v-if="config" class="brand-text">{{
 							config.event.name
 						}}</span>
-						<span v-else class="brand-text">Readathon</span>
+						<span v-else class="brand-text">Readathon 2026</span>
 					</RouterLink>
 
 					<button
