@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { getConfig } from '../config.js'
+import { getStaticConfig } from '../config.js'
 import { magicLinkEmailHtml, magicLinkEmailText } from './emailTemplates.js'
 
 export function generateToken(): string {
@@ -48,7 +48,7 @@ export async function sendEmail(opts: {
 export async function sendMagicLink(email: string, token: string): Promise<void> {
   const frontend = process.env.FRONTEND_URL ?? 'http://localhost:5173'
   const link = `${frontend}/api/auth/verify?token=${token}`
-  const eventName = getConfig().event.name as string
+  const eventName = getStaticConfig().event.name as string
 
   await sendEmail({
     to: email,

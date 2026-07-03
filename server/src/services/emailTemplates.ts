@@ -1,7 +1,7 @@
-import { getConfig } from '../config.js'
+import { getStaticConfig } from '../config.js'
 
 function themeColors() {
-  const theme = getConfig().branding.theme as Record<string, string>
+  const theme = getStaticConfig().branding.theme as Record<string, string>
   return {
     bg: theme.background ?? '#08070b',
     surface: theme.surface ?? '#12101a',
@@ -16,7 +16,7 @@ function themeColors() {
 }
 
 export function magicLinkEmailHtml(link: string, email: string): string {
-  const { event, copy } = getConfig()
+  const { event, copy } = getStaticConfig()
   const theme = themeColors()
   const year = new Date().getFullYear()
   const eventTitle = event.name as string
@@ -100,7 +100,7 @@ export function magicLinkEmailHtml(link: string, email: string): string {
 }
 
 export function magicLinkEmailText(link: string): string {
-  const { event } = getConfig()
+  const { event } = getStaticConfig()
   const eventTitle = event.name as string
   const eventSubtitle = event.subtitle as string
 

@@ -27,13 +27,11 @@ export function useAuth() {
   }
 
   async function register(displayName: string, email: string) {
-    const data = await api<{ user: PublicUser }>('/auth/register', {
+    const data = await api<{ sent: boolean; message: string }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ displayName, email }),
     })
-    user.value = data.user
-    loaded.value = true
-    return data.user
+    return data
   }
 
   async function login(email: string) {

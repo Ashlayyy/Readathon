@@ -7,8 +7,9 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { rateLimit } from './middleware/rateLimit.js'
-import { getConfig } from './config.js'
+import { getConfig } from './services/prompts.js'
 import { connectDb } from './db/connect.js'
+import { refreshPromptsCache } from './services/prompts.js'
 import { PublishedStandings } from './db/models/PublishedStandings.js'
 import { adminRoutes } from './routes/admin.js'
 import { authRoutes } from './routes/auth.js'
@@ -89,6 +90,7 @@ async function main() {
   }
 
   await connectDb()
+  await refreshPromptsCache()
   serve({ fetch: app.fetch, port }, () => {
     const mode = isProduction ? 'production' : 'development'
     console.log(`Server running (${mode}) at http://localhost:${port}`)

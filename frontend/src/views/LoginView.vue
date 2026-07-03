@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
 
 const { register, login, googleLoginUrl } = useAuth()
 const { config, loadConfig } = useConfig()
-const router = useRouter()
 const route = useRoute()
 
 const mode = ref<'register' | 'login'>('register')
@@ -32,8 +31,8 @@ async function submit() {
   loading.value = true
   try {
     if (mode.value === 'register') {
-      await register(displayName.value, email.value)
-      router.push('/')
+      const result = await register(displayName.value, email.value)
+      success.value = result.message
     } else {
       const result = await login(email.value)
       success.value = result.message
@@ -99,7 +98,7 @@ async function submit() {
 
       <p class="fine-print">
         <template v-if="mode === 'register' || success">
-          {{ config.copy.loginFinePrintRegister }}
+          {{ success && mode === 'register' ? config.copy.loginRegisterSuccess : config.copy.loginFinePrintRegister }}
         </template>
         <template v-else>
           {{ config.copy.loginFinePrintMagicLink }}

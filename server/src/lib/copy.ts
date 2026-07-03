@@ -1,4 +1,4 @@
-import { getConfig } from '../config.js'
+import { getConfig } from '../services/prompts.js'
 
 export function getCopyVars(): Record<string, string | number> {
   const config = getConfig()

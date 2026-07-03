@@ -1,8 +1,8 @@
-import { getConfig } from '../config.js'
+import { getStaticConfig } from '../config.js'
 import type { TeamStanding } from './scoring.js'
 
 export function generateStandingsSvg(standings: TeamStanding[], title?: string): string {
-  const resolvedTitle = title ?? `${getConfig().event.name as string} — Standings`
+  const resolvedTitle = title ?? `${getStaticConfig().event.name as string} — Standings`
   const width = 800
   const rowHeight = 72
   const headerHeight = 100

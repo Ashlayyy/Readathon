@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { getConfig } from '../config.js'
+import { getConfig } from './prompts.js'
 import { calculateScore, type SubmissionInput } from './scoring.js'
 import type { HydratedDocument } from 'mongoose'
 import type { IUser } from '../db/models/User.js'

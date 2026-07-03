@@ -1,8 +1,8 @@
-import { getConfig } from '../config.js'
+import { getStaticConfig } from '../config.js'
 import { formatCopy, getCopyVars } from '../lib/copy.js'
 
 function themeColors() {
-  const theme = getConfig().branding.theme as Record<string, string>
+  const theme = getStaticConfig().branding.theme as Record<string, string>
   return {
     bg: theme.background ?? '#08070b',
     surface: theme.surface ?? '#12101a',
@@ -67,7 +67,7 @@ export function answerNotificationEmail(opts: {
   profileUrl: string
 }): { subject: string; html: string; text: string } {
   const { eventName } = getCopyVars()
-  const copy = getConfig().copy as Record<string, Record<string, string>>
+  const copy = getStaticConfig().copy as Record<string, Record<string, string>>
   const subject = formatCopy(copy.notifications?.answerSubject ?? 'Your question was answered — {eventName}', getCopyVars())
 
   const html = emailShell(
@@ -103,7 +103,7 @@ export function standingsNotificationEmail(opts: {
   weekLabel: string
   standingsUrl: string
 }): { subject: string; html: string; text: string } {
-  const copy = getConfig().copy as Record<string, Record<string, string>>
+  const copy = getStaticConfig().copy as Record<string, Record<string, string>>
   const vars = { ...getCopyVars(), weekLabel: opts.weekLabel }
   const subject = formatCopy(copy.notifications?.standingsSubject ?? 'New standings published — {weekLabel}', vars)
   const intro = formatCopy(

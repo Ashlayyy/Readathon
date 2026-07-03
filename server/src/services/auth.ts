@@ -5,7 +5,7 @@ import type { Context } from 'hono'
 import { type HydratedDocument } from 'mongoose'
 import { AuthToken } from '../db/models/AuthToken.js'
 import { type IUser, User } from '../db/models/User.js'
-import { getConfig } from '../config.js'
+import { getStaticConfig } from '../config.js'
 import { generateToken, hashToken, sendMagicLink } from './email.js'
 
 type UserDoc = HydratedDocument<IUser>
@@ -224,7 +224,7 @@ export async function assignTeamsRandomly(): Promise<{ assigned: number }> {
   const pending = await User.find({ status: 'pending' })
   if (pending.length === 0) return { assigned: 0 }
 
-  const teamIds = getConfig().teams.map((t) => t.id)
+  const teamIds = getStaticConfig().teams.map((t) => t.id)
   if (teamIds.length === 0) return { assigned: 0 }
 
   const shuffled = [...pending].sort(() => Math.random() - 0.5)

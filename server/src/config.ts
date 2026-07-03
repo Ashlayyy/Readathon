@@ -39,7 +39,8 @@ export type RealmathonConfig = {
 
 let cached: RealmathonConfig | null = null
 
-export function getConfig(): RealmathonConfig {
+/** Load event copy, teams shell, FAQ, etc. from the JSON file (not DB prompts). */
+export function getStaticConfig(): RealmathonConfig {
   if (!cached) {
     cached = JSON.parse(readFileSync(configPath, 'utf-8')) as RealmathonConfig
   }
@@ -48,20 +49,11 @@ export function getConfig(): RealmathonConfig {
 
 export function reloadConfig(): RealmathonConfig {
   cached = null
-  return getConfig()
-}
-
-export function getPromptById(id: string): Prompt | undefined {
-  const config = getConfig()
-  return [...config.prompts.positive, ...config.prompts.negative].find((p) => p.id === id)
-}
-
-export function getTeamById(id: string): Team | undefined {
-  return getConfig().teams.find((t) => t.id === id)
+  return getStaticConfig()
 }
 
 export function pageCountBonus(pages: number): number {
-  const tiers = getConfig().pageCountBonuses
+  const tiers = getStaticConfig().pageCountBonuses
   for (const tier of tiers) {
     const max = tier.max ?? Infinity
     if (pages >= tier.min && pages <= max) return tier.points

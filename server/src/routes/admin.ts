@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
-import { getTeamById, reloadConfig, getConfig } from '../config.js'
+import { getStaticConfig, reloadConfig } from '../config.js'
+import { getTeamById } from '../services/prompts.js'
 import { Question, questionToAdminPublic } from '../db/models/Question.js'
 import { PublishedStandings } from '../db/models/PublishedStandings.js'
 import { StandingsEvent } from '../db/models/StandingsEvent.js'
@@ -21,6 +22,18 @@ import {
 } from '../services/scoring.js'
 import { generateStandingsSvg } from '../services/standings-image.js'
 import { maybeNotifyQuestionAnswered, notifyStandingsPublished } from '../services/notifications.js'
+import {
+  createPrompt,
+  deletePrompt,
+  importPromptsFromConfigFile,
+  isPromptLive,
+  promptToAdminPublic,
+  promptsUseDatabase,
+  refreshPromptsCache,
+  updatePrompt,
+  type PromptInput,
+} from '../services/prompts.js'
+import { Prompt } from '../db/models/Prompt.js'
 import { getWeekInfo } from '../utils/week.js'
 
 export const adminRoutes = new Hono()
@@ -207,7 +220,7 @@ adminRoutes.post('/standings/publish', async (c) => {
   const { weekKey, weekLabel } = getWeekInfo()
 
   const standings = await calculateStandings()
-  const eventName = getConfig().event.name as string
+  const eventName = getStaticConfig().event.name as string
   const svg = generateStandingsSvg(standings, `${eventName} — ${weekLabel}`)
 
   await PublishedStandings.updateMany({ isActive: true }, { isActive: false, unpublishedAt: new Date() })
@@ -275,9 +288,62 @@ adminRoutes.post('/standings/unpublish', async (c) => {
   return c.json({ ok: true, weekLabel: publication.weekLabel })
 })
 
-adminRoutes.post('/reload-config', (c) => {
+adminRoutes.post('/reload-config', async (c) => {
   reloadConfig()
+  await refreshPromptsCache()
   return c.json({ ok: true })
+})
+
+adminRoutes.get('/prompts', async (c) => {
+  const rows = await Prompt.find().sort({ sortOrder: 1, kind: 1, label: 1 })
+  return c.json({
+    usingDatabase: promptsUseDatabase(),
+    prompts: rows.map(promptToAdminPublic),
+    liveCount: rows.filter((p) => isPromptLive(p)).length,
+    scheduledCount: rows.filter(
+      (p) => p.isActive && p.goesLiveAt && new Date(p.goesLiveAt) > new Date(),
+    ).length,
+    draftCount: rows.filter((p) => !p.isActive).length,
+  })
+})
+
+adminRoutes.post('/prompts', async (c) => {
+  try {
+    const body = await c.req.json<PromptInput>()
+    const doc = await createPrompt(body)
+    return c.json({ prompt: promptToAdminPublic(doc) })
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Failed to create prompt' }, 400)
+  }
+})
+
+adminRoutes.patch('/prompts/:id', async (c) => {
+  try {
+    const body = await c.req.json<Partial<PromptInput>>()
+    const doc = await updatePrompt(c.req.param('id'), body)
+    return c.json({ prompt: promptToAdminPublic(doc) })
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Failed to update prompt' }, 400)
+  }
+})
+
+adminRoutes.delete('/prompts/:id', async (c) => {
+  try {
+    await deletePrompt(c.req.param('id'))
+    return c.json({ ok: true })
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Failed to delete prompt' }, 400)
+  }
+})
+
+adminRoutes.post('/prompts/import-from-config', async (c) => {
+  try {
+    const { replaceExisting } = await c.req.json<{ replaceExisting?: boolean }>()
+    const result = await importPromptsFromConfigFile(Boolean(replaceExisting))
+    return c.json(result)
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Import failed' }, 400)
+  }
 })
 
 adminRoutes.get('/questions', async (c) => {

@@ -1,4 +1,5 @@
-import { getConfig, getPromptById, getTeamById, pageCountBonus } from '../config.js'
+import { pageCountBonus } from '../config.js'
+import { getConfigWithPrompts, getPromptById, getTeamById } from './prompts.js'
 import { type HydratedDocument } from 'mongoose'
 import { type IUser, User } from '../db/models/User.js'
 import { Submission, type ISubmission } from '../db/models/Submission.js'
@@ -85,7 +86,7 @@ export async function validateSubmission(
     return 'Page count must be at least 1.'
   }
 
-  const maxPrompts = (getConfig().scoringRules.maxPromptsPerBook as number) ?? 5
+  const maxPrompts = (getConfigWithPrompts().scoringRules.maxPromptsPerBook as number) ?? 5
   if (input.promptIds.length > maxPrompts) {
     return `Maximum ${maxPrompts} prompts per book.`
   }
@@ -133,7 +134,7 @@ export async function validateSubmission(
 
 export function calculateScore(user: HydratedDocument<IUser>, input: SubmissionInput): ScoreBreakdown {
   const sign = input.submissionType === 'add' ? 1 : -1
-  const config = getConfig()
+  const config = getConfigWithPrompts()
   const team = getTeamById(user.teamId!)
 
   const promptDetails = input.promptIds.map((id) => {
@@ -187,7 +188,7 @@ export type TeamStanding = {
 }
 
 export async function calculateStandings(): Promise<TeamStanding[]> {
-  const config = getConfig()
+  const config = getConfigWithPrompts()
 
   const assignedUsers = await User.find({ status: 'assigned', teamId: { $ne: null } })
   const memberCounts = new Map<string, number>()

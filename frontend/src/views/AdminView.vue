@@ -12,10 +12,11 @@ import {
   type TeamStanding,
 } from '../lib/api'
 import StandingsPanel from '../components/StandingsPanel.vue'
+import AdminPromptsPanel from '../components/AdminPromptsPanel.vue'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 
-const { config } = useConfig()
+const { config, loadConfig } = useConfig()
 const { t } = useCopy()
 const users = ref<PublicUser[]>([])
 const pending = ref(0)
@@ -45,7 +46,7 @@ const modalDraft = ref('')
 const inboxFilter = ref<'unread' | 'read' | 'all'>('unread')
 const message = ref('')
 const loading = ref('')
-const activeTab = ref<'inbox' | 'teams' | 'standings' | 'users' | 'submissions'>('inbox')
+const activeTab = ref<'inbox' | 'teams' | 'standings' | 'users' | 'submissions' | 'prompts'>('inbox')
 
 onMounted(loadAll)
 
@@ -326,6 +327,9 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
       </button>
       <button type="button" :class="{ active: activeTab === 'submissions' }" @click="activeTab = 'submissions'">
         {{ config.copy.adminTabSubmissions }}
+      </button>
+      <button type="button" :class="{ active: activeTab === 'prompts' }" @click="activeTab = 'prompts'">
+        {{ config.copy.adminTabPrompts }}
       </button>
     </nav>
 
@@ -659,8 +663,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
           </tbody>
         </table>
       </div>
-      <p class="hint">Edit prompts & rules in <code>data/realmathon.json</code>, then reload config or restart the server.</p>
+      <p class="hint">Manage prompts in the Prompts tab. Event copy still lives in <code>data/realmathon.json</code>.</p>
     </section>
+
+    <AdminPromptsPanel
+      v-show="activeTab === 'prompts'"
+      @message="(text) => { message = text; loadConfig(true) }"
+    />
 
     <!-- Edit submission modal -->
     <div v-if="editSubmission" class="modal-backdrop" @click.self="closeEditSubmission">

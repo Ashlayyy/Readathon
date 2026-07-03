@@ -11,6 +11,7 @@ import {
   getSessionUser,
   registerWithEmail,
   loginByEmail,
+  requestMagicLink,
   userToPublic,
   verifyMagicLink,
 } from '../services/auth.js'
@@ -45,9 +46,13 @@ authRoutes.get('/me', async (c) => {
 authRoutes.post('/register', authLimiter, async (c) => {
   try {
     const { displayName, email } = await c.req.json<{ displayName: string; email: string }>()
-    const user = await registerWithEmail(displayName, email)
-    await createSession(c, user._id.toString())
-    return c.json({ user: userToPublic(user) })
+    await registerWithEmail(displayName, email)
+    await requestMagicLink(email)
+    return c.json({
+      sent: true,
+      message:
+        'Account created! Check your email for a sign-in link to continue. It expires in 15 minutes.',
+    })
   } catch (e) {
     if (e instanceof AuthError) return c.json({ error: e.message }, 400)
     throw e
