@@ -7,9 +7,10 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { rateLimit } from './middleware/rateLimit.js'
-import { getConfig } from './services/prompts.js'
 import { connectDb } from './db/connect.js'
-import { refreshPromptsCache } from './services/prompts.js'
+import { User } from './db/models/User.js'
+import { refreshPromptsCache, getConfig } from './services/prompts.js'
+import { refreshSiteSettingsCache, getSiteSettingsSync } from './services/siteSettings.js'
 import { PublishedStandings } from './db/models/PublishedStandings.js'
 import { adminRoutes } from './routes/admin.js'
 import { authRoutes } from './routes/auth.js'
@@ -36,6 +37,29 @@ const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyPrefix: 'admin
 app.get('/api/health', (c) => c.json({ status: 'ok' }))
 
 app.get('/api/config', (c) => c.json(getConfig()))
+
+app.get('/api/roster', async (c) => {
+  if (!getSiteSettingsSync().showTeamRosters) {
+    return c.json({ error: 'Team rosters are not public' }, 404)
+  }
+
+  const config = getConfig()
+  const assigned = await User.find({ status: 'assigned', teamId: { $ne: null } }).sort({
+    displayName: 1,
+  })
+
+  return c.json({
+    teams: config.teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      color: team.color,
+      icon: team.icon,
+      members: assigned
+        .filter((u) => u.teamId === team.id)
+        .map((u) => ({ id: u._id.toString(), displayName: u.displayName })),
+    })),
+  })
+})
 
 app.get('/api/standings', async (c) => {
   const published = await PublishedStandings.findOne({ isActive: true }).sort({ createdAt: -1 })
@@ -90,7 +114,7 @@ async function main() {
   }
 
   await connectDb()
-  await refreshPromptsCache()
+  await Promise.all([refreshPromptsCache(), refreshSiteSettingsCache()])
   serve({ fetch: app.fetch, port }, () => {
     const mode = isProduction ? 'production' : 'development'
     console.log(`Server running (${mode}) at http://localhost:${port}`)

@@ -6,6 +6,7 @@ import { type HydratedDocument } from 'mongoose'
 import { AuthToken } from '../db/models/AuthToken.js'
 import { type IUser, User } from '../db/models/User.js'
 import { getStaticConfig } from '../config.js'
+import { getTeamById } from './prompts.js'
 import { generateToken, hashToken, sendMagicLink } from './email.js'
 
 type UserDoc = HydratedDocument<IUser>
@@ -61,6 +62,13 @@ export function userToPublic(user: IUser) {
     teamId: user.teamId,
     status: user.status,
     isAdmin: userIsAdmin(user),
+  }
+}
+
+export function userToAdminPublic(user: IUser & { createdAt?: Date }) {
+  return {
+    ...userToPublic(user),
+    createdAt: user.createdAt,
   }
 }
 
@@ -144,6 +152,25 @@ export async function registerWithEmail(displayName: string, email: string): Pro
     isAdmin: isAdminEmail(normalizedEmail),
     status: 'pending',
   })
+
+  return user
+}
+
+/** Admin-created user — no magic-link email is sent. */
+export async function createUserByAdmin(
+  displayName: string,
+  email: string,
+  teamId?: string | null,
+): Promise<UserDoc> {
+  const user = await registerWithEmail(displayName, email)
+
+  const trimmedTeam = teamId?.trim()
+  if (trimmedTeam) {
+    if (!getTeamById(trimmedTeam)) throw new AuthError('Invalid team')
+    user.teamId = trimmedTeam
+    user.status = 'assigned'
+    await user.save()
+  }
 
   return user
 }

@@ -96,12 +96,17 @@ Logs: `logs/` in the project root.
 
 ## Auth
 
-- **Email signup:** name + email → pending pool (instant session)
+- **Email signup:** name + email → account created in the pending pool → **magic link emailed** (no session until you click it)
 - **Email login:** magic link via Resend (15 min, single-use)
 - **Google:** optional OAuth
 - **Admins:** `ADMIN_EMAILS` in `.env`
+- **Admin can add users** manually without sending email (Users tab)
 
 Without `RESEND_API_KEY`, sign-in links print to the server console (dev only).
+
+### Discord standings webhook (optional)
+
+Set `DISCORD_WEBHOOK_URL` in `server/.env` to post the standings SVG (same image as the site) with the week number when standings are published.
 
 ## User flow
 

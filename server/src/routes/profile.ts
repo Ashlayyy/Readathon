@@ -17,8 +17,8 @@ profileRoutes.get('/', async (c) => {
   return c.json({
     user: {
       ...userToPublic(user),
-      notifyStandings: user.notifyStandings ?? true,
-      notifyAnswers: user.notifyAnswers ?? true,
+      notifyStandings: user.notifyStandings ?? false,
+      notifyAnswers: user.notifyAnswers ?? false,
     },
     submissions: submissions.map(submissionToPublic),
     questions: questions.map((q) => ({

@@ -9,9 +9,12 @@ import { Submission } from '../db/models/Submission.js'
 import { User } from '../db/models/User.js'
 import {
   assignTeamsRandomly,
+  createUserByAdmin,
   getSessionUser,
   requireAdmin,
+  userToAdminPublic,
   userToPublic,
+  AuthError,
 } from '../services/auth.js'
 import {
   calculateScore,
@@ -22,6 +25,8 @@ import {
 } from '../services/scoring.js'
 import { generateStandingsSvg } from '../services/standings-image.js'
 import { maybeNotifyQuestionAnswered, notifyStandingsPublished } from '../services/notifications.js'
+import { notifyDiscordStandingsPublished } from '../services/discord.js'
+import { getSiteSettingsSync, updateSiteSettings } from '../services/siteSettings.js'
 import {
   createPrompt,
   deletePrompt,
@@ -51,10 +56,31 @@ adminRoutes.use('*', async (c, next) => {
 adminRoutes.get('/users', async (c) => {
   const users = await User.find().sort({ createdAt: -1 })
   return c.json({
-    users: users.map(userToPublic),
+    users: users.map(userToAdminPublic),
     pending: users.filter((u) => u.status === 'pending').length,
     assigned: users.filter((u) => u.status === 'assigned').length,
   })
+})
+
+adminRoutes.post('/users', async (c) => {
+  try {
+    const body = await c.req.json<{ displayName: string; email: string; teamId?: string | null }>()
+    const user = await createUserByAdmin(body.displayName, body.email, body.teamId)
+    return c.json({ user: userToAdminPublic(user) })
+  } catch (e) {
+    if (e instanceof AuthError) return c.json({ error: e.message }, 400)
+    throw e
+  }
+})
+
+adminRoutes.get('/settings', (c) => {
+  return c.json({ settings: getSiteSettingsSync() })
+})
+
+adminRoutes.patch('/settings', async (c) => {
+  const body = await c.req.json<{ showTeamRosters?: boolean }>()
+  const settings = await updateSiteSettings(body)
+  return c.json({ settings })
 })
 
 adminRoutes.post('/assign-teams', async (c) => {
@@ -249,6 +275,11 @@ adminRoutes.post('/standings/publish', async (c) => {
     return { sent: 0, skipped: 0 }
   })
 
+  const discordResult = await notifyDiscordStandingsPublished(weekKey, svg).catch((e) => {
+    console.error('[discord] Standings webhook failed:', e)
+    return { sent: false }
+  })
+
   return c.json({
     id: doc._id.toString(),
     weekKey,
@@ -257,6 +288,7 @@ adminRoutes.post('/standings/publish', async (c) => {
     standings,
     emailsSent: emailResult.sent,
     emailsSkipped: emailResult.skipped,
+    discordSent: discordResult.sent,
   })
 })
 

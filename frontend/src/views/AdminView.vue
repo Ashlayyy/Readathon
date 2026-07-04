@@ -6,7 +6,7 @@ import {
   type AdminQuestion,
   type AdminStandingsData,
   type AdminSubmission,
-  type PublicUser,
+  type AdminUser,
   type PublishedWeek,
   type StandingsHistoryEntry,
   type TeamStanding,
@@ -18,8 +18,11 @@ import { useCopy } from '../composables/useCopy'
 
 const { config, loadConfig } = useConfig()
 const { t } = useCopy()
-const users = ref<PublicUser[]>([])
+const users = ref<AdminUser[]>([])
 const pending = ref(0)
+const showTeamRosters = ref(false)
+const addUserOpen = ref(false)
+const newUser = ref({ displayName: '', email: '', teamId: '' })
 const submissions = ref<AdminSubmission[]>([])
 const questions = ref<AdminQuestion[]>([])
 const unreadQuestions = ref(0)
@@ -48,7 +51,11 @@ const message = ref('')
 const loading = ref('')
 const activeTab = ref<'inbox' | 'teams' | 'standings' | 'users' | 'submissions' | 'prompts'>('inbox')
 
-onMounted(loadAll)
+onMounted(async () => {
+  await loadConfig()
+  showTeamRosters.value = config.value?.site?.showTeamRosters ?? false
+  await loadAll()
+})
 
 watch(activeTab, (tab) => {
   if (tab === 'standings') loadStandings()
@@ -73,7 +80,7 @@ const filteredQuestions = computed(() => {
 
 async function loadAll() {
   const [u, s, q] = await Promise.all([
-    api<{ users: PublicUser[]; pending: number; assigned: number }>('/admin/users'),
+    api<{ users: AdminUser[]; pending: number; assigned: number }>('/admin/users'),
     api<{ submissions: AdminSubmission[] }>('/admin/submissions'),
     api<{ questions: AdminQuestion[]; unread: number }>('/admin/questions'),
   ])
@@ -111,6 +118,57 @@ async function setUserTeam(userId: string, teamId: string) {
     await loadAll()
   } catch (e) {
     message.value = e instanceof Error ? e.message : 'Failed to update team'
+  } finally {
+    loading.value = ''
+  }
+}
+
+async function saveRosterSetting() {
+  loading.value = 'roster-setting'
+  message.value = ''
+  try {
+    await api('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ showTeamRosters: showTeamRosters.value }),
+    })
+    await loadConfig(true)
+    message.value = showTeamRosters.value
+      ? 'Team rosters are now public.'
+      : 'Team rosters are hidden.'
+  } catch (e) {
+    message.value = e instanceof Error ? e.message : 'Failed to update setting'
+    showTeamRosters.value = config.value?.site?.showTeamRosters ?? false
+  } finally {
+    loading.value = ''
+  }
+}
+
+function openAddUser() {
+  newUser.value = { displayName: '', email: '', teamId: '' }
+  addUserOpen.value = true
+}
+
+function closeAddUser() {
+  addUserOpen.value = false
+}
+
+async function submitAddUser() {
+  loading.value = 'add-user'
+  message.value = ''
+  try {
+    await api('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({
+        displayName: newUser.value.displayName,
+        email: newUser.value.email,
+        teamId: newUser.value.teamId || null,
+      }),
+    })
+    message.value = 'User created (no login email sent).'
+    closeAddUser()
+    await loadAll()
+  } catch (e) {
+    message.value = e instanceof Error ? e.message : 'Failed to create user'
   } finally {
     loading.value = ''
   }
@@ -246,9 +304,10 @@ async function publishThisWeek() {
   loading.value = 'publish'
   message.value = ''
   try {
-    const result = await api<{ weekLabel: string; emailsSent?: number }>('/admin/standings/publish', { method: 'POST' })
+    const result = await api<{ weekLabel: string; emailsSent?: number; discordSent?: boolean }>('/admin/standings/publish', { method: 'POST' })
     const emailNote = result.emailsSent ? ` (${result.emailsSent} notification emails sent)` : ''
-    message.value = `Published ${result.weekLabel} to the site!${emailNote}`
+    const discordNote = result.discordSent ? ' Discord notified.' : ''
+    message.value = `Published ${result.weekLabel} to the site!${emailNote}${discordNote}`
     await loadStandings()
   } catch (e) {
     message.value = e instanceof Error ? e.message : 'Failed'
@@ -323,7 +382,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
         {{ config.copy.adminTabStandings }}
       </button>
       <button type="button" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">
-        {{ config.copy.adminTabParticipants }}
+        {{ config.copy.adminTabUsers }}
       </button>
       <button type="button" :class="{ active: activeTab === 'submissions' }" @click="activeTab = 'submissions'">
         {{ config.copy.adminTabSubmissions }}
@@ -467,6 +526,20 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
           <li><strong>{{ unreadQuestions }}</strong> unread messages</li>
         </ul>
       </section>
+
+      <section class="card admin-section">
+        <h2>{{ config.copy.adminShowRostersLabel }}</h2>
+        <p class="section-desc">{{ config.copy.adminShowRostersHint }}</p>
+        <label class="setting-toggle">
+          <input
+            v-model="showTeamRosters"
+            type="checkbox"
+            :disabled="loading === 'roster-setting'"
+            @change="saveRosterSetting"
+          />
+          <span>Enable team rosters page</span>
+        </label>
+      </section>
     </section>
 
     <!-- Standings -->
@@ -569,9 +642,17 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
       </section>
     </section>
 
-    <!-- Participants -->
+    <!-- Users -->
     <section v-show="activeTab === 'users'" class="card admin-section">
-      <h2>{{ config.copy.adminParticipantsTitle }}</h2>
+      <div class="users-header">
+        <div>
+          <h2>{{ config.copy.adminParticipantsTitle }}</h2>
+          <p class="section-desc">{{ users.length }} total · {{ pending }} pending · {{ users.length - pending }} assigned</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" @click="openAddUser">
+          {{ config.copy.adminAddUserButton }}
+        </button>
+      </div>
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -581,6 +662,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               <th>{{ config.copy.adminTeamColumn }}</th>
               <th>Status</th>
               <th>Admin</th>
+              <th>{{ config.copy.adminJoinedColumn }}</th>
             </tr>
           </thead>
           <tbody>
@@ -606,11 +688,48 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
                 </span>
               </td>
               <td>{{ u.isAdmin ? '✓' : '—' }}</td>
+              <td>
+                <time v-if="u.createdAt">{{ new Date(u.createdAt).toLocaleDateString() }}</time>
+                <span v-else>—</span>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
     </section>
+
+    <!-- Add user modal -->
+    <div v-if="addUserOpen" class="modal-backdrop" @click.self="closeAddUser">
+      <div class="modal card">
+        <h2>{{ config.copy.adminAddUserTitle }}</h2>
+        <p class="section-desc">{{ config.copy.adminAddUserLead }}</p>
+        <form class="add-user-form" @submit.prevent="submitAddUser">
+          <label>
+            Display name
+            <input v-model="newUser.displayName" type="text" required minlength="2" />
+          </label>
+          <label>
+            Email
+            <input v-model="newUser.email" type="email" required autocomplete="off" />
+          </label>
+          <label>
+            Team (optional)
+            <select v-model="newUser.teamId">
+              <option value="">{{ config.copy.adminUnassignedOption }}</option>
+              <option v-for="team in config.teams" :key="team.id" :value="team.id">
+                {{ team.icon }} {{ team.name }}
+              </option>
+            </select>
+          </label>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" @click="closeAddUser">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="loading === 'add-user'">
+              {{ loading === 'add-user' ? 'Creating…' : config.copy.adminAddUserSubmit }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <!-- Submissions -->
     <section v-show="activeTab === 'submissions'" class="card admin-section">
@@ -1254,5 +1373,41 @@ small {
   font-size: 0.85rem;
   color: var(--realm-text-muted);
   margin: 0;
+}
+
+.users-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.setting-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  cursor: pointer;
+  color: var(--realm-text);
+  font-weight: 500;
+}
+
+.setting-toggle input {
+  width: auto;
+}
+
+.add-user-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.add-user-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  color: var(--realm-text-muted);
 }
 </style>

@@ -109,6 +109,13 @@ function closeMenu() {
 					<RouterLink to="/teams" @click="closeMenu">{{
 						config?.copy.nav.teams ?? 'Teams'
 					}}</RouterLink>
+					<RouterLink
+						v-if="config?.site?.showTeamRosters"
+						to="/rosters"
+						@click="closeMenu"
+					>{{
+						config?.copy.nav.rosters ?? 'Rosters'
+					}}</RouterLink>
 					<RouterLink to="/prompts" @click="closeMenu">{{
 						config?.copy.nav.prompts ?? 'Prompts'
 					}}</RouterLink>

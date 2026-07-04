@@ -42,6 +42,23 @@ export type PublicUser = {
   unreadAnswers?: number
 }
 
+export type AdminUser = PublicUser & {
+  createdAt?: string
+}
+
+export type RosterMember = {
+  id: string
+  displayName: string
+}
+
+export type RosterTeam = {
+  id: string
+  name: string
+  color: string
+  icon: string
+  members: RosterMember[]
+}
+
 export type Prompt = {
   id: string
   gameName: string
@@ -91,6 +108,7 @@ export type RealmathonConfig = {
   howItWorks: { step: number; title: string; body: string }[]
   scoringRules: { maxPromptsPerBook: number }
   faq: { q: string; a: string }[]
+  site?: { showTeamRosters: boolean }
 }
 
 export type TeamStanding = {

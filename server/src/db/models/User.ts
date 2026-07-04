@@ -8,8 +8,8 @@ const userSchema = new Schema(
     teamId: { type: String, default: null },
     isAdmin: { type: Boolean, default: false },
     status: { type: String, enum: ['pending', 'assigned'], default: 'pending' },
-    notifyStandings: { type: Boolean, default: true },
-    notifyAnswers: { type: Boolean, default: true },
+    notifyStandings: { type: Boolean, default: false },
+    notifyAnswers: { type: Boolean, default: false },
   },
   { timestamps: true },
 )

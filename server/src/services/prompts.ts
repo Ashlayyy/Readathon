@@ -8,6 +8,7 @@ import {
   type Team,
 } from '../config.js'
 import { Prompt, type IPrompt } from '../db/models/Prompt.js'
+import { getSiteSettingsSync } from './siteSettings.js'
 
 const configPath = join(dirname(fileURLToPath(import.meta.url)), '../../data/realmathon.json')
 
@@ -70,7 +71,10 @@ export function getConfigWithPrompts(publicOnly = true): RealmathonConfig {
 
 /** Public site config — prompts from DB when populated, else JSON fallback. */
 export function getConfig(): RealmathonConfig {
-  return getConfigWithPrompts(true)
+  return {
+    ...getConfigWithPrompts(true),
+    site: getSiteSettingsSync(),
+  }
 }
 
 export function getPromptById(id: string, publicOnly = true): PublicPrompt | undefined {
