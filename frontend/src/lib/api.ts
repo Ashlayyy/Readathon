@@ -86,6 +86,11 @@ export type SiteCopy = {
   notifications: Record<string, string>
 }
 
+export type AdminSiteSettings = {
+  showTeamRosters: boolean
+  discordWebhookUrl: string
+}
+
 export type RealmathonConfig = {
   event: {
     name: string

@@ -26,7 +26,10 @@ import {
 import { generateStandingsSvg } from '../services/standings-image.js'
 import { maybeNotifyQuestionAnswered, notifyStandingsPublished } from '../services/notifications.js'
 import { notifyDiscordStandingsPublished } from '../services/discord.js'
-import { getSiteSettingsSync, updateSiteSettings } from '../services/siteSettings.js'
+import {
+  getSiteSettingsAdminSync,
+  updateSiteSettings,
+} from '../services/siteSettings.js'
 import {
   createPrompt,
   deletePrompt,
@@ -74,13 +77,20 @@ adminRoutes.post('/users', async (c) => {
 })
 
 adminRoutes.get('/settings', (c) => {
-  return c.json({ settings: getSiteSettingsSync() })
+  return c.json({ settings: getSiteSettingsAdminSync() })
 })
 
 adminRoutes.patch('/settings', async (c) => {
-  const body = await c.req.json<{ showTeamRosters?: boolean }>()
-  const settings = await updateSiteSettings(body)
-  return c.json({ settings })
+  const body = await c.req.json<{ showTeamRosters?: boolean; discordWebhookUrl?: string }>()
+  try {
+    const settings = await updateSiteSettings(body)
+    return c.json({ settings })
+  } catch (e) {
+    if (e instanceof Error && e.message === 'Invalid Discord webhook URL') {
+      return c.json({ error: e.message }, 400)
+    }
+    throw e
+  }
 })
 
 adminRoutes.post('/assign-teams', async (c) => {

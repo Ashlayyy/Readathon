@@ -1,3 +1,5 @@
+import { getDiscordWebhookUrl } from './siteSettings.js'
+
 function weekNumberLabel(weekKey: string): string {
   const match = weekKey.match(/W(\d+)$/i)
   if (!match) return weekKey
@@ -8,7 +10,7 @@ export async function notifyDiscordStandingsPublished(
   weekKey: string,
   svg: string,
 ): Promise<{ sent: boolean }> {
-  const webhookUrl = process.env.DISCORD_WEBHOOK_URL?.trim()
+  const webhookUrl = getDiscordWebhookUrl()
   if (!webhookUrl) return { sent: false }
 
   const content = weekNumberLabel(weekKey)

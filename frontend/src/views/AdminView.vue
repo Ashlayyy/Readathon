@@ -4,6 +4,7 @@ import {
   api,
   downloadFile,
   type AdminQuestion,
+  type AdminSiteSettings,
   type AdminStandingsData,
   type AdminSubmission,
   type AdminUser,
@@ -21,6 +22,8 @@ const { t } = useCopy()
 const users = ref<AdminUser[]>([])
 const pending = ref(0)
 const showTeamRosters = ref(false)
+const discordWebhookUrl = ref('')
+const discordWebhookDraft = ref('')
 const addUserOpen = ref(false)
 const newUser = ref({ displayName: '', email: '', teamId: '' })
 const submissions = ref<AdminSubmission[]>([])
@@ -54,8 +57,14 @@ const activeTab = ref<'inbox' | 'teams' | 'standings' | 'users' | 'submissions' 
 onMounted(async () => {
   await loadConfig()
   showTeamRosters.value = config.value?.site?.showTeamRosters ?? false
-  await loadAll()
+  await Promise.all([loadAll(), loadAdminSettings()])
 })
+
+async function loadAdminSettings() {
+  const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings')
+  discordWebhookUrl.value = settings.discordWebhookUrl ?? ''
+  discordWebhookDraft.value = settings.discordWebhookUrl ?? ''
+}
 
 watch(activeTab, (tab) => {
   if (tab === 'standings') loadStandings()
@@ -141,6 +150,32 @@ async function saveRosterSetting() {
   } finally {
     loading.value = ''
   }
+}
+
+async function saveDiscordWebhook() {
+  loading.value = 'discord-webhook'
+  message.value = ''
+  try {
+    const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ discordWebhookUrl: discordWebhookDraft.value.trim() }),
+    })
+    discordWebhookUrl.value = settings.discordWebhookUrl
+    discordWebhookDraft.value = settings.discordWebhookUrl
+    message.value = settings.discordWebhookUrl
+      ? 'Discord webhook saved. Standings will post there when published.'
+      : 'Discord webhook removed.'
+  } catch (e) {
+    message.value = e instanceof Error ? e.message : 'Failed to update webhook'
+    discordWebhookDraft.value = discordWebhookUrl.value
+  } finally {
+    loading.value = ''
+  }
+}
+
+function clearDiscordWebhook() {
+  discordWebhookDraft.value = ''
+  void saveDiscordWebhook()
 }
 
 function openAddUser() {
@@ -588,6 +623,45 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
           </ul>
         </div>
       </div>
+
+      <section class="card admin-section discord-webhook-section">
+        <h2>Discord notifications</h2>
+        <p class="section-desc">
+          When standings are published, the standings SVG is posted to this webhook with the week number.
+          Leave blank to disable. Create a webhook in your Discord channel settings.
+        </p>
+        <form class="discord-webhook-form" @submit.prevent="saveDiscordWebhook">
+          <label>
+            Webhook URL
+            <input
+              v-model="discordWebhookDraft"
+              type="url"
+              placeholder="https://discord.com/api/webhooks/…"
+              autocomplete="off"
+              spellcheck="false"
+              :disabled="loading === 'discord-webhook'"
+            />
+          </label>
+          <div class="btn-row">
+            <button
+              type="submit"
+              class="btn btn-primary"
+              :disabled="loading === 'discord-webhook' || discordWebhookDraft === discordWebhookUrl"
+            >
+              {{ loading === 'discord-webhook' ? 'Saving…' : 'Save webhook' }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              :disabled="loading === 'discord-webhook' || !discordWebhookUrl"
+              @click="clearDiscordWebhook"
+            >
+              Remove
+            </button>
+          </div>
+          <p v-if="discordWebhookUrl" class="webhook-status">Webhook configured.</p>
+        </form>
+      </section>
 
       <div v-if="loading === 'standings'" class="alert alert-info">Loading standings…</div>
       <StandingsPanel
@@ -1407,6 +1481,30 @@ small {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  font-size: 0.88rem;
+  color: var(--realm-text-muted);
+}
+
+.discord-webhook-section {
+  margin-top: 1rem;
+}
+
+.discord-webhook-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.discord-webhook-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  color: var(--realm-text-muted);
+}
+
+.webhook-status {
+  margin: 0;
   font-size: 0.88rem;
   color: var(--realm-text-muted);
 }

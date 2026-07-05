@@ -106,7 +106,7 @@ Without `RESEND_API_KEY`, sign-in links print to the server console (dev only).
 
 ### Discord standings webhook (optional)
 
-Set `DISCORD_WEBHOOK_URL` in `server/.env` to post the standings SVG (same image as the site) with the week number when standings are published.
+In **Admin → Standings**, set a Discord webhook URL to post the standings SVG (same image as the site) with the week number when standings are published. Leave it blank to disable, or use **Remove** to clear it later.
 
 ## User flow
 
