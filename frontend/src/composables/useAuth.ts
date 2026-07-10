@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { api, type PublicUser } from '../lib/api'
+import { api, googleLoginUrl, type PublicUser } from '../lib/api'
 
 const user = ref<PublicUser | null>(null)
 const loaded = ref(false)
@@ -46,10 +46,6 @@ export function useAuth() {
     await api('/auth/logout', { method: 'POST' })
     user.value = null
     loaded.value = true
-  }
-
-  function googleLoginUrl() {
-    return '/api/auth/google'
   }
 
   return { user, loaded, fetchUser, register, login, logout, googleLoginUrl }

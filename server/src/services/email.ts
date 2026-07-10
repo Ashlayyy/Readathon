@@ -2,6 +2,8 @@ import { createHash, randomBytes } from 'node:crypto'
 import { getStaticConfig } from '../config.js'
 import { magicLinkEmailHtml, magicLinkEmailText } from './emailTemplates.js'
 
+import { apiPublicUrl } from '../lib/urls.js'
+
 export function generateToken(): string {
   return randomBytes(32).toString('hex')
 }
@@ -46,8 +48,7 @@ export async function sendEmail(opts: {
 }
 
 export async function sendMagicLink(email: string, token: string): Promise<void> {
-  const frontend = process.env.FRONTEND_URL ?? 'http://localhost:5173'
-  const link = `${frontend}/api/auth/verify?token=${token}`
+  const link = `${apiPublicUrl('/auth/verify')}?token=${token}`
   const eventName = getStaticConfig().event.name as string
 
   await sendEmail({

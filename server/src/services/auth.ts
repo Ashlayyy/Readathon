@@ -6,6 +6,7 @@ import { type HydratedDocument } from 'mongoose'
 import { AuthToken } from '../db/models/AuthToken.js'
 import { type IUser, User } from '../db/models/User.js'
 import { getStaticConfig } from '../config.js'
+import { apiPublicUrl } from '../lib/urls.js'
 import { getTeamById } from './prompts.js'
 import { generateToken, hashToken, sendMagicLink } from './email.js'
 
@@ -47,7 +48,7 @@ function isAdminEmail(email: string): boolean {
 export function getGoogleClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI ?? 'http://localhost:3001/api/auth/google/callback'
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI ?? apiPublicUrl('/auth/google/callback')
 
   if (!clientId || !clientSecret) return null
 

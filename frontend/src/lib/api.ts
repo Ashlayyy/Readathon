@@ -1,7 +1,9 @@
-const API_BASE = '/api'
+import { apiUrl, googleLoginUrl } from './apiBase'
+
+export { apiUrl, googleLoginUrl }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
@@ -203,7 +205,7 @@ export type AdminStandingsData = {
 
 /** Download a file from an authenticated API path. */
 export async function downloadFile(path: string, filename: string) {
-  const res = await fetch(`/api${path}`, { credentials: 'include' })
+  const res = await fetch(apiUrl(path), { credentials: 'include' })
   if (!res.ok) {
     let msg = `Download failed (${res.status})`
     try {

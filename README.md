@@ -35,10 +35,19 @@ Edit `server/.env` — at minimum:
 MONGODB_URI=mongodb+srv://...
 SESSION_SECRET=long-random-secret
 FRONTEND_URL=https://your-domain.com
+API_URL=https://api.your-domain.com
 ADMIN_EMAILS=you@email.com
 RESEND_API_KEY=...
 EMAIL_FROM=Readathon <you@yourdomain.com>
 ```
+
+For production, copy `frontend/.env.production.example` to `frontend/.env.production` and set the same API host:
+
+```env
+VITE_API_URL=https://api.your-domain.com
+```
+
+Leave `VITE_API_URL` unset in local dev — the Vite dev server proxies `/api` to the backend.
 
 ## Development
 
@@ -55,29 +64,72 @@ Or with PM2 (two processes, hot reload):
 npm run pm2:start:dev
 ```
 
-## Production (Linux server)
+## Production (Linux server + nginx)
 
-Production builds the frontend and runs **one** PM2 process. The API serves both `/api` and the built `frontend/dist` on the same port — no nginx required.
+The frontend and API are on **separate public URLs**:
+
+- **Frontend:** `https://your-domain.com` — static Vue app
+- **API:** `https://api.your-domain.com` — Hono on port `3001` (PM2)
 
 ```bash
+cp frontend/.env.production.example frontend/.env.production
+# edit VITE_API_URL and server/.env (FRONTEND_URL, API_URL)
 npm run pm2:start
 ```
 
 What `pm2:start` does:
 
-1. `npm run build --prefix frontend` — outputs to `frontend/dist`
-2. Starts the API with `NODE_ENV=production`
-3. Hono serves static files from `frontend/dist` and falls back to `index.html` for client routes
+1. `npm run build --prefix frontend` — bakes `VITE_API_URL` into the client bundle
+2. Starts the API with `NODE_ENV=production` on port `3001`
 
-Set `FRONTEND_URL` to the URL users actually visit, e.g. `https://your-domain.com` or `http://your-server-ip:3001`.
+| Variable | Where | Production value |
+|----------|-------|------------------|
+| `VITE_API_URL` | `frontend/.env.production` | `https://api.your-domain.com` |
+| `FRONTEND_URL` | `server/.env` | `https://your-domain.com` |
+| `API_URL` | `server/.env` | `https://api.your-domain.com` |
+| `GOOGLE_REDIRECT_URI` | `server/.env` | `https://api.your-domain.com/api/auth/google/callback` |
+| `NODE_ENV` | PM2 | `production` |
+| `PORT` | `server/.env` / PM2 | `3001` (localhost only) |
+| `MONGODB_URI` | `server/.env` | Atlas connection string |
+| `SESSION_SECRET` | `server/.env` | Strong random string |
 
-| Variable | Production value |
-|----------|------------------|
-| `NODE_ENV` | `production` (set automatically by `npm run start` in server) |
-| `PORT` | `3001` (or your choice) |
-| `FRONTEND_URL` | Same origin users use in the browser |
-| `MONGODB_URI` | Atlas connection string |
-| `SESSION_SECRET` | Strong random string (server **exits** if missing/default in production) |
+### Example nginx
+
+**Frontend** (`your-domain.com`) — serve `frontend/dist`:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    root /path/to/Readathon/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
+**API** (`api.your-domain.com`) — proxy to PM2:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name api.your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+`FRONTEND_URL` must match the browser origin so CORS and auth cookies work across subdomains.
 
 After code changes:
 
