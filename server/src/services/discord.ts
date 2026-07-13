@@ -1,4 +1,4 @@
-import FormData from 'form-data'
+import { File } from 'node:buffer'
 import { getDiscordRoleId, getDiscordWebhookUrl } from './siteSettings.js'
 import { svgToPng, isPngBuffer } from './svgToPng.js'
 
@@ -31,12 +31,14 @@ function assertDiscordPng(png: Buffer, label: string): void {
 
 type WebhookPayload = {
   content: string
+  embeds: Array<{ image: { url: string } }>
   attachments: Array<{ id: number; filename: string }>
 }
 
 function buildPayload(content: string, filename: string): WebhookPayload {
   return {
     content,
+    embeds: [{ image: { url: `attachment://${filename}` } }],
     attachments: [{ id: 0, filename }],
   }
 }
@@ -69,26 +71,12 @@ async function postWebhookImage(
   })
 
   const form = new FormData()
-  form.append('payload_json', payloadJson, {
-    contentType: 'application/json; charset=utf-8',
-  })
-  form.append('files[0]', png, {
-    filename,
-    contentType: 'image/png',
-    knownLength: png.length,
-  })
-
-  const headers = form.getHeaders()
-  console.log(`[discord] ${label}: multipart headers`, {
-    contentType: headers['content-type'],
-    contentLength: headers['content-length'],
-  })
+  form.append('payload_json', payloadJson)
+  form.append('files[0]', new File([png], filename, { type: 'image/png' }))
 
   const res = await fetch(webhookUrlWithWait(webhookUrl), {
     method: 'POST',
-    // @ts-expect-error form-data stream body is accepted by Node fetch
     body: form,
-    headers,
   })
 
   const bodyText = await res.text()
