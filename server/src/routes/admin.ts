@@ -128,6 +128,26 @@ adminRoutes.patch('/users/:id/team', async (c) => {
   return c.json({ user: userToPublic(user) })
 })
 
+adminRoutes.patch('/users/:id/admin', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{ isAdmin?: boolean }>()
+
+  if (typeof body.isAdmin !== 'boolean') {
+    return c.json({ error: 'isAdmin must be true or false' }, 400)
+  }
+
+  const user = await User.findById(c.req.param('id'))
+  if (!user) return c.json({ error: 'User not found' }, 404)
+
+  if (user._id.toString() === admin._id.toString()) {
+    return c.json({ error: 'You cannot change your own admin status' }, 400)
+  }
+
+  user.isAdmin = body.isAdmin
+  await user.save()
+  return c.json({ user: userToAdminPublic(user) })
+})
+
 adminRoutes.get('/submissions', async (c) => {
   const rows = await Submission.find().sort({ createdAt: -1 })
   const userIds = [...new Set(rows.map((sub) => sub.userId.toString()))]

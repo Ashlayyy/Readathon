@@ -31,6 +31,7 @@ const usingDatabase = ref(false)
 const stats = ref({ liveCount: 0, scheduledCount: 0, draftCount: 0 })
 const loading = ref('')
 const filter = ref<'all' | 'live' | 'scheduled' | 'draft'>('all')
+const query = ref('')
 
 const editModal = ref<AdminPrompt | null>(null)
 const createMode = ref(false)
@@ -64,6 +65,11 @@ const teams = computed<TeamConfig[]>(() => config.value?.teams ?? [])
 
 const filtered = computed(() => {
   return prompts.value.filter((p) => {
+    const q = query.value.trim().toLowerCase()
+    if (q) {
+      const haystack = `${p.label} ${p.description} ${p.promptId} ${p.gameName} ${p.kind} ${p.teamId ?? ''}`.toLowerCase()
+      if (!haystack.includes(q)) return false
+    }
     if (filter.value === 'live') return p.isLive
     if (filter.value === 'scheduled')
       return p.isActive && p.goesLiveAt && new Date(p.goesLiveAt) > new Date()
@@ -365,12 +371,24 @@ async function runImport() {
     </div>
 
     <div class="prompt-filters">
-      <button type="button" :class="{ active: filter === 'all' }" @click="filter = 'all'">{{ section('prompts').filterAll }}</button>
-      <button type="button" :class="{ active: filter === 'live' }" @click="filter = 'live'">{{ section('prompts').filterLive }}</button>
-      <button type="button" :class="{ active: filter === 'scheduled' }" @click="filter = 'scheduled'">
-        {{ section('prompts').filterScheduled }}
-      </button>
-      <button type="button" :class="{ active: filter === 'draft' }" @click="filter = 'draft'">{{ section('prompts').filterDraft }}</button>
+      <div class="filter-left">
+        <button type="button" :class="{ active: filter === 'all' }" @click="filter = 'all'">{{ section('prompts').filterAll }}</button>
+        <button type="button" :class="{ active: filter === 'live' }" @click="filter = 'live'">{{ section('prompts').filterLive }}</button>
+        <button type="button" :class="{ active: filter === 'scheduled' }" @click="filter = 'scheduled'">
+          {{ section('prompts').filterScheduled }}
+        </button>
+        <button type="button" :class="{ active: filter === 'draft' }" @click="filter = 'draft'">{{ section('prompts').filterDraft }}</button>
+      </div>
+      <div class="filter-right">
+        <input
+          v-model="query"
+          type="search"
+          class="prompt-search"
+          placeholder="Search prompts…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
     </div>
 
     <div v-if="loading === 'load'" class="alert alert-info">{{ section('prompts').loading }}</div>
@@ -382,12 +400,23 @@ async function runImport() {
         <ul v-else class="prompt-list">
           <li v-for="p in sec.items" :key="p.id" class="prompt-row">
             <div class="prompt-main">
-              <span class="badge" :class="statusClass(p)">{{ statusLabel(p) }}</span>
-              <strong>{{ p.label }}</strong>
-              <span class="points">{{ p.points > 0 ? '+' : '' }}{{ p.points }} XP</span>
-              <span v-if="p.kind === 'team_bonus'" class="meta">· {{ teamName(p.teamId) }}</span>
-              <span v-else-if="p.gameName" class="meta">· {{ p.gameName }}</span>
-              <code class="pid">{{ p.promptId }}</code>
+              <div class="prompt-top">
+                <span class="badge" :class="statusClass(p)">{{ statusLabel(p) }}</span>
+                <strong class="label">{{ p.label }}</strong>
+                <span class="points">{{ p.points > 0 ? '+' : '' }}{{ p.points }} XP</span>
+                <span v-if="p.kind === 'team_bonus'" class="meta">· {{ teamName(p.teamId) }}</span>
+                <span v-else-if="p.gameName" class="meta">· {{ p.gameName }}</span>
+              </div>
+              <div class="prompt-bottom">
+                <span v-if="p.description" class="desc">{{ p.description }}</span>
+                <span class="meta-right">
+                  <span v-if="p.link" class="link-pill">link</span>
+                  <span v-if="p.goesLiveAt && new Date(p.goesLiveAt) > new Date()" class="meta"
+                    >· goes live {{ new Date(p.goesLiveAt).toLocaleString() }}</span
+                  >
+                  <code class="pid">{{ p.promptId }}</code>
+                </span>
+              </div>
             </div>
             <div class="row-actions">
               <button type="button" class="btn btn-secondary btn-sm" @click="openEdit(p)">{{ section('prompts').edit }}</button>
@@ -585,8 +614,22 @@ async function runImport() {
 .prompt-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.75rem;
   margin-bottom: 1.25rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.filter-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.filter-right {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .prompt-filters button {
@@ -644,14 +687,64 @@ async function runImport() {
 
 .prompt-main {
   display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.prompt-main strong {
+  color: var(--realm-text);
+}
+
+.prompt-top {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
 }
 
-.prompt-main strong {
-  color: var(--realm-text);
+.label {
+  min-width: 0;
+}
+
+.prompt-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  color: var(--realm-text-muted);
+}
+
+.desc {
+  flex: 1;
+  min-width: 14rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.meta-right {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.link-pill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(212, 99, 74, 0.4);
+  color: var(--realm-accent-glow);
+  background: rgba(212, 99, 74, 0.08);
 }
 
 .points {
@@ -668,6 +761,22 @@ async function runImport() {
 
 .pid {
   font-family: ui-monospace, monospace;
+}
+
+.prompt-search {
+  width: min(22rem, 100%);
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--realm-border);
+  background: var(--realm-bg);
+  color: var(--realm-text);
+  font-size: 0.9rem;
+}
+
+.prompt-search:focus {
+  outline: none;
+  border-color: rgba(212, 99, 74, 0.6);
+  box-shadow: 0 0 0 3px rgba(212, 99, 74, 0.12);
 }
 
 .empty-group {

@@ -6,7 +6,7 @@
 		"firstSetLiveAt": "2026-07-01T00:00:00.000Z",
 		"weeksBetweenSets": 2,
 		"daysBetweenSets": 14,
-		"note": "Set 1 goes live on readathon start. Sets 2–13 unlock exactly 14 days apart — no more, no less."
+		"note": "Set 1 goes live on readathon start. Sets 2–12 unlock exactly 14 days apart — no more, no less."
 	},
 	"sets": [
 		{
@@ -14,10 +14,10 @@
 			"goesLiveAt": "2026-07-01T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "attack-s01-wartime-wedding",
-					"gameName": "Siege the Chapel",
-					"label": "Wartime wedding",
-					"description": "A book featuring a wartime wedding.",
+					"id": "attack-s01-finish-4plus-series",
+					"gameName": "Complete the Saga",
+					"label": "Finish a 4+ series",
+					"description": "Finish a series with four or more books.",
 					"points": -15,
 					"sortOrder": 1
 				},
@@ -25,14 +25,14 @@
 					"id": "attack-s01-secret-royalty",
 					"gameName": "Unmask the Crown",
 					"label": "Secret Royalty",
-					"description": "The main character is secretly royal.",
+					"description": "The main character is secretly royalty.",
 					"points": -10,
 					"sortOrder": 2
 				},
 				{
 					"id": "attack-s01-mc-multiple-powers",
 					"gameName": "Overload the Arsenal",
-					"label": "Mc has more than one power",
+					"label": "MC has more than one power",
 					"description": "The main character has more than one power or ability.",
 					"points": -5,
 					"sortOrder": 3
@@ -116,7 +116,7 @@
 				{
 					"id": "attack-s03-mc-kidnapped",
 					"gameName": "Hostage Situation",
-					"label": "Mc is kidnapped",
+					"label": "MC is kidnapped",
 					"description": "The main character is kidnapped.",
 					"points": -10,
 					"sortOrder": 2
@@ -132,8 +132,8 @@
 				{
 					"id": "attack-s03-assassin-thief-slave",
 					"gameName": "Shadow Profession",
-					"label": "Assasin/ thief/ slave",
-					"description": "MC is an assassin, thief, or slave.",
+					"label": "Assassin / thief / slave",
+					"description": "The MC is an assassin, thief, or slave.",
 					"points": -5,
 					"sortOrder": 4
 				},
@@ -152,10 +152,10 @@
 			"goesLiveAt": "2026-08-12T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "attack-s04-finish-4plus-series",
-					"gameName": "Complete the Saga",
-					"label": "Finish a 4+ series",
-					"description": "Finish a series with four or more books.",
+					"id": "attack-s04-retelling",
+					"gameName": "Twist the Tale",
+					"label": "Retelling",
+					"description": "A retelling of a classic story.",
 					"points": -15,
 					"sortOrder": 1
 				},
@@ -184,10 +184,10 @@
 					"sortOrder": 4
 				},
 				{
-					"id": "attack-s04-playboy-except-you",
-					"gameName": "Only For You",
-					"label": "Playboy with everyone but you",
-					"description": "Playboy love interest — everyone but the MC.",
+					"id": "attack-s04-brothers-best-friend",
+					"gameName": "Brother's Blade",
+					"label": "Brother's best friend",
+					"description": "Brother's best friend romance.",
 					"points": -5,
 					"sortOrder": 5
 				}
@@ -232,7 +232,7 @@
 				{
 					"id": "attack-s05-duo-or-more-pov",
 					"gameName": "Many Voices",
-					"label": "Duo or more Pov",
+					"label": "Duo or more POV",
 					"description": "Two or more points of view.",
 					"points": -5,
 					"sortOrder": 5
@@ -246,7 +246,7 @@
 				{
 					"id": "attack-s06-brown-cover",
 					"gameName": "Bronze Dust Cover",
-					"label": "Brown Cover",
+					"label": "Brown cover",
 					"description": "Predominantly brown cover art.",
 					"points": -15,
 					"sortOrder": 1
@@ -278,7 +278,7 @@
 				{
 					"id": "attack-s06-fake-dating",
 					"gameName": "False Courtship",
-					"label": "Fake Dating",
+					"label": "Fake dating",
 					"description": "Fake dating trope.",
 					"points": -5,
 					"sortOrder": 5
@@ -290,18 +290,18 @@
 			"goesLiveAt": "2026-09-23T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "attack-s07-retelling",
-					"gameName": "Twist the Tale",
-					"label": "Retelling",
-					"description": "A retelling of a classic story.",
+					"id": "attack-s07-mc-is-a-ghost",
+					"gameName": "Haunt the Living",
+					"label": "MC is a ghost",
+					"description": "The main character is a ghost.",
 					"points": -15,
 					"sortOrder": 1
 				},
 				{
 					"id": "attack-s07-marriage-of-convenience",
 					"gameName": "Paper Alliance",
-					"label": "Marridge of conviniece",
-					"description": "Marriage of convenience.",
+					"label": "Marriage of convenience",
+					"description": "Marriage-of-convenience trope.",
 					"points": -10,
 					"sortOrder": 2
 				},
@@ -314,18 +314,18 @@
 					"sortOrder": 3
 				},
 				{
-					"id": "attack-s07-powerful-artefact",
-					"gameName": "Relic of Power",
-					"label": "Powerfull arefact",
-					"description": "A powerful artefact or artifact.",
+					"id": "attack-s07-forbidden-magic",
+					"gameName": "Forbidden Spell",
+					"label": "Forbidden magic",
+					"description": "Forbidden magic is used or central.",
 					"points": -5,
 					"sortOrder": 4
 				},
 				{
-					"id": "attack-s07-brother-best-friend",
-					"gameName": "Brother's Blade",
-					"label": "Brother best friend",
-					"description": "Brother's best friend romance.",
+					"id": "attack-s07-pink-cover",
+					"gameName": "Rose Dust Cover",
+					"label": "Pink cover",
+					"description": "Predominantly pink cover art.",
 					"points": -5,
 					"sortOrder": 5
 				}
@@ -336,42 +336,42 @@
 			"goesLiveAt": "2026-10-07T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "attack-s08-mc-is-ghost",
-					"gameName": "Haunt the Living",
-					"label": "mc is a ghost",
-					"description": "The main character is a ghost.",
+					"id": "attack-s08-published-before-2015",
+					"gameName": "Vintage Tome",
+					"label": "Published before 2015",
+					"description": "Book published before 2015.",
 					"points": -15,
 					"sortOrder": 1
 				},
 				{
-					"id": "attack-s08-tortured-hero",
-					"gameName": "Broken Champion",
-					"label": "Tortured hero",
-					"description": "A tortured hero.",
+					"id": "attack-s08-morally-grey-mc",
+					"gameName": "Grey Morality",
+					"label": "Morally grey MC",
+					"description": "A morally grey main character.",
 					"points": -10,
 					"sortOrder": 2
 				},
 				{
-					"id": "attack-s08-insta-love",
-					"gameName": "Love at First Strike",
-					"label": "Insta love",
-					"description": "Insta-love / love at first sight.",
-					"points": -10,
+					"id": "attack-s08-workplace-romance",
+					"gameName": "Office Intrigue",
+					"label": "Workplace romance",
+					"description": "Workplace romance.",
+					"points": -5,
 					"sortOrder": 3
 				},
 				{
-					"id": "attack-s08-forbidden-magic",
-					"gameName": "Forbidden Spell",
-					"label": "forbbiden magic",
-					"description": "Forbidden magic is used or central.",
+					"id": "attack-s08-white-cover",
+					"gameName": "Pale Dust Cover",
+					"label": "White cover",
+					"description": "Predominantly white cover art.",
 					"points": -5,
 					"sortOrder": 4
 				},
 				{
-					"id": "attack-s08-pink-cover",
-					"gameName": "Rose Dust Cover",
-					"label": "Pink cover",
-					"description": "Predominantly pink cover art.",
+					"id": "attack-s08-chapter-titles",
+					"gameName": "Named Chapters",
+					"label": "Book with chapter titles",
+					"description": "Chapters have individual titles.",
 					"points": -5,
 					"sortOrder": 5
 				}
@@ -382,42 +382,42 @@
 			"goesLiveAt": "2026-10-21T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "attack-s09-published-before-2015",
-					"gameName": "Vintage Tome",
-					"label": "Published before 2015",
-					"description": "Book published before 2015.",
+					"id": "attack-s09-five-word-title",
+					"gameName": "Count the Words",
+					"label": "Five-word title",
+					"description": "Title is exactly five words.",
 					"points": -15,
 					"sortOrder": 1
 				},
 				{
-					"id": "attack-s09-morally-grey-mc",
-					"gameName": "Grey Morality",
-					"label": "Morraly grey mc",
-					"description": "Morally grey main character.",
+					"id": "attack-s09-insta-love",
+					"gameName": "Love at First Strike",
+					"label": "Insta love",
+					"description": "Insta-love / love at first sight.",
 					"points": -10,
 					"sortOrder": 2
 				},
 				{
-					"id": "attack-s09-workplace-romance",
-					"gameName": "Office Intrigue",
-					"label": "Workplace romance",
-					"description": "Workplace romance.",
-					"points": -5,
+					"id": "attack-s09-recommended-by-a-friend",
+					"gameName": "Friend's Pick",
+					"label": "Recommended by a friend",
+					"description": "Book recommended by a friend.",
+					"points": -10,
 					"sortOrder": 3
 				},
 				{
-					"id": "attack-s09-white-cover",
-					"gameName": "Pale Dust Cover",
-					"label": "White cover",
-					"description": "Predominantly white cover art.",
+					"id": "attack-s09-long-chapters",
+					"gameName": "Marathon Chapters",
+					"label": "Book with long chapters",
+					"description": "Notably long chapters.",
 					"points": -5,
 					"sortOrder": 4
 				},
 				{
-					"id": "attack-s09-chapter-titles",
-					"gameName": "Named Chapters",
-					"label": "book with chapter tittles",
-					"description": "Chapters have individual titles.",
+					"id": "attack-s09-book-from-tiktok",
+					"gameName": "BookTok Raid",
+					"label": "Book from TikTok",
+					"description": "A book you found via TikTok / BookTok.",
 					"points": -5,
 					"sortOrder": 5
 				}
@@ -428,42 +428,42 @@
 			"goesLiveAt": "2026-11-04T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "attack-s10-five-word-title",
-					"gameName": "Count the Words",
-					"label": "five word tittle",
-					"description": "Title is exactly five words.",
+					"id": "attack-s10-time-travel",
+					"gameName": "Ripple in Time",
+					"label": "Book with time travel",
+					"description": "Time travel is part of the story.",
 					"points": -15,
 					"sortOrder": 1
 				},
 				{
-					"id": "attack-s10-introvert-x-extrovert",
-					"gameName": "Opposite Souls",
-					"label": "introvert x extroverte",
-					"description": "Introvert × extrovert pairing.",
+					"id": "attack-s10-read-in-one-day",
+					"gameName": "Single Sitting",
+					"label": "Read in one day",
+					"description": "Finished in one day.",
 					"points": -10,
 					"sortOrder": 2
 				},
 				{
-					"id": "attack-s10-recommended-by-friend",
-					"gameName": "Friend's Pick",
-					"label": "recommended by a friend",
-					"description": "Book recommended by a friend.",
+					"id": "attack-s10-book-club-book",
+					"gameName": "Club Selection",
+					"label": "Book club book",
+					"description": "A book club pick.",
 					"points": -10,
 					"sortOrder": 3
 				},
 				{
-					"id": "attack-s10-long-chapters",
-					"gameName": "Marathon Chapters",
-					"label": "book with long chapters",
-					"description": "Notably long chapters.",
+					"id": "attack-s10-set-in-winter",
+					"gameName": "Winter Setting",
+					"label": "Set in winter",
+					"description": "Set in winter.",
 					"points": -5,
 					"sortOrder": 4
 				},
 				{
-					"id": "attack-s10-book-from-tiktok",
-					"gameName": "BookTok Raid",
-					"label": "book from tiktok",
-					"description": "A book you found via TikTok / BookTok.",
+					"id": "attack-s10-title-starts-with-the",
+					"gameName": "The Title Gambit",
+					"label": "Title starts with \"The\"",
+					"description": "Title starts with the word \"The\".",
 					"points": -5,
 					"sortOrder": 5
 				}
@@ -474,42 +474,42 @@
 			"goesLiveAt": "2026-11-18T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "attack-s11-time-travel",
-					"gameName": "Ripple in Time",
-					"label": "Book with time travel",
-					"description": "Time travel is part of the story.",
+					"id": "attack-s11-someone-dies-early",
+					"gameName": "Early Casualty",
+					"label": "Someone dies in first two chapters",
+					"description": "Someone dies in the first two chapters.",
 					"points": -15,
 					"sortOrder": 1
 				},
 				{
-					"id": "attack-s11-read-in-one-day",
-					"gameName": "Single Sitting",
-					"label": "Read in one day",
-					"description": "Finished in one day.",
+					"id": "attack-s11-set-in-prison",
+					"gameName": "Behind Bars",
+					"label": "Set in prison",
+					"description": "Set in a prison.",
 					"points": -10,
 					"sortOrder": 2
 				},
 				{
-					"id": "attack-s11-book-club-book",
-					"gameName": "Club Selection",
-					"label": "book club book",
-					"description": "A book club pick.",
+					"id": "attack-s11-grumpy-x-grumpy",
+					"gameName": "Double Grump",
+					"label": "Grumpy x grumpy",
+					"description": "Grumpy × grumpy romance.",
 					"points": -10,
 					"sortOrder": 3
 				},
 				{
-					"id": "attack-s11-set-in-winter",
-					"gameName": "Winter Setting",
-					"label": "Set in winter",
-					"description": "Set in winter.",
+					"id": "attack-s11-set-in-autumn",
+					"gameName": "Autumn Setting",
+					"label": "Set in autumn",
+					"description": "Set in autumn.",
 					"points": -5,
 					"sortOrder": 4
 				},
 				{
-					"id": "attack-s11-title-starts-the",
-					"gameName": "The Title Gambit",
-					"label": "Tittle starts on \"The\"",
-					"description": "Title starts with the word \"The\".",
+					"id": "attack-s11-cliffhanger-ending",
+					"gameName": "Cliffhanger Strike",
+					"label": "Cliffhanger ending",
+					"description": "Ends on a cliffhanger.",
 					"points": -5,
 					"sortOrder": 5
 				}
@@ -520,53 +520,7 @@
 			"goesLiveAt": "2026-12-02T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "attack-s12-death-first-two-chapters",
-					"gameName": "Early Casualty",
-					"label": "Someone dies in first two chapter 2",
-					"description": "Someone dies in the first two chapters.",
-					"points": -15,
-					"sortOrder": 1
-				},
-				{
-					"id": "attack-s12-set-in-prison",
-					"gameName": "Behind Bars",
-					"label": "Set in prison",
-					"description": "Set in a prison.",
-					"points": -10,
-					"sortOrder": 2
-				},
-				{
-					"id": "attack-s12-grumpy-x-grumpy",
-					"gameName": "Double Grump",
-					"label": "grumpy x grumpy",
-					"description": "Grumpy × grumpy romance.",
-					"points": -10,
-					"sortOrder": 3
-				},
-				{
-					"id": "attack-s12-set-in-autumn",
-					"gameName": "Autumn Setting",
-					"label": "Set in autumn",
-					"description": "Set in autumn.",
-					"points": -5,
-					"sortOrder": 4
-				},
-				{
-					"id": "attack-s12-cliffhanger-ending",
-					"gameName": "Cliffhanger Strike",
-					"label": "clinffhanger ending",
-					"description": "Ends on a cliffhanger.",
-					"points": -5,
-					"sortOrder": 5
-				}
-			]
-		},
-		{
-			"set": 13,
-			"goesLiveAt": "2026-12-16T00:00:00.000Z",
-			"prompts": [
-				{
-					"id": "attack-s13-matches-your-outfit",
+					"id": "attack-s12-matches-your-outfit",
 					"gameName": "Fashion Match",
 					"label": "Book that matches your outfit",
 					"description": "Cover or vibe matches what you're wearing.",
@@ -574,15 +528,15 @@
 					"sortOrder": 1
 				},
 				{
-					"id": "attack-s13-female-villain",
+					"id": "attack-s12-female-villain",
 					"gameName": "Queen of Knives",
-					"label": "Female villian",
+					"label": "Female villain",
 					"description": "A female villain.",
 					"points": -10,
 					"sortOrder": 2
 				},
 				{
-					"id": "attack-s13-set-in-spring",
+					"id": "attack-s12-set-in-spring",
 					"gameName": "Spring Setting",
 					"label": "Set in spring",
 					"description": "Set in spring.",
@@ -590,17 +544,17 @@
 					"sortOrder": 3
 				},
 				{
-					"id": "attack-s13-building-on-cover",
+					"id": "attack-s12-building-on-the-cover",
 					"gameName": "Architecture on Cover",
-					"label": "building on the cover",
+					"label": "Building on the cover",
 					"description": "A building appears on the cover.",
 					"points": -5,
 					"sortOrder": 4
 				},
 				{
-					"id": "attack-s13-rich-people-drama",
+					"id": "attack-s12-rich-people-drama",
 					"gameName": "Elite Drama",
-					"label": "rich people drama",
+					"label": "Rich people drama",
 					"description": "Rich-people drama.",
 					"points": -5,
 					"sortOrder": 5

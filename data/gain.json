@@ -6,7 +6,7 @@
 		"firstSetLiveAt": "2026-07-01T00:00:00.000Z",
 		"weeksBetweenSets": 2,
 		"daysBetweenSets": 14,
-		"note": "Set 1 goes live on readathon start. Sets 2–13 unlock exactly 14 days apart — no more, no less."
+		"note": "Set 1 goes live on readathon start. Sets 2–12 unlock exactly 14 days apart — no more, no less."
 	},
 	"sets": [
 		{
@@ -24,8 +24,8 @@
 				{
 					"id": "gain-s01-werewolf-mc",
 					"gameName": "Run With the Pack",
-					"label": "Werewolf mc",
-					"description": "A book featuring werewolf mc.",
+					"label": "Werewolf MC",
+					"description": "The main character is a werewolf.",
 					"points": 10,
 					"sortOrder": 2
 				},
@@ -48,8 +48,8 @@
 				{
 					"id": "gain-s01-magical-bond-between-mc-and-a-creature",
 					"gameName": "Bind With a Beast",
-					"label": "Magical bond between Mc and a creature",
-					"description": "A book featuring magical bond between mc and a creature.",
+					"label": "Magical bond between MC and a creature",
+					"description": "The MC has a magical bond with a creature.",
 					"points": 5,
 					"sortOrder": 5
 				}
@@ -63,7 +63,7 @@
 					"id": "gain-s02-mental-illness-rep",
 					"gameName": "Honor the Mind",
 					"label": "Mental illness rep",
-					"description": "A book with mental illness rep.",
+					"description": "Mental illness representation.",
 					"points": 15,
 					"sortOrder": 1
 				},
@@ -76,18 +76,18 @@
 					"sortOrder": 2
 				},
 				{
-					"id": "gain-s02-talking-animals",
-					"gameName": "Hear the Wild Speak",
-					"label": "Talking Animals",
-					"description": "A book featuring talking animals.",
+					"id": "gain-s02-new-author",
+					"gameName": "Discover New Talent",
+					"label": "New author",
+					"description": "A book by a new-to-you author.",
 					"points": 10,
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s02-grumpy-x-sunshine",
-					"gameName": "Balance Light and Shadow",
-					"label": "Grumpy x Sunshine",
-					"description": "A book featuring grumpy x sunshine.",
+					"id": "gain-s02-small-town",
+					"gameName": "Settle the Hearth",
+					"label": "Small town",
+					"description": "A book set in a small town.",
 					"points": 5,
 					"sortOrder": 4
 				},
@@ -130,18 +130,18 @@
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s03-bully-turned-nice-guy",
-					"gameName": "Redeem the Rival",
-					"label": "Bully turned nice guy",
-					"description": "A book featuring bully turned nice guy.",
+					"id": "gain-s03-grumpy-x-sunshine",
+					"gameName": "Balance Light and Shadow",
+					"label": "Grumpy x sunshine",
+					"description": "Grumpy × sunshine pairing.",
 					"points": 5,
 					"sortOrder": 4
 				},
 				{
 					"id": "gain-s03-golden-retriever-mc",
 					"gameName": "Lead With Sunshine",
-					"label": "Golden retriever mc",
-					"description": "A book featuring golden retriever mc.",
+					"label": "Golden retriever MC",
+					"description": "A golden-retriever MC (sweet / upbeat / loyal).",
 					"points": 5,
 					"sortOrder": 5
 				}
@@ -198,42 +198,42 @@
 			"goesLiveAt": "2026-08-26T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "gain-s05-first-love",
-					"gameName": "Remember First Love",
-					"label": "First love",
-					"description": "A book featuring first love.",
+					"id": "gain-s05-chosen-one",
+					"gameName": "Fulfill the Prophecy",
+					"label": "Chosen one",
+					"description": "Chosen-one trope.",
 					"points": 15,
 					"sortOrder": 1
 				},
 				{
-					"id": "gain-s05-new-author",
-					"gameName": "Discover New Talent",
-					"label": "New author",
-					"description": "A book by a new-to-you author.",
+					"id": "gain-s05-one-night-stand",
+					"gameName": "One Night Only",
+					"label": "One night stand",
+					"description": "One-night stand trope.",
 					"points": 10,
 					"sortOrder": 2
 				},
 				{
-					"id": "gain-s05-small-town",
-					"gameName": "Settle the Hearth",
-					"label": "Small Town",
-					"description": "A book featuring small town.",
-					"points": 5,
+					"id": "gain-s05-magic-animal",
+					"gameName": "Befriend a Familiar",
+					"label": "Magic animal",
+					"description": "A magical animal or familiar.",
+					"points": 10,
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s05-book-with-a-map",
-					"gameName": "Chart the Realm",
-					"label": "Book with a map",
-					"description": "A book with a map.",
+					"id": "gain-s05-slow-burn",
+					"gameName": "Let the Flame Grow",
+					"label": "Slow burn",
+					"description": "Slow-burn romance.",
 					"points": 5,
 					"sortOrder": 4
 				},
 				{
-					"id": "gain-s05-forced-proximity",
-					"gameName": "Share Close Quarters",
-					"label": "Forced Proximity",
-					"description": "A book featuring forced proximity.",
+					"id": "gain-s05-forbidden-love",
+					"gameName": "Break the Taboo",
+					"label": "Forbidden love",
+					"description": "Forbidden love trope.",
 					"points": 5,
 					"sortOrder": 5
 				}
@@ -244,42 +244,42 @@
 			"goesLiveAt": "2026-09-09T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "gain-s06-chosen-one",
-					"gameName": "Fulfill the Prophecy",
-					"label": "Chosen one",
-					"description": "A book featuring chosen one.",
+					"id": "gain-s06-witch-mc",
+					"gameName": "Master the Craft",
+					"label": "Witch MC",
+					"description": "The main character is a witch.",
 					"points": 15,
 					"sortOrder": 1
 				},
 				{
-					"id": "gain-s06-one-night-stand",
-					"gameName": "One Night Only",
-					"label": "One night stand",
-					"description": "A book featuring one night stand.",
+					"id": "gain-s06-book-that-made-you-cry",
+					"gameName": "Feel the Feels",
+					"label": "Book that made you cry",
+					"description": "A book that made you cry.",
 					"points": 10,
 					"sortOrder": 2
 				},
 				{
-					"id": "gain-s06-magic-animal",
-					"gameName": "Befriend a Familiar",
-					"label": "Magic animal",
-					"description": "A book featuring magic animal.",
-					"points": 10,
+					"id": "gain-s06-fae-mc",
+					"gameName": "Dance With the Fae",
+					"label": "Fae MC",
+					"description": "The main character is fae.",
+					"points": 5,
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s06-slow-burn",
-					"gameName": "Let the Flame Grow",
-					"label": "Slow burn",
-					"description": "A book featuring slow burn.",
+					"id": "gain-s06-god-blessed",
+					"gameName": "Receive Divine Favor",
+					"label": "God-blessed",
+					"description": "The MC is god-blessed / divinely favored.",
 					"points": 5,
 					"sortOrder": 4
 				},
 				{
-					"id": "gain-s06-forbidden-love",
-					"gameName": "Break the Taboo",
-					"label": "Forbidden love",
-					"description": "A book featuring forbidden love.",
+					"id": "gain-s06-book-with-a-map",
+					"gameName": "Chart the Realm",
+					"label": "Book with a map",
+					"description": "The book includes a map.",
 					"points": 5,
 					"sortOrder": 5
 				}
@@ -290,42 +290,42 @@
 			"goesLiveAt": "2026-09-23T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "gain-s07-witch-mc",
-					"gameName": "Master the Craft",
-					"label": "Witch mc",
-					"description": "A book featuring witch mc.",
+					"id": "gain-s07-mc-is-a-pirate",
+					"gameName": "Sail the High Seas",
+					"label": "MC is a pirate",
+					"description": "The main character is a pirate.",
 					"points": 15,
 					"sortOrder": 1
 				},
 				{
-					"id": "gain-s07-book-that-made-you-cry",
-					"gameName": "Feel the Feels",
-					"label": "Book that made you cry",
-					"description": "A book that made you cry.",
+					"id": "gain-s07-he-falls-first",
+					"gameName": "Fall First",
+					"label": "He falls first",
+					"description": "\"He falls first\" romance trope.",
 					"points": 10,
 					"sortOrder": 2
 				},
 				{
-					"id": "gain-s07-fae-mc",
-					"gameName": "Dance With the Fae",
-					"label": "Fae mc",
-					"description": "A book featuring fae mc.",
-					"points": 5,
+					"id": "gain-s07-shapeshifter-mc-has-a-different-form",
+					"gameName": "Shift Your Shape",
+					"label": "Shapeshifter / MC has a different form",
+					"description": "The MC is a shapeshifter or has another form.",
+					"points": 10,
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s07-god-blessed",
-					"gameName": "Receive Divine Favor",
-					"label": "God blessed",
-					"description": "A book featuring god blessed.",
+					"id": "gain-s07-age-gap",
+					"gameName": "Bridge the Years",
+					"label": "Age gap",
+					"description": "Age-gap romance.",
 					"points": 5,
 					"sortOrder": 4
 				},
 				{
-					"id": "gain-s07-hockey-romance",
-					"gameName": "Hit the Ice",
-					"label": "Hockey romance",
-					"description": "A book featuring hockey romance.",
+					"id": "gain-s07-forced-proximity",
+					"gameName": "Share Close Quarters",
+					"label": "Forced proximity",
+					"description": "Forced-proximity trope.",
 					"points": 5,
 					"sortOrder": 5
 				}
@@ -336,42 +336,42 @@
 			"goesLiveAt": "2026-10-07T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "gain-s08-mc-is-a-pirate",
-					"gameName": "Sail the High Seas",
-					"label": "MC is a pirate",
-					"description": "A mC is a pirate.",
+					"id": "gain-s08-mc-is-over-30-years-old",
+					"gameName": "Veteran Adventurer",
+					"label": "MC is over 30 years old",
+					"description": "The main character is over 30 years old.",
 					"points": 15,
 					"sortOrder": 1
 				},
 				{
-					"id": "gain-s08-he-falls-first",
-					"gameName": "Fall First",
-					"label": "He falls first",
-					"description": "A book featuring he falls first.",
+					"id": "gain-s08-childhood-friends-to-lovers",
+					"gameName": "Rekindle Old Flames",
+					"label": "Childhood friends to lovers",
+					"description": "Childhood friends-to-lovers romance.",
 					"points": 10,
 					"sortOrder": 2
 				},
 				{
-					"id": "gain-s08-shapeshifter-mc-has-a-different-form",
-					"gameName": "Shift Your Shape",
-					"label": "Shapeshifter / MC has a different form",
-					"description": "A book featuring shapeshifter / mc has a different form.",
-					"points": 10,
+					"id": "gain-s08-royal-mc",
+					"gameName": "Wear the Crown",
+					"label": "Royal MC",
+					"description": "The main character is royal.",
+					"points": 5,
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s08-age-gap",
-					"gameName": "Bridge the Years",
-					"label": "Age gap",
-					"description": "A book featuring age gap.",
+					"id": "gain-s08-one-word-title",
+					"gameName": "Speak in One Word",
+					"label": "One-word title",
+					"description": "Title is one word.",
 					"points": 5,
 					"sortOrder": 4
 				},
 				{
-					"id": "gain-s08-doctor-firefighter-policeman",
-					"gameName": "Serve and Protect",
-					"label": "Doctor / firefighter / policeman",
-					"description": "A book featuring doctor / firefighter / policeman.",
+					"id": "gain-s08-book-with-short-chapters",
+					"gameName": "Quick Chapter Runs",
+					"label": "Book with short chapters",
+					"description": "Short chapters.",
 					"points": 5,
 					"sortOrder": 5
 				}
@@ -382,42 +382,42 @@
 			"goesLiveAt": "2026-10-21T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "gain-s09-mc-is-over-30-years-old",
-					"gameName": "Veteran Adventurer",
-					"label": "MC is over 30 years old",
-					"description": "A mC is over 30 years old.",
+					"id": "gain-s09-book-you-have-been-avoiding-for-over-2-years",
+					"gameName": "Face the Dreaded Tome",
+					"label": "Book you've been avoiding for over 2 years",
+					"description": "A book you've been avoiding for over two years.",
 					"points": 15,
 					"sortOrder": 1
 				},
 				{
-					"id": "gain-s09-childhood-friends-to-lovers",
-					"gameName": "Rekindle Old Flames",
-					"label": "Childhood friends to lovers",
-					"description": "A book featuring childhood friends to lovers.",
+					"id": "gain-s09-buddy-read",
+					"gameName": "Quest With a Friend",
+					"label": "Buddy read",
+					"description": "A book you buddy-read with someone.",
 					"points": 10,
 					"sortOrder": 2
 				},
 				{
-					"id": "gain-s09-royal-mc",
-					"gameName": "Wear the Crown",
-					"label": "Royal mc",
-					"description": "A book featuring royal mc.",
-					"points": 5,
+					"id": "gain-s09-standalone",
+					"gameName": "Complete the Arc",
+					"label": "Standalone",
+					"description": "A standalone book (not part of a series).",
+					"points": 10,
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s09-one-word-title",
-					"gameName": "Speak in One Word",
-					"label": "One word title",
-					"description": "A book with a one-word title.",
+					"id": "gain-s09-book-with-a-rebellion",
+					"gameName": "Join the Uprising",
+					"label": "Book with a rebellion",
+					"description": "A book with a rebellion.",
 					"points": 5,
 					"sortOrder": 4
 				},
 				{
-					"id": "gain-s09-book-with-short-chapters",
-					"gameName": "Quick Chapter Runs",
-					"label": "Book with short chapters",
-					"description": "A book with short chapters.",
+					"id": "gain-s09-set-in-summer",
+					"gameName": "Chase the Summer Sun",
+					"label": "Set in summer",
+					"description": "Set in summer.",
 					"points": 5,
 					"sortOrder": 5
 				}
@@ -428,42 +428,42 @@
 			"goesLiveAt": "2026-11-04T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "gain-s10-book-you-have-been-avoiding-for-over-2-years",
-					"gameName": "Face the Dreaded Tome",
-					"label": "Book you have been avoiding for over 2 years",
-					"description": "A book you have been avoiding for over 2 years.",
+					"id": "gain-s10-why-choose",
+					"gameName": "Choose Your Champion",
+					"label": "Why choose",
+					"description": "A why-choose / reverse-harem romance.",
 					"points": 15,
 					"sortOrder": 1
 				},
 				{
-					"id": "gain-s10-buddy-read",
-					"gameName": "Quest With a Friend",
-					"label": "Buddy read",
-					"description": "A book you buddy-read with someone.",
+					"id": "gain-s10-out-of-your-comfort-zone",
+					"gameName": "Leave Your Lane",
+					"label": "Out of your comfort zone",
+					"description": "Out of your comfort zone.",
 					"points": 10,
 					"sortOrder": 2
 				},
 				{
-					"id": "gain-s10-standalone",
-					"gameName": "Complete the Arc",
-					"label": "Standalone",
-					"description": "A standalone book (not part of a series).",
+					"id": "gain-s10-set-at-sea",
+					"gameName": "Brave Open Waters",
+					"label": "Set at sea",
+					"description": "Set at sea.",
 					"points": 10,
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s10-book-with-a-rebellion",
-					"gameName": "Join the Uprising",
-					"label": "Book with a rebellion",
-					"description": "A book with a rebellion.",
+					"id": "gain-s10-has-a-movie-tv-show-adaptation",
+					"gameName": "See the Adaptation",
+					"label": "Has a movie / TV show adaptation",
+					"description": "Has a movie or TV show adaptation.",
 					"points": 5,
 					"sortOrder": 4
 				},
 				{
-					"id": "gain-s10-set-in-summer",
-					"gameName": "Chase the Summer Sun",
-					"label": "Set in summer",
-					"description": "A set in summer.",
+					"id": "gain-s10-one-horse",
+					"gameName": "Ride the Lone Steed",
+					"label": "One horse",
+					"description": "One-horse trope.",
 					"points": 5,
 					"sortOrder": 5
 				}
@@ -474,42 +474,42 @@
 			"goesLiveAt": "2026-11-18T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "gain-s11-why-choose",
-					"gameName": "Choose Your Champion",
-					"label": "Why choose",
-					"description": "A why-choose / reverse-harem romance.",
+					"id": "gain-s11-one-star",
+					"gameName": "Risk the One Star",
+					"label": "One star",
+					"description": "A book you rated one star (or would).",
 					"points": 15,
 					"sortOrder": 1
 				},
 				{
-					"id": "gain-s11-out-of-your-comfort-zone",
-					"gameName": "Leave Your Lane",
-					"label": "Out of your comfort zone",
-					"description": "A book featuring out of your comfort zone.",
+					"id": "gain-s11-number-in-a-title",
+					"gameName": "Count the Title",
+					"label": "Number in a title",
+					"description": "A number appears in the title.",
 					"points": 10,
 					"sortOrder": 2
 				},
 				{
-					"id": "gain-s11-set-at-sea",
-					"gameName": "Brave Open Waters",
-					"label": "Set at sea",
-					"description": "A set at sea.",
+					"id": "gain-s11-lovers-to-enemies",
+					"gameName": "Break the Bond",
+					"label": "Lovers to enemies",
+					"description": "Lovers-to-enemies trope.",
 					"points": 10,
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s11-has-a-movie-tv-show-adaptation",
-					"gameName": "See the Adaptation",
-					"label": "Has a movie / TV show adaptation",
-					"description": "A book featuring has a movie / tv show adaptation.",
+					"id": "gain-s11-urban-fantasy",
+					"gameName": "Walk the City Veil",
+					"label": "Urban fantasy",
+					"description": "Urban fantasy.",
 					"points": 5,
 					"sortOrder": 4
 				},
 				{
-					"id": "gain-s11-one-horse",
-					"gameName": "Ride the Lone Steed",
-					"label": "One horse",
-					"description": "A book featuring one horse.",
+					"id": "gain-s11-finished-at-night-evening",
+					"gameName": "Close the Day",
+					"label": "Finished at night / evening",
+					"description": "A book you finished at night or in the evening.",
 					"points": 5,
 					"sortOrder": 5
 				}
@@ -520,53 +520,7 @@
 			"goesLiveAt": "2026-12-02T00:00:00.000Z",
 			"prompts": [
 				{
-					"id": "gain-s12-one-star",
-					"gameName": "Risk the One Star",
-					"label": "One star",
-					"description": "A book you rated one star (or would).",
-					"points": 15,
-					"sortOrder": 1
-				},
-				{
-					"id": "gain-s12-number-in-a-title",
-					"gameName": "Count the Title",
-					"label": "Number in a title",
-					"description": "A book featuring number in a title.",
-					"points": 10,
-					"sortOrder": 2
-				},
-				{
-					"id": "gain-s12-lovers-to-enemies",
-					"gameName": "Break the Bond",
-					"label": "Lovers to enemies",
-					"description": "A book featuring lovers to enemies.",
-					"points": 10,
-					"sortOrder": 3
-				},
-				{
-					"id": "gain-s12-urban-fantasy",
-					"gameName": "Walk the City Veil",
-					"label": "Urban fantasy",
-					"description": "A book featuring urban fantasy.",
-					"points": 5,
-					"sortOrder": 4
-				},
-				{
-					"id": "gain-s12-finished-at-night-evening",
-					"gameName": "Close the Day",
-					"label": "Finished at night / evening",
-					"description": "A book you finished at night or in the evening.",
-					"points": 5,
-					"sortOrder": 5
-				}
-			]
-		},
-		{
-			"set": 13,
-			"goesLiveAt": "2026-12-16T00:00:00.000Z",
-			"prompts": [
-				{
-					"id": "gain-s13-book-out-of-your-comfort-zone",
+					"id": "gain-s12-book-out-of-your-comfort-zone",
 					"gameName": "Stretch Your Shelf",
 					"label": "Book out of your comfort zone",
 					"description": "A book out of your comfort zone.",
@@ -574,34 +528,34 @@
 					"sortOrder": 1
 				},
 				{
-					"id": "gain-s13-special-edition-or-sprayed-edges",
+					"id": "gain-s12-special-edition-or-sprayed-edges",
 					"gameName": "Claim the Collector's Cut",
 					"label": "Special edition or sprayed edges",
-					"description": "A book featuring special edition or sprayed edges.",
+					"description": "Special edition or sprayed edges.",
 					"points": 10,
 					"sortOrder": 2
 				},
 				{
-					"id": "gain-s13-billionaire-romance",
+					"id": "gain-s12-billionaire-romance",
 					"gameName": "Count the Gold",
 					"label": "Billionaire romance",
-					"description": "A book featuring billionaire romance.",
+					"description": "Billionaire romance.",
 					"points": 5,
 					"sortOrder": 3
 				},
 				{
-					"id": "gain-s13-dancing-scenes",
+					"id": "gain-s12-dancing-scenes",
 					"gameName": "Take the Floor",
 					"label": "Dancing scenes",
-					"description": "A book featuring dancing scenes.",
+					"description": "Dancing scenes.",
 					"points": 5,
 					"sortOrder": 4
 				},
 				{
-					"id": "gain-s13-accidental-pregnancy",
+					"id": "gain-s12-accidental-pregnancy",
 					"gameName": "Unexpected Turns",
 					"label": "Accidental pregnancy",
-					"description": "A book featuring accidental pregnancy.",
+					"description": "Accidental pregnancy trope.",
 					"points": 5,
 					"sortOrder": 5
 				}
