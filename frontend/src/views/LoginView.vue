@@ -5,7 +5,7 @@ import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
 
 const { register, login, googleLoginUrl } = useAuth()
-const { config, loadConfig } = useConfig()
+const { config, loadConfig, configLoading } = useConfig()
 const route = useRoute()
 
 const mode = ref<'register' | 'login'>('register')
@@ -47,7 +47,11 @@ async function submit() {
 
 <template>
   <main class="page login-page">
-    <div v-if="config" class="login-card card">
+    <div v-if="!config && configLoading" class="page-state">
+      <div class="page-spinner" role="status" aria-label="Loading" />
+      <p>Loading…</p>
+    </div>
+    <div v-else-if="config" class="login-card card">
       <div class="login-header">
         <span class="login-icon">⚔</span>
         <h1>{{ config.copy.loginTitle }}</h1>

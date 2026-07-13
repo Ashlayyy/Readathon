@@ -4,9 +4,11 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { api } from './lib/api';
 import { useAuth } from './composables/useAuth';
 import { useConfig } from './composables/useConfig';
+import { useAdminCopy } from './composables/useAdminCopy';
 
 const { user, logout } = useAuth();
-const { config } = useConfig();
+const { config, configLoading, configError, loadConfig } = useConfig();
+const { admin } = useAdminCopy();
 const route = useRoute();
 const router = useRouter();
 const unreadQuestions = ref(0);
@@ -145,7 +147,7 @@ function closeMenu() {
 							class="btn btn-secondary btn-sm action-btn"
 							@click="closeMenu"
 						>
-							{{ config?.copy.adminNav ?? 'Admin' }}
+							{{ (admin?.nav as string) ?? 'Admin' }}
 							<span v-if="unreadQuestions > 0" class="inbox-badge">{{
 								unreadQuestions
 							}}</span>
@@ -195,13 +197,27 @@ function closeMenu() {
 
 		<div class="app-content">
 			<div
-				v-if="user?.status === 'pending'"
+				v-if="user?.status === 'pending' && config"
 				class="alert alert-warning status-banner"
 			>
-				<strong>Awaiting assignment.</strong> {{ config?.copy.pendingBanner }}
+				<strong>Awaiting assignment.</strong> {{ config.copy.pendingBanner }}
 			</div>
 
-			<RouterView />
+			<div v-if="configLoading && !config" class="page-state">
+				<div class="page-spinner" role="status" aria-label="Loading" />
+				<p>Loading event…</p>
+			</div>
+
+			<div v-else-if="configError && !config" class="page-state">
+				<div class="alert alert-error">
+					{{ configError }}
+				</div>
+				<button type="button" class="btn btn-primary" @click="loadConfig(true)">
+					Try again
+				</button>
+			</div>
+
+			<RouterView v-else />
 		</div>
 
 		<footer v-if="config" class="site-footer">

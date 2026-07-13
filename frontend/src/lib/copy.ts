@@ -21,6 +21,8 @@ export function buildCopyVars(config: RealmathonConfig | null): CopyVars {
     negativeCount,
     maxPrompts,
     schedule: config.event.month,
+    scheduleStart: String(config.schedule.readathonStart ?? 'July 1'),
+    scheduleEnd: String(config.schedule.readathonEnd ?? 'December 31'),
   }
 }
 

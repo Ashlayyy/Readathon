@@ -1,35 +1,114 @@
 # Readathon 2026 — The Crucible
 
-Vue frontend + Hono API + MongoDB for the Readathon 2026 community readathon.
+A team-based reading competition for the Book Baddies community. Readers join realms, submit finished books, stack prompts and bonuses for XP, sabotage rival teams, and climb weekly standings.
 
-Event name, copy, teams, and prompts live in `data/realmathon.json` — the site reads the title from there at runtime.
+Built with **Vue 3 + Vite** (frontend), **Hono + MongoDB** (API), and a single config file that drives almost all site copy, teams, prompts, FAQ, branding, and admin UI text.
 
-## Structure
+---
+
+## Features
+
+- **Sign up & magic-link login** (email via Resend, optional Google OAuth)
+- **Team assignment** — admins sort readers into realms (Sun & Moon)
+- **Book submission wizard** — prompts, bonuses, add XP or sabotage
+- **Standings** — weekly publish with SVG leaderboard, optional Discord webhook
+- **FAQ inbox** — readers ask questions; admins reply by email
+- **Admin panel** — users, teams, submissions, prompts, standings, rosters
+- **Config-driven UI** — event name, copy, colors, and admin labels live in `data/realmathon.json`
+
+---
+
+## Project structure
 
 ```
 Readathon/
-├── data/realmathon.json   # Event content (teams, prompts, FAQ, branding)
-├── ecosystem.config.cjs   # PM2 process config
-├── frontend/              # Vue 3 + Vite + TypeScript
-├── server/                # Hono + Mongoose + MongoDB
-└── package.json
+├── data/
+│   └── realmathon.json      # Event content, copy, teams, prompts, FAQ, branding, admin UI
+├── frontend/                # Vue 3 + Vite + TypeScript SPA
+├── server/                  # Hono API + Mongoose + MongoDB
+├── ecosystem.config.cjs       # PM2 process config
+├── package.json             # Root scripts (dev, pm2, test)
+└── .nvmrc                   # Node 22.18+
 ```
+
+---
 
 ## Requirements
 
-- Node.js **22.18+** or **24.12+** (see `.nvmrc`)
-- **MongoDB Atlas** (or any MongoDB URI)
+- **Node.js 22.18+** or **24.12+** (`nvm use`)
+- **MongoDB** (Atlas recommended)
+- **Resend** API key for production email (magic links)
+- Optional: **Google OAuth** credentials, **Discord** webhook for standings posts
 
-## Setup
+---
+
+## Quick start (development)
 
 ```bash
+nvm use
 npm install
 npm install --prefix frontend
 npm install --prefix server
+
 cp server/.env.example server/.env
+# Edit server/.env — at minimum MONGODB_URI and SESSION_SECRET
+
+npm run dev
 ```
 
-Edit `server/.env` — at minimum:
+| Service  | URL |
+|----------|-----|
+| Frontend | http://localhost:5173 |
+| API      | http://localhost:3001 |
+
+The Vite dev server proxies `/api` to the backend. Leave `VITE_API_URL` unset locally.
+
+Without `RESEND_API_KEY`, sign-in links print to the server console instead of emailing.
+
+---
+
+## Configuration (`data/realmathon.json`)
+
+This file is the **single source of truth** for static event content. The server loads it at startup and exposes it via `GET /api/config`. The frontend applies branding colors dynamically from `branding.theme`.
+
+### What's in the file
+
+| Section | Purpose |
+|---------|---------|
+| `event` | Name, subtitle, tagline, lore, schedule month |
+| `copy` | All user-facing UI strings (login, nav, submit wizard, profile, pages) |
+| `copy.admin` | **All admin panel labels, buttons, messages, and confirm dialogs** |
+| `copy.nav` | Main navigation labels |
+| `schedule` | Readathon start/end dates (used in FAQ copy) |
+| `branding.theme` | CSS theme colors applied at runtime |
+| `teams` | Realm definitions, colors, bonus prompts |
+| `prompts` | Global positive/negative prompts (fallback if DB empty) |
+| `globalBonuses` | Competition/trials bonus (+10 XP) |
+| `pageCountBonuses` | Page-count XP tiers |
+| `howItWorks` | Step-by-step guide |
+| `faq` | Questions and answers |
+| `scoringRules` | Game rules (max prompts, averaging, etc.) |
+
+### Editing copy
+
+Most strings support `{placeholders}` like `{teamCount}`, `{maxPrompts}`, `{eventName}`. Admin messages use `{count}`, `{weekLabel}`, `{title}`, etc.
+
+After editing the JSON on a **running production server**, reload config:
+
+- Admin → call reload endpoint, or
+- Restart PM2: `npm run pm2:restart`
+
+### Prompts: JSON vs database
+
+- **JSON** — default prompts, team shells, FAQ, all copy
+- **Database** — admins can import JSON prompts and edit them live (Admin → Prompts → Import from config file)
+- If the DB has prompts, those take precedence over JSON for the public site
+
+---
+
+## Environment variables
+
+### Server (`server/.env`)
 
 ```env
 MONGODB_URI=mongodb+srv://...
@@ -37,71 +116,48 @@ SESSION_SECRET=long-random-secret
 FRONTEND_URL=https://your-domain.com
 API_URL=https://api.your-domain.com
 ADMIN_EMAILS=you@email.com
-RESEND_API_KEY=...
+RESEND_API_KEY=re_...
 EMAIL_FROM=Readathon <you@yourdomain.com>
+
+# Optional
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=https://api.your-domain.com/api/auth/google/callback
+PORT=3001
 ```
 
-For production, copy `frontend/.env.production.example` to `frontend/.env.production` and set the same API host:
+### Frontend production (`frontend/.env.production`)
 
 ```env
 VITE_API_URL=https://api.your-domain.com
 ```
 
-Leave `VITE_API_URL` unset in local dev — the Vite dev server proxies `/api` to the backend.
+---
 
-## Development
+## Production deployment
 
-```bash
-npm run dev
-```
+Frontend and API run on **separate URLs**:
 
-- Frontend: http://localhost:5173 (proxies `/api` to the server)
-- API: http://localhost:3001
-
-Or with PM2 (two processes, hot reload):
-
-```bash
-npm run pm2:start:dev
-```
-
-## Production (Linux server + nginx)
-
-The frontend and API are on **separate public URLs**:
-
-- **Frontend:** `https://your-domain.com` — static Vue app
-- **API:** `https://api.your-domain.com` — Hono on port `3001` (PM2)
+- `https://your-domain.com` — static Vue app (`frontend/dist`)
+- `https://api.your-domain.com` — Hono on port 3001 behind nginx
 
 ```bash
 cp frontend/.env.production.example frontend/.env.production
-# edit VITE_API_URL and server/.env (FRONTEND_URL, API_URL)
+# Set VITE_API_URL and server/.env (FRONTEND_URL, API_URL)
+
 npm run pm2:start
 ```
 
-What `pm2:start` does:
+`pm2:start` builds the frontend (baking in `VITE_API_URL`) and starts the API with `NODE_ENV=production`.
 
-1. `npm run build --prefix frontend` — bakes `VITE_API_URL` into the client bundle
-2. Starts the API with `NODE_ENV=production` on port `3001`
+### nginx examples
 
-| Variable | Where | Production value |
-|----------|-------|------------------|
-| `VITE_API_URL` | `frontend/.env.production` | `https://api.your-domain.com` |
-| `FRONTEND_URL` | `server/.env` | `https://your-domain.com` |
-| `API_URL` | `server/.env` | `https://api.your-domain.com` |
-| `GOOGLE_REDIRECT_URI` | `server/.env` | `https://api.your-domain.com/api/auth/google/callback` |
-| `NODE_ENV` | PM2 | `production` |
-| `PORT` | `server/.env` / PM2 | `3001` (localhost only) |
-| `MONGODB_URI` | `server/.env` | Atlas connection string |
-| `SESSION_SECRET` | `server/.env` | Strong random string |
-
-### Example nginx
-
-**Frontend** (`your-domain.com`) — serve `frontend/dist`:
+**Frontend** — serve `frontend/dist` with SPA fallback:
 
 ```nginx
 server {
     listen 443 ssl http2;
     server_name your-domain.com;
-
     root /path/to/Readathon/frontend/dist;
     index index.html;
 
@@ -111,7 +167,7 @@ server {
 }
 ```
 
-**API** (`api.your-domain.com`) — proxy to PM2:
+**API** — proxy to PM2:
 
 ```nginx
 server {
@@ -129,45 +185,58 @@ server {
 }
 ```
 
-`FRONTEND_URL` must match the browser origin so CORS and auth cookies work across subdomains.
+`FRONTEND_URL` must match the browser origin for CORS and session cookies.
 
-After code changes:
+After code or config changes:
 
 ```bash
 npm run build --prefix frontend && npm run pm2:restart
 ```
 
-Keep PM2 running after reboot:
+Keep PM2 alive across reboots:
 
 ```bash
 pm2 startup systemd -u $USER --hp $HOME
 pm2 save
 ```
 
-Logs: `logs/` in the project root.
-
-## Auth
-
-- **Email signup:** name + email → account created in the pending pool → **magic link emailed** (no session until you click it)
-- **Email login:** magic link via Resend (15 min, single-use)
-- **Google:** optional OAuth
-- **Admins:** `ADMIN_EMAILS` in `.env`
-- **Admin can add users** manually without sending email (Users tab)
-
-Without `RESEND_API_KEY`, sign-in links print to the server console (dev only).
-
-### Discord standings webhook (optional)
-
-In **Admin → Standings**, set a Discord webhook URL to post the standings SVG (same image as the site) with the week number when standings are published. Leave it blank to disable, or use **Remove** to clear it later.
+---
 
 ## User flow
 
-1. Sign up
-2. Wait in the unassigned pool (2 teams: Sun & Moon)
-3. Admin assigns teams
-4. Submit books
-5. View reads on **Profile**
-6. Admin publishes standings
+1. Reader signs up → waits in the unassigned pool
+2. Admin assigns teams (random or manual)
+3. Reader submits books via the wizard
+4. Admin publishes weekly standings
+5. Readers track submissions on **Profile**
+
+---
+
+## Admin panel
+
+Access via **Admin** in the nav (users listed in `ADMIN_EMAILS`).
+
+| Tab | What it does |
+|-----|----------------|
+| **Inbox** | FAQ questions from readers — reply, mark read, dismiss |
+| **Teams** | Random assign, roster visibility toggle, quick stats |
+| **Standings** | Publish/unpublish weeks, Discord webhook, download SVG |
+| **Users** | View participants, assign teams, add users manually |
+| **Submissions** | Edit or delete reader submissions |
+| **Prompts** | Manage live/scheduled/draft prompts, import from JSON |
+
+All admin UI text is in `data/realmathon.json` under `copy.admin`.
+
+---
+
+## Auth
+
+- **Signup** — name + email → magic link emailed (15 min, single-use)
+- **Login** — same magic-link flow
+- **Google** — optional OAuth (requires server env vars)
+- **Admins** — emails in `ADMIN_EMAILS`
+
+---
 
 ## Tests
 
@@ -175,8 +244,16 @@ In **Admin → Standings**, set a Discord webhook URL to post the standings SVG 
 npm test
 ```
 
-Basic scoring tests live in `server/src/services/scoring.test.ts`.
+Scoring logic tests live in `server/src/services/scoring.test.ts`.
 
-## MongoDB Atlas backups
+---
 
-Atlas **M0 free tier** includes daily snapshots (limited retention). Paid tiers get continuous backup and point-in-time restore. Enable **Cloud Backup** in your Atlas cluster settings — worth doing before real participant data accumulates.
+## MongoDB backups
+
+Enable **Cloud Backup** in Atlas before real participant data accumulates. M0 free tier includes limited daily snapshots; paid tiers offer point-in-time restore.
+
+---
+
+## License
+
+Private community project for Book Baddies.

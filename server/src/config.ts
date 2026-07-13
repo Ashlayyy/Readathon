@@ -19,7 +19,6 @@ export type Team = {
   color: string
   accent: string
   icon: string
-  leads: string[]
   bonusPrompts: { id: string; label: string; points: number }[]
 }
 

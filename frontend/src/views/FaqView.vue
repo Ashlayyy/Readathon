@@ -57,7 +57,7 @@ async function submitQuestion() {
 	<main v-if="config" class="page">
 		<header class="page-header">
 			<div>
-				<h1 class="page-title">FAQ</h1>
+				<h1 class="page-title">{{ config.copy.faqPageTitle }}</h1>
 				<p class="page-lead">{{ config.copy.faqPageLead }}</p>
 			</div>
 		</header>

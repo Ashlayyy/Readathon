@@ -16,9 +16,11 @@ import StandingsPanel from '../components/StandingsPanel.vue'
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
+import { useAdminCopy } from '../composables/useAdminCopy'
 
 const { config, loadConfig } = useConfig()
 const { t } = useCopy()
+const { admin, section, msg, confirmMsg } = useAdminCopy()
 const users = ref<AdminUser[]>([])
 const pending = ref(0)
 const showTeamRosters = ref(false)
@@ -51,19 +53,28 @@ const editDraft = ref({
 const modalDraft = ref('')
 const inboxFilter = ref<'unread' | 'read' | 'all'>('unread')
 const message = ref('')
+const messageIsError = ref(false)
 const loading = ref('')
 const activeTab = ref<'inbox' | 'teams' | 'standings' | 'users' | 'submissions' | 'prompts'>('inbox')
 
 onMounted(async () => {
   await loadConfig()
   showTeamRosters.value = config.value?.site?.showTeamRosters ?? false
-  await Promise.all([loadAll(), loadAdminSettings()])
+  try {
+    await Promise.all([loadAll(), loadAdminSettings()])
+  } catch (e) {
+    showMessage(e instanceof Error ? e.message : msg('loadFailed'), true)
+  }
 })
 
 async function loadAdminSettings() {
-  const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings')
-  discordWebhookUrl.value = settings.discordWebhookUrl ?? ''
-  discordWebhookDraft.value = settings.discordWebhookUrl ?? ''
+  try {
+    const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings')
+    discordWebhookUrl.value = settings.discordWebhookUrl ?? ''
+    discordWebhookDraft.value = settings.discordWebhookUrl ?? ''
+  } catch (e) {
+    showMessage(e instanceof Error ? e.message : msg('settingsLoadFailed'), true)
+  }
 }
 
 watch(activeTab, (tab) => {
@@ -101,15 +112,20 @@ async function loadAll() {
   if (q.unread > 0) activeTab.value = 'inbox'
 }
 
+function showMessage(msg: string, isError = false) {
+  message.value = msg
+  messageIsError.value = isError && !!msg
+}
+
 async function assignTeams() {
   loading.value = 'assign'
-  message.value = ''
+  showMessage('')
   try {
     const result = await api<{ assigned: number }>('/admin/assign-teams', { method: 'POST' })
-    message.value = `Assigned ${result.assigned} users to teams.`
+    showMessage(msg('assignedTeams', { count: result.assigned }))
     await loadAll()
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed'
+    showMessage(e instanceof Error ? e.message : msg('assignFailed'), true)
   } finally {
     loading.value = ''
   }
@@ -117,16 +133,16 @@ async function assignTeams() {
 
 async function setUserTeam(userId: string, teamId: string) {
   loading.value = `team-${userId}`
-  message.value = ''
+  showMessage('')
   try {
     await api(`/admin/users/${userId}/team`, {
       method: 'PATCH',
       body: JSON.stringify({ teamId: teamId || null }),
     })
-    message.value = 'Team updated.'
+    showMessage(msg('teamUpdated'))
     await loadAll()
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed to update team'
+    showMessage(e instanceof Error ? e.message : msg('teamUpdateFailed'), true)
   } finally {
     loading.value = ''
   }
@@ -134,18 +150,18 @@ async function setUserTeam(userId: string, teamId: string) {
 
 async function saveRosterSetting() {
   loading.value = 'roster-setting'
-  message.value = ''
+  showMessage('')
   try {
     await api('/admin/settings', {
       method: 'PATCH',
       body: JSON.stringify({ showTeamRosters: showTeamRosters.value }),
     })
     await loadConfig(true)
-    message.value = showTeamRosters.value
-      ? 'Team rosters are now public.'
-      : 'Team rosters are hidden.'
+    showMessage(
+      showTeamRosters.value ? msg('rostersPublic') : msg('rostersHidden'),
+    )
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed to update setting'
+    showMessage(e instanceof Error ? e.message : msg('rosterSettingFailed'), true)
     showTeamRosters.value = config.value?.site?.showTeamRosters ?? false
   } finally {
     loading.value = ''
@@ -154,7 +170,7 @@ async function saveRosterSetting() {
 
 async function saveDiscordWebhook() {
   loading.value = 'discord-webhook'
-  message.value = ''
+  showMessage('')
   try {
     const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings', {
       method: 'PATCH',
@@ -162,11 +178,11 @@ async function saveDiscordWebhook() {
     })
     discordWebhookUrl.value = settings.discordWebhookUrl
     discordWebhookDraft.value = settings.discordWebhookUrl
-    message.value = settings.discordWebhookUrl
-      ? 'Discord webhook saved. Standings will post there when published.'
-      : 'Discord webhook removed.'
+    showMessage(
+      settings.discordWebhookUrl ? msg('webhookSaved') : msg('webhookRemoved'),
+    )
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed to update webhook'
+    showMessage(e instanceof Error ? e.message : msg('webhookFailed'), true)
     discordWebhookDraft.value = discordWebhookUrl.value
   } finally {
     loading.value = ''
@@ -189,7 +205,7 @@ function closeAddUser() {
 
 async function submitAddUser() {
   loading.value = 'add-user'
-  message.value = ''
+  showMessage('')
   try {
     await api('/admin/users', {
       method: 'POST',
@@ -199,30 +215,38 @@ async function submitAddUser() {
         teamId: newUser.value.teamId || null,
       }),
     })
-    message.value = 'User created (no login email sent).'
+    showMessage(msg('userCreated'))
     closeAddUser()
     await loadAll()
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed to create user'
+    showMessage(e instanceof Error ? e.message : msg('userCreateFailed'), true)
   } finally {
     loading.value = ''
   }
 }
 
 async function markQuestion(id: string, status: 'read' | 'unread') {
-  await api(`/admin/questions/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status }),
-  })
-  await loadAll()
+  try {
+    await api(`/admin/questions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    })
+    await loadAll()
+  } catch (e) {
+    showMessage(e instanceof Error ? e.message : msg('messageUpdateFailed'), true)
+  }
 }
 
 async function deleteQuestion(id: string) {
-  if (!confirm('Remove this message from the inbox?')) return
-  await api(`/admin/questions/${id}`, { method: 'DELETE' })
-  message.value = 'Message removed.'
-  if (answerModal.value?.id === id) closeAnswerModal()
-  await loadAll()
+  if (!confirm(confirmMsg('deleteQuestion'))) return
+  try {
+    await api(`/admin/questions/${id}`, { method: 'DELETE' })
+    showMessage(msg('messageRemoved'))
+    if (answerModal.value?.id === id) closeAnswerModal()
+    await loadAll()
+  } catch (e) {
+    showMessage(e instanceof Error ? e.message : msg('messageRemoveFailed'), true)
+  }
 }
 
 function openAnswerModal(q: AdminQuestion) {
@@ -239,22 +263,22 @@ async function submitModalAnswer() {
   if (!answerModal.value) return
   const answer = modalDraft.value.trim()
   if (answer.length < 2) {
-    message.value = 'Answer must be at least 2 characters.'
+    showMessage(msg('answerTooShort'), true)
     return
   }
   const id = answerModal.value.id
   loading.value = 'answer'
-  message.value = ''
+  showMessage('')
   try {
     await api(`/admin/questions/${id}/answer`, {
       method: 'POST',
       body: JSON.stringify({ answer }),
     })
-    message.value = 'Reply sent to the reader.'
+    showMessage(msg('replySent'))
     closeAnswerModal()
     await loadAll()
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed to send reply'
+    showMessage(e instanceof Error ? e.message : msg('replyFailed'), true)
   } finally {
     loading.value = ''
   }
@@ -284,7 +308,7 @@ function closeEditSubmission() {
 async function saveEditSubmission() {
   if (!editSubmission.value) return
   loading.value = `edit-sub-${editSubmission.value.id}`
-  message.value = ''
+  showMessage('')
   try {
     await api(`/admin/submissions/${editSubmission.value.id}`, {
       method: 'PATCH',
@@ -296,27 +320,27 @@ async function saveEditSubmission() {
         finishedAt: editDraft.value.finishedAt || null,
       }),
     })
-    message.value = 'Submission updated.'
+    showMessage(msg('submissionUpdated'))
     closeEditSubmission()
     await loadAll()
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed to update submission'
+    showMessage(e instanceof Error ? e.message : msg('submissionUpdateFailed'), true)
   } finally {
     loading.value = ''
   }
 }
 
 async function deleteSubmission(id: string, title: string) {
-  if (!confirm(`Delete submission "${title}"? This cannot be undone.`)) return
+  if (!confirm(confirmMsg('deleteSubmission', { title }))) return
   loading.value = `del-sub-${id}`
-  message.value = ''
+  showMessage('')
   try {
     await api(`/admin/submissions/${id}`, { method: 'DELETE' })
-    message.value = 'Submission deleted.'
+    showMessage(msg('submissionDeleted'))
     if (editSubmission.value?.id === id) closeEditSubmission()
     await loadAll()
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed to delete submission'
+    showMessage(e instanceof Error ? e.message : msg('submissionDeleteFailed'), true)
   } finally {
     loading.value = ''
   }
@@ -337,33 +361,35 @@ async function loadStandings() {
 
 async function publishThisWeek() {
   loading.value = 'publish'
-  message.value = ''
+  showMessage('')
   try {
     const result = await api<{ weekLabel: string; emailsSent?: number; discordSent?: boolean }>('/admin/standings/publish', { method: 'POST' })
-    const emailNote = result.emailsSent ? ` (${result.emailsSent} notification emails sent)` : ''
-    const discordNote = result.discordSent ? ' Discord notified.' : ''
-    message.value = `Published ${result.weekLabel} to the site!${emailNote}${discordNote}`
+    const emailNote = result.emailsSent
+      ? msg('emailNote', { count: result.emailsSent })
+      : ''
+    const discordNote = result.discordSent ? msg('discordNote') : ''
+    showMessage(msg('published', { weekLabel: result.weekLabel, emailNote, discordNote }))
     await loadStandings()
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed'
+    showMessage(e instanceof Error ? e.message : msg('publishFailed'), true)
   } finally {
     loading.value = ''
   }
 }
 
 async function unpublishWeek(publicationId: string, weekLabel: string) {
-  if (!confirm(`Unpublish ${weekLabel} from the public site?`)) return
+  if (!confirm(confirmMsg('unpublishWeek', { weekLabel }))) return
   loading.value = 'unpublish'
-  message.value = ''
+  showMessage('')
   try {
     await api('/admin/standings/unpublish', {
       method: 'POST',
       body: JSON.stringify({ publicationId }),
     })
-    message.value = `${weekLabel} unpublished.`
+    showMessage(msg('unpublished', { weekLabel }))
     await loadStandings()
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Failed'
+    showMessage(e instanceof Error ? e.message : msg('unpublishFailed'), true)
   } finally {
     loading.value = ''
   }
@@ -374,7 +400,7 @@ async function downloadCurrentSvg() {
     const weekKey = activeWeeks.value[0]?.weekKey ?? 'current'
     await downloadFile('/admin/standings/current.svg', `standings-${weekKey}.svg`)
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Download failed'
+    showMessage(e instanceof Error ? e.message : msg('downloadFailed'), true)
   }
 }
 
@@ -385,7 +411,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
       `standings-${entry.weekKey}-${entry.action}.svg`,
     )
   } catch (e) {
-    message.value = e instanceof Error ? e.message : 'Download failed'
+    showMessage(e instanceof Error ? e.message : msg('downloadFailed'), true)
   }
 }
 </script>
@@ -394,12 +420,12 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
   <main v-if="config" class="page admin-page">
     <header class="admin-header">
       <div>
-        <h1 class="page-title">{{ config.copy.adminTitle }}</h1>
-        <p class="page-lead">{{ config.copy.adminLead }}</p>
+        <h1 class="page-title">{{ admin?.title }}</h1>
+        <p class="page-lead">{{ admin?.lead }}</p>
       </div>
     </header>
 
-    <div v-if="message" class="alert alert-success">{{ message }}</div>
+    <div v-if="message" class="alert" :class="messageIsError ? 'alert-error' : 'alert-success'">{{ message }}</div>
 
     <nav class="admin-tabs" aria-label="Admin sections">
       <button
@@ -407,23 +433,23 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
         :class="{ active: activeTab === 'inbox' }"
         @click="activeTab = 'inbox'"
       >
-        {{ config.copy.adminTabInbox }}
+        {{ section('tabs').inbox }}
         <span v-if="unreadQuestions > 0" class="tab-badge">{{ unreadQuestions }}</span>
       </button>
       <button type="button" :class="{ active: activeTab === 'teams' }" @click="activeTab = 'teams'">
-        {{ config.copy.adminTabTeams }}
+        {{ section('tabs').teams }}
       </button>
       <button type="button" :class="{ active: activeTab === 'standings' }" @click="activeTab = 'standings'">
-        {{ config.copy.adminTabStandings }}
+        {{ section('tabs').standings }}
       </button>
       <button type="button" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">
-        {{ config.copy.adminTabUsers }}
+        {{ section('tabs').users }}
       </button>
       <button type="button" :class="{ active: activeTab === 'submissions' }" @click="activeTab = 'submissions'">
-        {{ config.copy.adminTabSubmissions }}
+        {{ section('tabs').submissions }}
       </button>
       <button type="button" :class="{ active: activeTab === 'prompts' }" @click="activeTab = 'prompts'">
-        {{ config.copy.adminTabPrompts }}
+        {{ section('tabs').prompts }}
       </button>
     </nav>
 
@@ -431,24 +457,24 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     <section v-show="activeTab === 'inbox'" class="card admin-section">
       <div class="inbox-header">
         <div>
-          <h2>Question Inbox</h2>
-          <p class="section-desc">Messages from readers who couldn't find an answer in the FAQ.</p>
+          <h2>{{ section('inbox').title }}</h2>
+          <p class="section-desc">{{ section('inbox').lead }}</p>
         </div>
         <div class="inbox-filters" role="tablist" aria-label="Filter questions">
           <button type="button" :class="{ active: inboxFilter === 'unread' }" @click="inboxFilter = 'unread'">
-            Unread
+            {{ section('inbox').filterUnread }}
           </button>
           <button type="button" :class="{ active: inboxFilter === 'read' }" @click="inboxFilter = 'read'">
-            Read
+            {{ section('inbox').filterRead }}
           </button>
           <button type="button" :class="{ active: inboxFilter === 'all' }" @click="inboxFilter = 'all'">
-            All
+            {{ section('inbox').filterAll }}
           </button>
         </div>
       </div>
 
       <div v-if="filteredQuestions.length === 0" class="empty-inbox">
-        <p>{{ questions.length === 0 ? 'No messages yet.' : 'Nothing in this filter.' }}</p>
+        <p>{{ questions.length === 0 ? section('inbox').emptyNone : section('inbox').emptyFilter }}</p>
       </div>
 
       <ul v-else class="inbox-list">
@@ -468,7 +494,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
           <p class="inbox-message">{{ q.message }}</p>
 
           <div v-if="q.answer" class="existing-answer">
-            <p class="answer-label">Your reply</p>
+            <p class="answer-label">{{ section('inbox').yourReply }}</p>
             <p class="answer-text">{{ q.answer }}</p>
             <time v-if="q.answeredAt">{{ new Date(q.answeredAt).toLocaleString() }}</time>
           </div>
@@ -479,7 +505,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               class="btn btn-primary btn-sm"
               @click="openAnswerModal(q)"
             >
-              {{ q.answer ? 'Update answer' : 'Reply' }}
+              {{ q.answer ? section('inbox').updateAnswer : section('inbox').reply }}
             </button>
             <button
               v-if="q.status === 'unread'"
@@ -487,7 +513,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               class="btn btn-secondary btn-sm"
               @click="markQuestion(q.id, 'read')"
             >
-              Mark read
+              {{ section('inbox').markRead }}
             </button>
             <button
               v-else-if="q.status === 'read'"
@@ -495,10 +521,10 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               class="btn btn-ghost btn-sm"
               @click="markQuestion(q.id, 'unread')"
             >
-              Mark unread
+              {{ section('inbox').markUnread }}
             </button>
             <button type="button" class="btn btn-ghost btn-sm" @click="deleteQuestion(q.id)">
-              Dismiss
+              {{ section('inbox').dismiss }}
             </button>
           </div>
         </li>
@@ -509,32 +535,32 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
       <div v-if="answerModal" class="modal-backdrop" @click.self="closeAnswerModal">
         <div class="modal card" role="dialog" aria-labelledby="answer-modal-title">
           <header class="modal-header">
-            <h2 id="answer-modal-title">{{ answerModal.answer ? 'Update answer' : 'Send reply' }}</h2>
-            <button type="button" class="modal-close" aria-label="Close" @click="closeAnswerModal">×</button>
+            <h2 id="answer-modal-title">{{ answerModal.answer ? section('inbox').updateAnswer : section('inbox').sendReply }}</h2>
+            <button type="button" class="modal-close" :aria-label="section('inbox').close" @click="closeAnswerModal">×</button>
           </header>
           <div class="modal-body">
             <p class="modal-question">
-              <strong>{{ answerModal.displayName }}</strong> asked:
+              <strong>{{ answerModal.displayName }}</strong> {{ section('inbox').asked }}
             </p>
             <p class="modal-question-text">{{ answerModal.message }}</p>
             <label class="field">
-              Your answer
+              {{ section('inbox').answerLabel }}
               <textarea
                 v-model="modalDraft"
                 rows="5"
-                placeholder="Write your answer to the reader…"
+                :placeholder="section('inbox').answerPlaceholder"
                 autofocus
               />
             </label>
             <div class="modal-actions">
-              <button type="button" class="btn btn-ghost" @click="closeAnswerModal">Cancel</button>
+              <button type="button" class="btn btn-ghost" @click="closeAnswerModal">{{ section('inbox').cancel }}</button>
               <button
                 type="button"
                 class="btn btn-primary"
                 :disabled="loading === 'answer' || modalDraft.trim().length < 2"
                 @click="submitModalAnswer"
               >
-                {{ loading === 'answer' ? 'Sending…' : answerModal.answer ? 'Update answer' : 'Send answer' }}
+                {{ loading === 'answer' ? section('inbox').sending : answerModal.answer ? section('inbox').updateAnswer : section('inbox').sendAnswer }}
               </button>
             </div>
           </div>
@@ -545,26 +571,26 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     <!-- Teams -->
     <section v-show="activeTab === 'teams'" class="admin-grid">
       <section class="card admin-section">
-        <h2>{{ config.copy.adminTeamAssignmentTitle }}</h2>
-        <p class="stat-line">{{ t(String(config.copy.adminTeamAssignmentLead), { pending }) }}</p>
+        <h2>{{ section('teams').assignmentTitle }}</h2>
+        <p class="stat-line">{{ t(section('teams').assignmentLead, { pending }) }}</p>
         <button class="btn btn-primary" :disabled="loading === 'assign' || pending === 0" @click="assignTeams">
-          {{ loading === 'assign' ? config.copy.adminAssigning : config.copy.adminAssignTeams }}
+          {{ loading === 'assign' ? section('teams').assigning : section('teams').assignTeams }}
         </button>
       </section>
 
       <section class="card admin-section">
-        <h2>Quick Stats</h2>
+        <h2>{{ section('teams').quickStatsTitle }}</h2>
         <ul class="quick-stats">
-          <li><strong>{{ users.length }}</strong> total users</li>
-          <li><strong>{{ users.filter((u) => u.status === 'assigned').length }}</strong> assigned</li>
-          <li><strong>{{ submissions.length }}</strong> book submissions</li>
-          <li><strong>{{ unreadQuestions }}</strong> unread messages</li>
+          <li><strong>{{ users.length }}</strong> {{ section('teams').statTotalUsers }}</li>
+          <li><strong>{{ users.filter((u) => u.status === 'assigned').length }}</strong> {{ section('teams').statAssigned }}</li>
+          <li><strong>{{ submissions.length }}</strong> {{ section('teams').statSubmissions }}</li>
+          <li><strong>{{ unreadQuestions }}</strong> {{ section('teams').statUnread }}</li>
         </ul>
       </section>
 
       <section class="card admin-section">
-        <h2>{{ config.copy.adminShowRostersLabel }}</h2>
-        <p class="section-desc">{{ config.copy.adminShowRostersHint }}</p>
+        <h2>{{ section('teams').rostersLabel }}</h2>
+        <p class="section-desc">{{ section('teams').rostersHint }}</p>
         <label class="setting-toggle">
           <input
             v-model="showTeamRosters"
@@ -572,7 +598,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             :disabled="loading === 'roster-setting'"
             @change="saveRosterSetting"
           />
-          <span>Enable team rosters page</span>
+          <span>{{ section('teams').rostersToggle }}</span>
         </label>
       </section>
     </section>
@@ -582,8 +608,8 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
       <div class="card standings-actions">
         <div class="standings-actions-top">
           <div>
-            <h2>Current Standings</h2>
-            <p class="section-desc">Live standings from all submissions. Publish to make them visible on the site.</p>
+            <h2>{{ section('standings').currentTitle }}</h2>
+            <p class="section-desc">{{ section('standings').currentLead }}</p>
           </div>
           <div class="btn-row">
             <button
@@ -591,25 +617,25 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               :disabled="loading === 'publish' || !standings?.length"
               @click="publishThisWeek"
             >
-              {{ loading === 'publish' ? 'Publishing…' : 'Publish This Week' }}
+              {{ loading === 'publish' ? section('standings').publishing : section('standings').publish }}
             </button>
             <button
               class="btn btn-secondary"
               :disabled="!standingsSvg"
               @click="downloadCurrentSvg"
             >
-              Download SVG
+              {{ section('standings').downloadSvg }}
             </button>
           </div>
         </div>
 
         <div v-if="activeWeeks.length" class="active-weeks">
-          <h3>Published on site</h3>
+          <h3>{{ section('standings').publishedTitle }}</h3>
           <ul class="week-list">
             <li v-for="week in activeWeeks" :key="week.id" class="week-item">
               <div>
                 <strong>{{ week.weekLabel }}</strong>
-                <span class="week-meta">Published {{ new Date(week.publishedAt).toLocaleString() }}</span>
+                <span class="week-meta">{{ section('standings').publishedAt }} {{ new Date(week.publishedAt).toLocaleString() }}</span>
               </div>
               <button
                 type="button"
@@ -617,7 +643,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
                 :disabled="loading === 'unpublish'"
                 @click="unpublishWeek(week.id, week.weekLabel)"
               >
-                Unpublish
+                {{ section('standings').unpublish }}
               </button>
             </li>
           </ul>
@@ -625,18 +651,15 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
       </div>
 
       <section class="card admin-section discord-webhook-section">
-        <h2>Discord notifications</h2>
-        <p class="section-desc">
-          When standings are published, the standings SVG is posted to this webhook with the week number.
-          Leave blank to disable. Create a webhook in your Discord channel settings.
-        </p>
+        <h2>{{ section('standings').discordTitle }}</h2>
+        <p class="section-desc">{{ section('standings').discordLead }}</p>
         <form class="discord-webhook-form" @submit.prevent="saveDiscordWebhook">
           <label>
-            Webhook URL
+            {{ section('standings').webhookLabel }}
             <input
               v-model="discordWebhookDraft"
               type="url"
-              placeholder="https://discord.com/api/webhooks/…"
+              :placeholder="section('standings').webhookPlaceholder"
               autocomplete="off"
               spellcheck="false"
               :disabled="loading === 'discord-webhook'"
@@ -648,7 +671,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               class="btn btn-primary"
               :disabled="loading === 'discord-webhook' || discordWebhookDraft === discordWebhookUrl"
             >
-              {{ loading === 'discord-webhook' ? 'Saving…' : 'Save webhook' }}
+              {{ loading === 'discord-webhook' ? section('standings').saving : section('standings').saveWebhook }}
             </button>
             <button
               type="button"
@@ -656,37 +679,37 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               :disabled="loading === 'discord-webhook' || !discordWebhookUrl"
               @click="clearDiscordWebhook"
             >
-              Remove
+              {{ section('standings').remove }}
             </button>
           </div>
-          <p v-if="discordWebhookUrl" class="webhook-status">Webhook configured.</p>
+          <p v-if="discordWebhookUrl" class="webhook-status">{{ section('standings').webhookConfigured }}</p>
         </form>
       </section>
 
-      <div v-if="loading === 'standings'" class="alert alert-info">Loading standings…</div>
+      <div v-if="loading === 'standings'" class="alert alert-info">{{ section('standings').loading }}</div>
       <StandingsPanel
         v-else-if="standings"
         :standings="standings"
         :svg="standingsSvg"
-        title="Live Standings"
+        :title="section('standings').liveTitle"
       />
 
       <section class="card admin-section history-section">
-        <h2>Publish History</h2>
-        <p class="section-desc">Every time standings were published or unpublished.</p>
+        <h2>{{ section('standings').historyTitle }}</h2>
+        <p class="section-desc">{{ section('standings').historyLead }}</p>
 
         <div v-if="standingsHistory.length === 0" class="empty-inbox">
-          <p>No publish history yet.</p>
+          <p>{{ section('standings').historyEmpty }}</p>
         </div>
 
         <div v-else class="table-wrap">
           <table class="data-table">
             <thead>
               <tr>
-                <th>When</th>
-                <th>Action</th>
-                <th>Week</th>
-                <th>By</th>
+                <th>{{ section('standings').colWhen }}</th>
+                <th>{{ section('standings').colAction }}</th>
+                <th>{{ section('standings').colWeek }}</th>
+                <th>{{ section('standings').colBy }}</th>
                 <th></th>
               </tr>
             </thead>
@@ -695,7 +718,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
                 <td>{{ new Date(entry.createdAt).toLocaleString() }}</td>
                 <td>
                   <span class="badge" :class="entry.action === 'published' ? 'badge-positive' : 'badge-negative'">
-                    {{ entry.action }}
+                    {{ entry.action === 'published' ? section('standings').actionPublished : section('standings').actionUnpublished }}
                   </span>
                 </td>
                 <td>{{ entry.weekLabel }}</td>
@@ -706,7 +729,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
                 </td>
                 <td>
                   <button type="button" class="btn btn-ghost btn-sm" @click="downloadHistorySvg(entry)">
-                    Download SVG
+                    {{ section('standings').downloadSvg }}
                   </button>
                 </td>
               </tr>
@@ -720,23 +743,23 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     <section v-show="activeTab === 'users'" class="card admin-section">
       <div class="users-header">
         <div>
-          <h2>{{ config.copy.adminParticipantsTitle }}</h2>
-          <p class="section-desc">{{ users.length }} total · {{ pending }} pending · {{ users.length - pending }} assigned</p>
+          <h2>{{ section('users').title }}</h2>
+          <p class="section-desc">{{ t(section('users').summary, { total: users.length, pending, assigned: users.length - pending }) }}</p>
         </div>
         <button type="button" class="btn btn-primary btn-sm" @click="openAddUser">
-          {{ config.copy.adminAddUserButton }}
+          {{ section('users').addButton }}
         </button>
       </div>
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>{{ config.copy.adminTeamColumn }}</th>
-              <th>Status</th>
-              <th>Admin</th>
-              <th>{{ config.copy.adminJoinedColumn }}</th>
+              <th>{{ section('users').colName }}</th>
+              <th>{{ section('users').colEmail }}</th>
+              <th>{{ section('users').colTeam }}</th>
+              <th>{{ section('users').colStatus }}</th>
+              <th>{{ section('users').colAdmin }}</th>
+              <th>{{ section('users').colJoined }}</th>
             </tr>
           </thead>
           <tbody>
@@ -750,7 +773,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
                   :disabled="loading === `team-${u.id}`"
                   @change="setUserTeam(u.id, ($event.target as HTMLSelectElement).value)"
                 >
-                  <option value="">{{ config.copy.adminUnassignedOption }}</option>
+                  <option value="">{{ section('users').unassigned }}</option>
                   <option v-for="team in config.teams" :key="team.id" :value="team.id">
                     {{ team.icon }} {{ team.name }}
                   </option>
@@ -775,30 +798,30 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     <!-- Add user modal -->
     <div v-if="addUserOpen" class="modal-backdrop" @click.self="closeAddUser">
       <div class="modal card">
-        <h2>{{ config.copy.adminAddUserTitle }}</h2>
-        <p class="section-desc">{{ config.copy.adminAddUserLead }}</p>
+        <h2>{{ section('users').addTitle }}</h2>
+        <p class="section-desc">{{ section('users').addLead }}</p>
         <form class="add-user-form" @submit.prevent="submitAddUser">
           <label>
-            Display name
+            {{ section('users').displayNameLabel }}
             <input v-model="newUser.displayName" type="text" required minlength="2" />
           </label>
           <label>
-            Email
+            {{ section('users').emailLabel }}
             <input v-model="newUser.email" type="email" required autocomplete="off" />
           </label>
           <label>
-            Team (optional)
+            {{ section('users').teamOptionalLabel }}
             <select v-model="newUser.teamId">
-              <option value="">{{ config.copy.adminUnassignedOption }}</option>
+              <option value="">{{ section('users').unassigned }}</option>
               <option v-for="team in config.teams" :key="team.id" :value="team.id">
                 {{ team.icon }} {{ team.name }}
               </option>
             </select>
           </label>
           <div class="modal-actions">
-            <button type="button" class="btn btn-ghost" @click="closeAddUser">Cancel</button>
+            <button type="button" class="btn btn-ghost" @click="closeAddUser">{{ section('inbox').cancel }}</button>
             <button type="submit" class="btn btn-primary" :disabled="loading === 'add-user'">
-              {{ loading === 'add-user' ? 'Creating…' : config.copy.adminAddUserSubmit }}
+              {{ loading === 'add-user' ? section('users').creating : section('users').addSubmit }}
             </button>
           </div>
         </form>
@@ -807,17 +830,17 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
     <!-- Submissions -->
     <section v-show="activeTab === 'submissions'" class="card admin-section">
-      <h2>All Submissions</h2>
+      <h2>{{ section('submissions').title }}</h2>
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Book</th>
-              <th>Reader</th>
-              <th>Type</th>
-              <th>Impact</th>
-              <th>Date</th>
-              <th>Actions</th>
+              <th>{{ section('submissions').colBook }}</th>
+              <th>{{ section('submissions').colReader }}</th>
+              <th>{{ section('submissions').colType }}</th>
+              <th>{{ section('submissions').colImpact }}</th>
+              <th>{{ section('submissions').colDate }}</th>
+              <th>{{ section('submissions').colActions }}</th>
             </tr>
           </thead>
           <tbody>
@@ -841,7 +864,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               <td>{{ new Date(s.createdAt).toLocaleDateString() }}</td>
               <td class="row-actions">
                 <button type="button" class="btn btn-secondary btn-sm" @click="openEditSubmission(s)">
-                  Edit
+                  {{ section('submissions').edit }}
                 </button>
                 <button
                   type="button"
@@ -849,43 +872,43 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
                   :disabled="loading === `del-sub-${s.id}`"
                   @click="deleteSubmission(s.id, s.bookTitle)"
                 >
-                  Delete
+                  {{ section('submissions').delete }}
                 </button>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="hint">Manage prompts in the Prompts tab. Event copy still lives in <code>data/realmathon.json</code>.</p>
+      <p class="hint">{{ section('submissions').hint }}</p>
     </section>
 
     <AdminPromptsPanel
       v-show="activeTab === 'prompts'"
-      @message="(text) => { message = text; loadConfig(true) }"
+      @message="(text, isError) => { showMessage(text, isError); loadConfig(true) }"
     />
 
     <!-- Edit submission modal -->
     <div v-if="editSubmission" class="modal-backdrop" @click.self="closeEditSubmission">
       <div class="modal card edit-sub-modal">
-        <h2>Edit submission</h2>
+        <h2>{{ section('submissions').editTitle }}</h2>
         <p class="section-desc">
-          {{ editSubmission.userName }} — prompts and bonuses are kept; update book details and type.
+          {{ t(section('submissions').editLead, { name: editSubmission.userName }) }}
         </p>
         <form class="edit-sub-form" @submit.prevent="saveEditSubmission">
           <label>
-            Title
+            {{ section('submissions').titleLabel }}
             <input v-model="editDraft.bookTitle" type="text" required />
           </label>
           <label>
-            Author
+            {{ section('submissions').authorLabel }}
             <input v-model="editDraft.bookAuthor" type="text" required />
           </label>
           <label>
-            Pages
+            {{ section('submissions').pagesLabel }}
             <input v-model.number="editDraft.pageCount" type="number" min="1" required />
           </label>
           <label>
-            Format
+            {{ section('submissions').formatLabel }}
             <select v-model="editDraft.format">
               <option value="ebook">Ebook</option>
               <option value="audiobook">Audiobook</option>
@@ -893,14 +916,14 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             </select>
           </label>
           <label>
-            Type
+            {{ section('submissions').typeLabel }}
             <select v-model="editDraft.submissionType">
-              <option value="add">Add XP</option>
-              <option value="sabotage">Sabotage</option>
+              <option value="add">{{ section('submissions').typeAdd }}</option>
+              <option value="sabotage">{{ section('submissions').typeSabotage }}</option>
             </select>
           </label>
           <label v-if="editDraft.submissionType === 'sabotage'">
-            Target team
+            {{ section('submissions').targetTeamLabel }}
             <select v-model="editDraft.targetTeamId" required>
               <option v-for="team in config?.teams" :key="team.id" :value="team.id">
                 {{ team.name }}
@@ -908,18 +931,18 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             </select>
           </label>
           <label>
-            Started (optional)
+            {{ section('submissions').startedLabel }}
             <input v-model="editDraft.startedAt" type="date" />
           </label>
           <label>
-            Finished (optional)
+            {{ section('submissions').finishedLabel }}
             <input v-model="editDraft.finishedAt" type="date" />
           </label>
-          <p class="prompt-note">{{ editDraft.promptIds.length }} prompts selected (unchanged)</p>
+          <p class="prompt-note">{{ t(section('submissions').promptsUnchanged, { count: editDraft.promptIds.length }) }}</p>
           <div class="modal-actions">
-            <button type="button" class="btn btn-ghost" @click="closeEditSubmission">Cancel</button>
+            <button type="button" class="btn btn-ghost" @click="closeEditSubmission">{{ section('inbox').cancel }}</button>
             <button type="submit" class="btn btn-primary" :disabled="loading.startsWith('edit-sub-')">
-              Save changes
+              {{ section('submissions').saveChanges }}
             </button>
           </div>
         </form>

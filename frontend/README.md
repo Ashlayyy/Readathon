@@ -1,48 +1,109 @@
-# frontend
+# Readathon Frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+Vue 3 single-page app for the Readathon 2026 readathon. All event copy, branding, and admin UI labels come from `../data/realmathon.json` via `GET /api/config`.
 
-## Recommended IDE Setup
+## Stack
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+- Vue 3 + TypeScript (`<script setup>`)
+- Vue Router 5
+- Vite 8
+- Plain CSS design system (`src/assets/main.css`) — no UI framework
+- Cookie-based session auth (no tokens in localStorage)
 
-## Recommended Browser Setup
+## Scripts
 
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
-npm install
+```bash
+npm run dev        # Dev server on :5173, proxies /api → :3001
+npm run build      # Type-check + production bundle → dist/
+npm run preview    # Preview production build
+npm run lint       # oxlint + eslint
 ```
 
-### Compile and Hot-Reload for Development
+Requires **Node 22.18+** (see root `.nvmrc`).
 
-```sh
-npm run dev
+## Environment
+
+| File | When | Purpose |
+|------|------|---------|
+| `.env.example` | Dev reference | Optional overrides |
+| `.env.production` | `npm run build` | `VITE_API_URL` for production API host |
+
+Leave `VITE_API_URL` unset in dev — Vite proxies `/api` to the backend.
+
+## Project layout
+
+```
+src/
+├── App.vue              # Shell: header, nav, loading/error states, footer
+├── assets/
+│   ├── main.css         # Design system (buttons, cards, alerts, layout)
+│   └── base.css         # Minimal reset
+├── components/          # StandingsPanel, TeamCard, PromptCard, AdminPromptsPanel
+├── composables/
+│   ├── useAuth.ts       # Session user singleton
+│   ├── useConfig.ts     # Event config + branding theme
+│   ├── useCopy.ts       # {placeholder} substitution
+│   └── useAdminCopy.ts  # Admin panel copy helpers
+├── lib/
+│   ├── api.ts           # Fetch client + types
+│   ├── apiBase.ts       # URL resolution
+│   ├── branding.ts      # Applies branding.theme to CSS variables
+│   └── copy.ts          # Template variable builder
+├── router/index.ts      # Routes + auth guards
+└── views/               # One view per page
+public/
+└── favicon.svg
 ```
 
-### Type-Check, Compile and Minify for Production
+## Config-driven copy
 
-```sh
-npm run build
+The app does not hardcode event strings. Key patterns:
+
+- **Pages** — `config.copy.submitPageTitle`, `config.copy.faqPageTitle`, etc.
+- **Admin** — `config.copy.admin` nested object (inbox, teams, standings, users, submissions, prompts, messages, confirm)
+- **Branding** — `config.branding.theme` applied to `:root` CSS variables on config load
+- **Placeholders** — `useCopy().t('Hello {teamCount} realms', { teamCount: 2 })`
+
+## Routes
+
+| Path | View | Access |
+|------|------|--------|
+| `/` | Home | Public |
+| `/how-it-works` | HowItWorks | Public |
+| `/teams` | Teams | Public |
+| `/rosters` | TeamRoster | Public when enabled |
+| `/prompts` | Prompts | Public |
+| `/faq` | FAQ | Public |
+| `/standings` | Standings | Public |
+| `/login` | Login | Guests only |
+| `/submit` | Submit | Assigned readers |
+| `/profile` | Profile | Authenticated |
+| `/admin` | Admin | Admins only |
+
+## Production build
+
+```bash
+# From repo root
+cp frontend/.env.production.example frontend/.env.production
+# Set VITE_API_URL=https://api.your-domain.com
+
+npm run build --prefix frontend
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+Serve `dist/` as a static SPA (`try_files … /index.html`). The API must set CORS and cookies for the frontend origin.
 
-```sh
-npm run lint
+## Editing admin copy
+
+All admin panel text lives in `data/realmathon.json` under `copy.admin`:
+
+```json
+"admin": {
+  "title": "Admin Panel",
+  "tabs": { "inbox": "Inbox", ... },
+  "inbox": { "title": "Question Inbox", ... },
+  "messages": { "teamUpdated": "Team updated.", ... },
+  "confirm": { "deleteQuestion": "Remove this message?", ... }
+}
 ```
+
+Restart the server or reload config after editing.
