@@ -1,10 +1,24 @@
+import FormData from 'form-data'
 import { getDiscordRoleId, getDiscordWebhookUrl } from './siteSettings.js'
-import { svgToPng } from './svgToPng.js'
+import { svgToPng, isPngBuffer } from './svgToPng.js'
 
 function weekNumberLabel(weekKey: string): string {
   const match = weekKey.match(/W(\d+)$/i)
   if (!match) return weekKey
   return `Week ${parseInt(match[1]!, 10)}`
+}
+
+function webhookUrlWithWait(webhookUrl: string): string {
+  return webhookUrl.includes('?') ? `${webhookUrl}&wait=true` : `${webhookUrl}?wait=true`
+}
+
+function assertDiscordPng(png: Buffer, label: string): void {
+  if (!isPngBuffer(png)) {
+    throw new Error(`[discord] ${label} is not a valid PNG`)
+  }
+  if (png.length < 5000) {
+    throw new Error(`[discord] ${label} PNG is too small (${png.length} bytes)`)
+  }
 }
 
 async function postWebhookImage(
@@ -13,26 +27,50 @@ async function postWebhookImage(
   filename: string,
   content?: string,
 ): Promise<boolean> {
-  const form = new FormData()
-  if (content) {
-    form.append('payload_json', JSON.stringify({ content }))
+  assertDiscordPng(png, filename)
+
+  const payload: Record<string, unknown> = {
+    embeds: [{ image: { url: `attachment://${filename}` } }],
   }
+  if (content) payload.content = content
 
-  form.append(
-    'files[0]',
-    new Blob([new Uint8Array(png)], { type: 'image/png' }),
+  const form = new FormData()
+  form.append('payload_json', JSON.stringify(payload))
+  form.append('files[0]', png, {
     filename,
-  )
-
-  const res = await fetch(webhookUrl, {
-    method: 'POST',
-    body: form,
+    contentType: 'image/png',
+    knownLength: png.length,
   })
 
+  const res = await fetch(webhookUrlWithWait(webhookUrl), {
+    method: 'POST',
+    // @ts-expect-error form-data stream body is accepted by Node fetch
+    body: form,
+    headers: form.getHeaders(),
+  })
+
+  const bodyText = await res.text()
   if (!res.ok) {
-    const body = await res.text()
-    console.error('[discord] Webhook failed:', res.status, body)
+    console.error('[discord] Webhook failed:', res.status, bodyText)
     return false
+  }
+
+  try {
+    const data = JSON.parse(bodyText) as {
+      attachments?: Array<{ filename?: string; size?: number; width?: number; height?: number }>
+    }
+    const attachment = data.attachments?.[0]
+    console.log('[discord] uploaded', filename, {
+      bytes: png.length,
+      discordSize: attachment?.size,
+      width: attachment?.width,
+      height: attachment?.height,
+    })
+    if (attachment?.size !== undefined && attachment.size < 5000) {
+      console.error('[discord] Discord stored a suspiciously small attachment for', filename)
+    }
+  } catch {
+    console.log('[discord] uploaded', filename, 'bytes:', png.length)
   }
 
   return true
@@ -54,7 +92,6 @@ export async function notifyDiscordStandingsPublished(
 
   try {
     const standingsPng = svgToPng(standingsSvg)
-    console.log('[discord] standings PNG bytes:', standingsPng.length)
     const standingsSent = await postWebhookImage(
       webhookUrl,
       standingsPng,
@@ -65,7 +102,6 @@ export async function notifyDiscordStandingsPublished(
 
     if (breakdownSvg?.trim()) {
       const breakdownPng = svgToPng(breakdownSvg)
-      console.log('[discord] breakdown PNG bytes:', breakdownPng.length)
       const breakdownSent = await postWebhookImage(
         webhookUrl,
         breakdownPng,
