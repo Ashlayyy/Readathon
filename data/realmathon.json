@@ -394,9 +394,13 @@
 		},
 		"nav": {
 			"home": "Home",
-			"howItWorks": "How It Works",
+			"playGroup": "Play",
+			"aboutGroup": "About",
+			"howItWorks": "Rules",
 			"teams": "Teams",
+			"teamsTab": "Realms",
 			"rosters": "Rosters",
+			"rostersTab": "Rosters",
 			"prompts": "Prompts",
 			"faq": "FAQ",
 			"standings": "Standings"

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { api } from './lib/api';
 import { useAuth } from './composables/useAuth';
 import { useConfig } from './composables/useConfig';
 import { useAdminCopy } from './composables/useAdminCopy';
+import SiteNavDropdown from './components/SiteNavDropdown.vue';
 
 const { user, logout } = useAuth();
 const { config, configLoading, configError, loadConfig } = useConfig();
@@ -14,6 +15,24 @@ const router = useRouter();
 const unreadQuestions = ref(0);
 const menuOpen = ref(false);
 let unreadPromise: Promise<void> | null = null;
+
+const nav = computed(() => config.value?.copy.nav ?? {});
+
+const playNavItems = computed(() => [
+	{ to: '/prompts', label: nav.value.prompts ?? 'Prompts' },
+	{ to: '/standings', label: nav.value.standings ?? 'Standings' },
+	{
+		to: '/submit',
+		label: String(config.value?.copy.submitNav ?? 'Submit'),
+		show: user.value?.status === 'assigned',
+	},
+]);
+
+const aboutNavItems = computed(() => [
+	{ to: '/how-it-works', label: nav.value.howItWorks ?? 'Rules' },
+	{ to: '/teams', label: nav.value.teams ?? 'Teams' },
+	{ to: '/faq', label: nav.value.faq ?? 'FAQ' },
+]);
 
 watch(
 	() => user.value?.isAdmin,
@@ -102,47 +121,42 @@ function closeMenu() {
 					:class="{ open: menuOpen }"
 					aria-label="Main"
 				>
-					<RouterLink to="/" @click="closeMenu">{{
-						config?.copy.nav.home ?? 'Home'
+					<RouterLink to="/" class="nav-home" @click="closeMenu">{{
+						nav.home ?? 'Home'
 					}}</RouterLink>
-					<RouterLink to="/how-it-works" @click="closeMenu">{{
-						config?.copy.nav.howItWorks ?? 'How It Works'
-					}}</RouterLink>
-					<RouterLink to="/teams" @click="closeMenu">{{
-						config?.copy.nav.teams ?? 'Teams'
-					}}</RouterLink>
-					<RouterLink
-						v-if="config?.site?.showTeamRosters"
-						to="/rosters"
-						@click="closeMenu"
-						>{{ config?.copy.nav.rosters ?? 'Rosters' }}</RouterLink
-					>
-					<RouterLink to="/prompts" @click="closeMenu">{{
-						config?.copy.nav.prompts ?? 'Prompts'
-					}}</RouterLink>
-					<RouterLink to="/faq" @click="closeMenu">{{
-						config?.copy.nav.faq ?? 'FAQ'
-					}}</RouterLink>
-					<RouterLink to="/standings" @click="closeMenu">{{
-						config?.copy.nav.standings ?? 'Standings'
-					}}</RouterLink>
+
+					<div class="nav-desktop-groups">
+						<SiteNavDropdown
+							:label="nav.playGroup ?? 'Play'"
+							:items="playNavItems"
+							@navigate="closeMenu"
+						/>
+						<SiteNavDropdown
+							:label="nav.aboutGroup ?? 'About'"
+							:items="aboutNavItems"
+							@navigate="closeMenu"
+						/>
+					</div>
+
+					<div class="nav-mobile-groups">
+						<SiteNavDropdown
+							mobile
+							:label="nav.playGroup ?? 'Play'"
+							:items="playNavItems"
+							@navigate="closeMenu"
+						/>
+						<SiteNavDropdown
+							mobile
+							:label="nav.aboutGroup ?? 'About'"
+							:items="aboutNavItems"
+							@navigate="closeMenu"
+						/>
+					</div>
 				</nav>
 
 				<div class="header-actions" :class="{ open: menuOpen }">
-					<div
-						v-if="user && (user.status === 'assigned' || user.isAdmin)"
-						class="action-buttons"
-					>
+					<div v-if="user?.isAdmin" class="action-buttons">
 						<RouterLink
-							v-if="user.status === 'assigned'"
-							to="/submit"
-							class="btn btn-secondary btn-sm action-btn"
-							@click="closeMenu"
-						>
-							{{ config?.copy.submitNav ?? 'Submit' }}
-						</RouterLink>
-						<RouterLink
-							v-if="user.isAdmin"
 							to="/admin"
 							class="btn btn-secondary btn-sm action-btn"
 							@click="closeMenu"
@@ -157,13 +171,17 @@ function closeMenu() {
 					<template v-if="user">
 						<RouterLink
 							to="/profile"
-							class="btn btn-secondary btn-sm profile-btn"
+							class="btn btn-secondary btn-sm profile-btn profile-btn-compact"
+							:title="user.displayName"
 							@click="closeMenu"
 						>
-							<span class="profile-avatar">{{
-								user.displayName.charAt(0).toUpperCase()
-							}}</span>
-							<span class="profile-text">
+							<span class="profile-avatar">
+								{{ user.displayName.charAt(0).toUpperCase() }}
+								<span v-if="user.unreadAnswers" class="avatar-badge">{{
+									user.unreadAnswers
+								}}</span>
+							</span>
+							<span class="profile-text profile-text-menu">
 								<span class="profile-name">
 									{{ user.displayName }}
 									<span v-if="user.unreadAnswers" class="profile-badge">{{
@@ -364,18 +382,53 @@ function closeMenu() {
 .main-nav {
 	grid-column: 2;
 	display: flex;
-	flex-wrap: wrap;
-	gap: 0.25rem 1.25rem;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 0.15rem 1rem;
 	justify-content: center;
 	justify-self: center;
 }
 
+.nav-desktop-groups {
+	display: flex;
+	align-items: center;
+	gap: 0.15rem 1rem;
+}
+
+.nav-mobile-groups {
+	display: none;
+}
+
+.main-nav :deep(.nav-home),
+.main-nav > :deep(a.nav-home) {
+	color: var(--realm-text-muted);
+	font-size: 0.88rem;
+	font-weight: 500;
+	padding: 0.45rem 0;
+	min-height: 2.5rem;
+	display: inline-flex;
+	align-items: center;
+	border-bottom: 2px solid transparent;
+	transition:
+		color 0.2s,
+		border-color 0.2s;
+	white-space: nowrap;
+	text-decoration: none;
+}
+
+.main-nav :deep(.nav-home:hover),
+.main-nav :deep(.nav-home.router-link-active),
+.main-nav :deep(.nav-home.router-link-exact-active) {
+	color: var(--realm-accent-glow);
+	border-bottom-color: var(--realm-accent);
+}
+
 .main-nav a {
 	color: var(--realm-text-muted);
-	font-size: 0.92rem;
+	font-size: 0.88rem;
 	font-weight: 500;
-	padding: 0.5rem 0;
-	min-height: 2.75rem;
+	padding: 0.45rem 0;
+	min-height: 2.5rem;
 	display: inline-flex;
 	align-items: center;
 	border-bottom: 2px solid transparent;
@@ -406,8 +459,14 @@ function closeMenu() {
 	display: flex;
 	align-items: center;
 	gap: 0.5rem;
-	padding-right: 0.65rem;
+	padding-right: 0.5rem;
 	border-right: 1px solid var(--realm-border);
+}
+
+.action-buttons:empty {
+	display: none;
+	padding: 0;
+	border: none;
 }
 
 .action-buttons :deep(a.action-btn) {
@@ -430,9 +489,17 @@ function closeMenu() {
 	gap: 0.65rem;
 	text-align: left;
 	text-decoration: none;
-	max-width: 14rem;
-	min-height: 2.75rem;
-	padding: 0.4rem 0.85rem 0.4rem 0.45rem;
+	min-height: 2.5rem;
+	padding: 0.35rem 0.75rem 0.35rem 0.35rem;
+}
+
+.profile-btn-compact {
+	max-width: none;
+	padding: 0.2rem;
+}
+
+.profile-text-menu {
+	display: none;
 }
 
 .profile-btn:hover,
@@ -456,6 +523,25 @@ function closeMenu() {
 	font-family: var(--font-display);
 	font-size: 0.9rem;
 	font-weight: 700;
+	position: relative;
+}
+
+.avatar-badge {
+	position: absolute;
+	top: -0.2rem;
+	right: -0.2rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1rem;
+	height: 1rem;
+	padding: 0 0.25rem;
+	border-radius: 999px;
+	background: var(--realm-success);
+	color: #0a1a0f;
+	font-size: 0.6rem;
+	font-weight: 700;
+	border: 2px solid var(--realm-surface);
 }
 
 .profile-text {
@@ -515,9 +601,9 @@ function closeMenu() {
 }
 
 .btn-sm {
-	padding: 0.5rem 0.9rem;
-	font-size: 0.85rem;
-	min-height: 2.75rem;
+	padding: 0.45rem 0.8rem;
+	font-size: 0.82rem;
+	min-height: 2.5rem;
 }
 
 .menu-backdrop {
@@ -569,7 +655,19 @@ function closeMenu() {
 		grid-row: 2;
 		width: 100%;
 		justify-content: flex-start;
-		gap: 0.15rem 1rem;
+		flex-wrap: wrap;
+		gap: 0.15rem 0.85rem;
+	}
+}
+
+@media (max-width: 900px) {
+	.header-actions:not(.open) .logout-btn {
+		display: none;
+	}
+
+	.action-buttons {
+		border-right: none;
+		padding-right: 0;
 	}
 }
 
@@ -639,15 +737,22 @@ function closeMenu() {
 		display: flex;
 	}
 
-	.main-nav a {
+	.nav-desktop-groups {
+		display: none;
+	}
+
+	.nav-mobile-groups {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+
+	.main-nav :deep(.nav-home) {
 		padding: 0.85rem 0.5rem;
 		border-bottom: 1px solid var(--realm-border);
 		width: 100%;
 		font-size: 1rem;
-	}
-
-	.main-nav a:last-child {
-		border-bottom: none;
+		min-height: unset;
 	}
 
 	.header-actions {
@@ -679,6 +784,15 @@ function closeMenu() {
 	.profile-btn {
 		max-width: 100%;
 		width: 100%;
+		padding: 0.4rem 0.85rem 0.4rem 0.45rem;
+	}
+
+	.profile-text-menu {
+		display: flex;
+	}
+
+	.logout-btn {
+		display: inline-flex !important;
 	}
 
 	.logout-btn,
@@ -688,11 +802,13 @@ function closeMenu() {
 	}
 }
 
-@media (max-width: 400px) {
+@media (max-width: 768px) {
 	.profile-email {
 		display: none;
 	}
+}
 
+@media (max-width: 400px) {
 	.profile-btn {
 		justify-content: flex-start;
 	}
