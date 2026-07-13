@@ -73,6 +73,8 @@ app.get('/api/standings', async (c) => {
     publishedAt: published.createdAt,
     standings: JSON.parse(published.standingsJson),
     svg: published.svgData,
+    breakdown: published.breakdownJson ? JSON.parse(published.breakdownJson) : null,
+    breakdownSvg: published.breakdownSvgData || null,
   })
 })
 

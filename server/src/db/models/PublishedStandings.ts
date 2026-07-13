@@ -6,6 +6,8 @@ const publishedStandingsSchema = new Schema(
     weekLabel: { type: String, required: true },
     standingsJson: { type: String, required: true },
     svgData: { type: String, required: true },
+    breakdownJson: { type: String, default: '' },
+    breakdownSvgData: { type: String, default: '' },
     isActive: { type: Boolean, default: true },
     unpublishedAt: { type: Date, default: null },
   },

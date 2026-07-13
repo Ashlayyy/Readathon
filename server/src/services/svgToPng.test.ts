@@ -14,9 +14,11 @@ describe('svgToPng', () => {
           color: '#d4634a',
           memberCount: 12,
           xpGained: 400,
+          xpDealt: 50,
           xpLost: 50,
           netXp: 350,
-          averagePerMember: 29.2,
+          totalTeamXp: 750,
+          averagePerMember: 37.5,
         },
         {
           teamId: 'b',
@@ -25,12 +27,14 @@ describe('svgToPng', () => {
           color: '#4a90d4',
           memberCount: 10,
           xpGained: 300,
+          xpDealt: 20,
           xpLost: 80,
           netXp: 220,
-          averagePerMember: 22,
+          totalTeamXp: 620,
+          averagePerMember: 32,
         },
       ],
-      'Test Event — Week 1',
+      'Week of Jul 13, 2026',
     )
 
     const png = svgToPng(svg)

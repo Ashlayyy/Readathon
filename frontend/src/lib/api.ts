@@ -93,6 +93,7 @@ export type AdminCopyBlock = Record<string, string | Record<string, string>>
 export type AdminSiteSettings = {
   showTeamRosters: boolean
   discordWebhookUrl: string
+  discordRoleId: string
 }
 
 export type RealmathonConfig = {
@@ -125,8 +126,10 @@ export type TeamStanding = {
   teamName: string
   memberCount: number
   xpGained: number
+  xpDealt: number
   xpLost: number
   netXp: number
+  totalTeamXp: number
   averagePerMember: number
   color: string
   icon: string
@@ -198,8 +201,53 @@ export type StandingsHistoryEntry = {
   createdAt: string
 }
 
+export type MemberContribution = {
+  userId: string
+  displayName: string
+  xpGained: number
+  xpDealt: number
+  addCount: number
+  sabotageCount: number
+}
+
+export type IncomingAttack = {
+  displayName: string
+  attackerTeamId: string
+  attackerTeamName: string
+  damage: number
+}
+
+export type TeamBreakdown = {
+  teamId: string
+  teamName: string
+  color: string
+  icon: string
+  members: MemberContribution[]
+  attacksFromOthers: IncomingAttack[]
+}
+
+export type StandingsBreakdown = {
+  teams: TeamBreakdown[]
+}
+
+export type SubmitStrategy = {
+  standingsAvailable: boolean
+  yourRank: number | null
+  yourTeamId: string | null
+  yourTeamName: string | null
+  suggestion: 'add' | 'sabotage' | null
+  targetTeamId: string | null
+  targetTeamName: string | null
+  reason: string
+}
+
 export type AdminStandingsData = {
-  current: { standings: TeamStanding[]; svg: string }
+  current: {
+    standings: TeamStanding[]
+    svg: string
+    breakdown: StandingsBreakdown
+    breakdownSvg: string
+  }
   activePublication: PublishedWeek | null
   activeWeeks: PublishedWeek[]
   history: StandingsHistoryEntry[]

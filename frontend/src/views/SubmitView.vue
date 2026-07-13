@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { api } from '../lib/api'
+import { api, type SubmitStrategy } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
@@ -43,8 +43,29 @@ const targetTeamId = ref('')
 const selectedPromptIds = ref<string[]>([])
 const bonusCompetition = ref(false)
 const bonusTeamPromptIds = ref<string[]>([])
+const strategy = ref<SubmitStrategy | null>(null)
 
 onMounted(loadConfig)
+
+async function loadStrategy() {
+  if (user.value?.status !== 'assigned') {
+    strategy.value = null
+    return
+  }
+  try {
+    strategy.value = await api<SubmitStrategy>('/submissions/strategy')
+  } catch {
+    strategy.value = null
+  }
+}
+
+function applyStrategySuggestion() {
+  if (!strategy.value?.suggestion) return
+  submissionType.value = strategy.value.suggestion
+  if (strategy.value.suggestion === 'sabotage' && strategy.value.targetTeamId) {
+    targetTeamId.value = strategy.value.targetTeamId
+  }
+}
 
 const maxPrompts = computed(() => config.value?.scoringRules.maxPromptsPerBook ?? 5)
 
@@ -142,6 +163,10 @@ watch(submissionType, () => {
   selectedPromptIds.value = []
   targetTeamId.value = ''
   promptSearch.value = ''
+})
+
+watch(step, (s) => {
+  if (s === 2) void loadStrategy()
 })
 
 async function submit() {
@@ -296,6 +321,20 @@ function reset() {
       <section v-show="step === 2" class="wizard-step">
         <h2>{{ config.copy.submitTypeTitle }}</h2>
         <p class="step-hint">{{ config.copy.submitTypeHint }}</p>
+
+        <div v-if="strategy?.suggestion && strategy.reason" class="strategy-hint card">
+          <p class="strategy-label">{{ config.copy.submitStrategyLabel }}</p>
+          <p class="strategy-reason">{{ strategy.reason }}</p>
+          <button type="button" class="btn btn-secondary btn-sm" @click="applyStrategySuggestion">
+            {{
+              strategy.suggestion === 'add'
+                ? config.copy.submitStrategyUseAdd
+                : t(String(config.copy.submitStrategyUseAttack), {
+                    team: strategy.targetTeamName ?? 'rival',
+                  })
+            }}
+          </button>
+        </div>
 
         <div class="choice-row">
           <button
@@ -770,6 +809,33 @@ function reset() {
 
 .xp-preview strong {
   color: var(--realm-accent-glow);
+}
+
+/* Strategy hint */
+.strategy-hint {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.15rem;
+  border-color: color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
+  background: linear-gradient(
+    135deg,
+    var(--realm-surface) 0%,
+    color-mix(in srgb, var(--realm-accent) 8%, var(--realm-surface)) 100%
+  );
+}
+
+.strategy-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--realm-accent-glow);
+}
+
+.strategy-reason {
+  margin: 0 0 0.75rem;
+  color: var(--realm-text);
+  line-height: 1.5;
 }
 
 /* Add / sabotage */

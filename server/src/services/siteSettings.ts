@@ -6,11 +6,12 @@ export type SiteSettingsPublic = {
 
 export type SiteSettingsAdmin = SiteSettingsPublic & {
   discordWebhookUrl: string
+  discordRoleId: string
 }
 
 type SiteSettingsCached = SiteSettingsAdmin
 
-let cached: SiteSettingsCached = { showTeamRosters: false, discordWebhookUrl: '' }
+let cached: SiteSettingsCached = { showTeamRosters: false, discordWebhookUrl: '', discordRoleId: '' }
 
 export function getSiteSettingsSync(): SiteSettingsPublic {
   return { showTeamRosters: cached.showTeamRosters }
@@ -22,6 +23,10 @@ export function getSiteSettingsAdminSync(): SiteSettingsAdmin {
 
 export function getDiscordWebhookUrl(): string {
   return cached.discordWebhookUrl.trim()
+}
+
+export function getDiscordRoleId(): string {
+  return cached.discordRoleId.trim()
 }
 
 function isValidDiscordWebhookUrl(url: string): boolean {
@@ -38,14 +43,20 @@ function isValidDiscordWebhookUrl(url: string): boolean {
   }
 }
 
+function isValidDiscordRoleId(roleId: string): boolean {
+  if (!roleId) return true
+  return /^[0-9]{5,30}$/.test(roleId)
+}
+
 export async function refreshSiteSettingsCache(): Promise<SiteSettingsAdmin> {
   let doc = await SiteSettings.findOne()
   if (!doc) {
-    doc = await SiteSettings.create({ showTeamRosters: false, discordWebhookUrl: '' })
+    doc = await SiteSettings.create({ showTeamRosters: false, discordWebhookUrl: '', discordRoleId: '' })
   }
   cached = {
     showTeamRosters: doc.showTeamRosters,
     discordWebhookUrl: doc.discordWebhookUrl ?? '',
+    discordRoleId: doc.discordRoleId ?? '',
   }
   return { ...cached }
 }
@@ -55,7 +66,7 @@ export async function updateSiteSettings(
 ): Promise<SiteSettingsAdmin> {
   let doc = await SiteSettings.findOne()
   if (!doc) {
-    doc = await SiteSettings.create({ showTeamRosters: false, discordWebhookUrl: '' })
+    doc = await SiteSettings.create({ showTeamRosters: false, discordWebhookUrl: '', discordRoleId: '' })
   }
   if (typeof patch.showTeamRosters === 'boolean') {
     doc.showTeamRosters = patch.showTeamRosters
@@ -67,10 +78,18 @@ export async function updateSiteSettings(
     }
     doc.discordWebhookUrl = trimmed
   }
+  if (typeof patch.discordRoleId === 'string') {
+    const trimmed = patch.discordRoleId.trim()
+    if (!isValidDiscordRoleId(trimmed)) {
+      throw new Error('Invalid Discord role ID')
+    }
+    doc.discordRoleId = trimmed
+  }
   await doc.save()
   cached = {
     showTeamRosters: doc.showTeamRosters,
     discordWebhookUrl: doc.discordWebhookUrl ?? '',
+    discordRoleId: doc.discordRoleId ?? '',
   }
   return { ...cached }
 }

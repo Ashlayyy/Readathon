@@ -10,9 +10,11 @@ import {
   type AdminUser,
   type PublishedWeek,
   type StandingsHistoryEntry,
+  type StandingsBreakdown,
   type TeamStanding,
 } from '../lib/api'
 import StandingsPanel from '../components/StandingsPanel.vue'
+import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue'
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
@@ -26,6 +28,8 @@ const pending = ref(0)
 const showTeamRosters = ref(false)
 const discordWebhookUrl = ref('')
 const discordWebhookDraft = ref('')
+const discordRoleId = ref('')
+const discordRoleIdDraft = ref('')
 const addUserOpen = ref(false)
 const newUser = ref({ displayName: '', email: '', teamId: '' })
 const submissions = ref<AdminSubmission[]>([])
@@ -33,6 +37,8 @@ const questions = ref<AdminQuestion[]>([])
 const unreadQuestions = ref(0)
 const standings = ref<TeamStanding[] | null>(null)
 const standingsSvg = ref<string | null>(null)
+const standingsBreakdown = ref<StandingsBreakdown | null>(null)
+const standingsBreakdownSvg = ref<string | null>(null)
 const activeWeeks = ref<PublishedWeek[]>([])
 const standingsHistory = ref<StandingsHistoryEntry[]>([])
 const answerModal = ref<AdminQuestion | null>(null)
@@ -72,6 +78,8 @@ async function loadAdminSettings() {
     const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings')
     discordWebhookUrl.value = settings.discordWebhookUrl ?? ''
     discordWebhookDraft.value = settings.discordWebhookUrl ?? ''
+    discordRoleId.value = settings.discordRoleId ?? ''
+    discordRoleIdDraft.value = settings.discordRoleId ?? ''
   } catch (e) {
     showMessage(e instanceof Error ? e.message : msg('settingsLoadFailed'), true)
   }
@@ -174,16 +182,22 @@ async function saveDiscordWebhook() {
   try {
     const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings', {
       method: 'PATCH',
-      body: JSON.stringify({ discordWebhookUrl: discordWebhookDraft.value.trim() }),
+      body: JSON.stringify({
+        discordWebhookUrl: discordWebhookDraft.value.trim(),
+        discordRoleId: discordRoleIdDraft.value.trim(),
+      }),
     })
     discordWebhookUrl.value = settings.discordWebhookUrl
     discordWebhookDraft.value = settings.discordWebhookUrl
+    discordRoleId.value = settings.discordRoleId ?? ''
+    discordRoleIdDraft.value = settings.discordRoleId ?? ''
     showMessage(
       settings.discordWebhookUrl ? msg('webhookSaved') : msg('webhookRemoved'),
     )
   } catch (e) {
     showMessage(e instanceof Error ? e.message : msg('webhookFailed'), true)
     discordWebhookDraft.value = discordWebhookUrl.value
+    discordRoleIdDraft.value = discordRoleId.value
   } finally {
     loading.value = ''
   }
@@ -191,6 +205,11 @@ async function saveDiscordWebhook() {
 
 function clearDiscordWebhook() {
   discordWebhookDraft.value = ''
+  void saveDiscordWebhook()
+}
+
+function clearDiscordRoleId() {
+  discordRoleIdDraft.value = ''
   void saveDiscordWebhook()
 }
 
@@ -352,6 +371,8 @@ async function loadStandings() {
     const data = await api<AdminStandingsData>('/admin/standings/current')
     standings.value = data.current.standings
     standingsSvg.value = data.current.svg
+    standingsBreakdown.value = data.current.breakdown
+    standingsBreakdownSvg.value = data.current.breakdownSvg
     activeWeeks.value = data.activeWeeks
     standingsHistory.value = data.history
   } finally {
@@ -665,11 +686,26 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
               :disabled="loading === 'discord-webhook'"
             />
           </label>
+          <label>
+            Discord role to ping (optional)
+            <input
+              v-model="discordRoleIdDraft"
+              type="text"
+              placeholder="123456789012345678"
+              autocomplete="off"
+              spellcheck="false"
+              inputmode="numeric"
+              :disabled="loading === 'discord-webhook'"
+            />
+          </label>
           <div class="btn-row">
             <button
               type="submit"
               class="btn btn-primary"
-              :disabled="loading === 'discord-webhook' || discordWebhookDraft === discordWebhookUrl"
+              :disabled="
+                loading === 'discord-webhook' ||
+                (discordWebhookDraft === discordWebhookUrl && discordRoleIdDraft === discordRoleId)
+              "
             >
               {{ loading === 'discord-webhook' ? section('standings').saving : section('standings').saveWebhook }}
             </button>
@@ -681,8 +717,17 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             >
               {{ section('standings').remove }}
             </button>
+            <button
+              type="button"
+              class="btn btn-ghost"
+              :disabled="loading === 'discord-webhook' || !discordRoleId"
+              @click="clearDiscordRoleId"
+            >
+              Remove ping role
+            </button>
           </div>
           <p v-if="discordWebhookUrl" class="webhook-status">{{ section('standings').webhookConfigured }}</p>
+          <p v-if="discordRoleId" class="webhook-status">Ping role configured.</p>
         </form>
       </section>
 
@@ -692,6 +737,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
         :standings="standings"
         :svg="standingsSvg"
         :title="section('standings').liveTitle"
+      />
+
+      <StandingsBreakdownPanel
+        v-if="standingsBreakdown && !loading"
+        :breakdown="standingsBreakdown"
+        :breakdown-svg="standingsBreakdownSvg"
+        :title="section('standings').breakdownTitle"
       />
 
       <section class="card admin-section history-section">

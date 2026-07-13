@@ -7,6 +7,8 @@ const standingsEventSchema = new Schema(
     weekLabel: { type: String, required: true },
     standingsJson: { type: String, required: true },
     svgData: { type: String, required: true },
+    breakdownJson: { type: String, default: '' },
+    breakdownSvgData: { type: String, default: '' },
     adminName: { type: String, required: true },
     adminEmail: { type: String, required: true },
     publicationId: { type: Schema.Types.ObjectId, ref: 'PublishedStandings', default: null },
