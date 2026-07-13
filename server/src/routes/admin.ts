@@ -28,6 +28,7 @@ import { calculateStandingsBreakdown } from '../services/standings-breakdown.js'
 import { generateBreakdownSvg } from '../services/standings-breakdown-image.js'
 import { maybeNotifyQuestionAnswered, notifyStandingsPublished } from '../services/notifications.js'
 import { notifyDiscordStandingsPublished } from '../services/discord.js'
+import { svgToPng } from '../services/svgToPng.js'
 import {
   getSiteSettingsAdminSync,
   updateSiteSettings,
@@ -272,6 +273,26 @@ adminRoutes.get('/standings/current.svg', async (c) => {
   const { weekKey, weekLabel } = getWeekInfo()
   const svg = generateStandingsSvg(standings, weekLabel)
   return svgAttachment(c, `standings-${weekKey}.svg`, svg)
+})
+
+adminRoutes.get('/standings/discord-preview.png', async (c) => {
+  const kind = c.req.query('kind') ?? 'standings'
+  const { weekKey, weekLabel } = getWeekInfo()
+
+  let svg: string
+  if (kind === 'breakdown') {
+    const breakdown = await calculateStandingsBreakdown()
+    svg = generateBreakdownSvg(breakdown, weekLabel)
+  } else {
+    const standings = await calculateStandings()
+    svg = generateStandingsSvg(standings, weekLabel)
+  }
+
+  const png = svgToPng(svg)
+  c.header('Content-Type', 'image/png')
+  c.header('Cache-Control', 'no-store')
+  c.header('Content-Disposition', `inline; filename="discord-${kind}-${weekKey}.png"`)
+  return c.body(new Uint8Array(png))
 })
 
 adminRoutes.get('/standings/history/:id.svg', async (c) => {
