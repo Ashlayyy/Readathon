@@ -10,6 +10,7 @@ const svg = ref<string | null>(null)
 const publishedAt = ref<string | null>(null)
 const published = ref(false)
 const loading = ref(true)
+const error = ref('')
 
 onMounted(async () => {
   await loadConfig()
@@ -24,6 +25,8 @@ onMounted(async () => {
     standings.value = data.standings ?? null
     svg.value = data.svg ?? null
     publishedAt.value = data.publishedAt ?? null
+  } catch {
+    error.value = String(config.value?.copy.standingsLoadError ?? "Couldn't load standings.")
   } finally {
     loading.value = false
   }
@@ -32,9 +35,12 @@ onMounted(async () => {
 
 <template>
   <main v-if="config" class="page">
-    <h1 class="page-title">Standings</h1>
+    <h1 class="page-title">{{ config.copy.standingsPageTitle }}</h1>
 
     <div v-if="loading" class="alert alert-info">Loading…</div>
+    <div v-else-if="error" class="alert alert-error card">
+      <p>{{ error }}</p>
+    </div>
     <div v-else-if="!published" class="alert alert-info card">
       <p>{{ config.copy.standingsUnpublished }}</p>
     </div>

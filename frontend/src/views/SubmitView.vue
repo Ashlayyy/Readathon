@@ -4,19 +4,25 @@ import { useRouter } from 'vue-router'
 import { api } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
+import { useCopy } from '../composables/useCopy'
 import type { Prompt } from '../lib/api'
 
 const { user } = useAuth()
 const { config, loadConfig, getTeam } = useConfig()
+const { t } = useCopy()
 const router = useRouter()
 
-const STEPS = [
-  { n: 1, label: 'Book' },
-  { n: 2, label: 'Type' },
-  { n: 3, label: 'Prompts' },
-  { n: 4, label: 'Bonuses' },
-  { n: 5, label: 'Review' },
-] as const
+const steps = computed(() => {
+  const c = config.value?.copy
+  if (!c) return []
+  return [
+    { n: 1, label: String(c.submitStepBook) },
+    { n: 2, label: String(c.submitStepType) },
+    { n: 3, label: String(c.submitStepPrompts) },
+    { n: 4, label: String(c.submitStepBonuses) },
+    { n: 5, label: String(c.submitStepReview) },
+  ]
+})
 
 const step = ref(1)
 const error = ref('')
@@ -86,8 +92,26 @@ const estimatedPromptPoints = computed(() => {
 })
 
 const bonusCount = computed(
-  () => bonusTeamPromptIds.value.length + (bonusCompetition.value ? 1 : 0),
+  () =>
+    bonusTeamPromptIds.value.length +
+    (bonusCompetition.value ? (config.value?.globalBonuses.length ?? 0) > 0 ? 1 : 0 : 0),
 )
+
+function toggleGlobalBonus(bonusId: string) {
+  const firstId = config.value?.globalBonuses[0]?.id
+  if (bonusId === firstId) {
+    bonusCompetition.value = !bonusCompetition.value
+  }
+}
+
+function isGlobalBonusSelected(bonusId: string) {
+  const firstId = config.value?.globalBonuses[0]?.id
+  return bonusId === firstId && bonusCompetition.value
+}
+
+function globalBonusLabel(bonus: { points: number }) {
+  return `±${Math.abs(bonus.points)}`
+}
 
 function isPromptSelected(id: string) {
   return selectedPromptIds.value.includes(id)
@@ -201,9 +225,9 @@ function reset() {
 
 <template>
   <main v-if="config && user" class="page">
-    <h1 class="page-title">Submit a Book</h1>
+    <h1 class="page-title">{{ config.copy.submitPageTitle }}</h1>
     <p class="page-lead">
-      Team:
+      {{ config.copy.submitPageLead }}
       <strong :style="{ color: getTeam(user.teamId!)?.color }">
         {{ getTeam(user.teamId!)?.name }}
       </strong>
@@ -212,7 +236,7 @@ function reset() {
     <div class="wizard card">
       <div class="progress" aria-label="Submission progress">
         <div
-          v-for="s in STEPS"
+          v-for="s in steps"
           :key="s.n"
           class="progress-step"
           :class="{ active: step >= s.n, current: step === s.n, done: step > s.n }"
@@ -226,25 +250,25 @@ function reset() {
 
       <!-- Step 1: Book -->
       <section v-show="step === 1" class="wizard-step">
-        <h2>Book details</h2>
-        <p class="step-hint">Tell us what you finished reading.</p>
+        <h2>{{ config.copy.submitBookTitle }}</h2>
+        <p class="step-hint">{{ config.copy.submitBookHint }}</p>
 
         <div class="form-grid">
           <label class="field">
-            Title
-            <input v-model="bookTitle" required placeholder="e.g. The Name of the Wind" />
+            {{ config.copy.submitTitleLabel }}
+            <input v-model="bookTitle" required :placeholder="String(config.copy.submitTitlePlaceholder)" />
           </label>
           <label class="field">
-            Author
-            <input v-model="bookAuthor" required placeholder="e.g. Patrick Rothfuss" />
+            {{ config.copy.submitAuthorLabel }}
+            <input v-model="bookAuthor" required :placeholder="String(config.copy.submitAuthorPlaceholder)" />
           </label>
           <label class="field">
-            Page count
+            {{ config.copy.submitPageCountLabel }}
             <input v-model.number="pageCount" type="number" min="1" />
-            <small class="field-hint">Audiobook? Use Goodreads pages or ~40 pages/hour.</small>
+            <small class="field-hint">{{ config.copy.submitPageCountHint }}</small>
           </label>
           <label class="field">
-            Format
+            {{ config.copy.submitFormatLabel }}
             <select v-model="format">
               <option value="physical">Physical</option>
               <option value="ebook">Ebook</option>
@@ -254,24 +278,24 @@ function reset() {
             </select>
           </label>
           <label class="field">
-            Started <span class="optional">(optional)</span>
+            {{ config.copy.submitStartedLabel }} <span class="optional">{{ config.copy.submitOptional }}</span>
             <input v-model="startedAt" type="date" />
           </label>
           <label class="field">
-            Finished <span class="optional">(optional)</span>
+            {{ config.copy.submitFinishedLabel }} <span class="optional">{{ config.copy.submitOptional }}</span>
             <input v-model="finishedAt" type="date" />
           </label>
         </div>
 
         <p class="xp-preview">
-          Page bonus for your team: <strong>+{{ pageBonus }} XP</strong>
+          {{ config.copy.submitPageBonusPreview }} <strong>+{{ pageBonus }} XP</strong>
         </p>
       </section>
 
       <!-- Step 2: Add or Sabotage -->
       <section v-show="step === 2" class="wizard-step">
-        <h2>Add XP or sabotage?</h2>
-        <p class="step-hint">Positive prompts help your team. Negative prompts attack another realm.</p>
+        <h2>{{ config.copy.submitTypeTitle }}</h2>
+        <p class="step-hint">{{ config.copy.submitTypeHint }}</p>
 
         <div class="choice-row">
           <button
@@ -282,8 +306,8 @@ function reset() {
             @click="submissionType = 'add'"
           >
             <span class="choice-icon">🛡</span>
-            <strong>Add XP</strong>
-            <span>Help your team</span>
+            <strong>{{ config.copy.submitAddXp }}</strong>
+            <span>{{ config.copy.submitAddXpHint }}</span>
           </button>
           <button
             type="button"
@@ -293,13 +317,13 @@ function reset() {
             @click="submissionType = 'sabotage'"
           >
             <span class="choice-icon">💀</span>
-            <strong>Sabotage</strong>
-            <span>Attack another realm</span>
+            <strong>{{ config.copy.submitSabotage }}</strong>
+            <span>{{ config.copy.submitSabotageHint }}</span>
           </button>
         </div>
 
         <div v-if="submissionType === 'sabotage'" class="target-pick">
-          <p class="target-label">Choose a realm to attack</p>
+          <p class="target-label">{{ config.copy.submitTargetLabel }}</p>
           <div
             class="target-team-grid"
             :class="{ 'has-selection': !!targetTeamId }"
@@ -320,7 +344,7 @@ function reset() {
               <span class="target-team-icon" aria-hidden="true">{{ getTeam(t.id)?.icon }}</span>
               <span class="target-team-body">
                 <span class="target-team-name">{{ getTeam(t.id)?.name ?? t.name }}</span>
-                <span class="target-team-hint" :class="{ visible: targetTeamId === t.id }">Selected target</span>
+                <span class="target-team-hint" :class="{ visible: targetTeamId === t.id }">{{ config.copy.submitTargetSelected }}</span>
               </span>
               <span class="target-team-radio" aria-hidden="true">
                 <span v-if="targetTeamId === t.id" class="target-team-check">✓</span>
@@ -334,8 +358,8 @@ function reset() {
       <section v-show="step === 3" class="wizard-step">
         <div class="step-header-row">
           <div>
-            <h2>Pick prompts</h2>
-            <p class="step-hint">Choose up to {{ maxPrompts }} that match your book.</p>
+            <h2>{{ config.copy.submitPromptsTitle }}</h2>
+            <p class="step-hint">{{ t(String(config.copy.submitPromptsHint)) }}</p>
           </div>
           <span class="counter-pill">{{ selectedPromptIds.length }} / {{ maxPrompts }}</span>
         </div>
@@ -344,12 +368,12 @@ function reset() {
           v-model="promptSearch"
           type="search"
           class="prompt-search"
-          placeholder="Search prompts…"
+          :placeholder="String(config.copy.promptsSearchPlaceholder)"
           aria-label="Search prompts"
         />
 
         <div v-if="filteredPrompts.length === 0" class="empty-prompts">
-          No prompts match your search.
+          {{ config.copy.submitPromptsEmpty }}
         </div>
 
         <div class="pick-list" role="list">
@@ -382,32 +406,34 @@ function reset() {
       <section v-show="step === 4" class="wizard-step">
         <div class="step-header-row">
           <div>
-            <h2>Bonus prompts</h2>
-            <p class="step-hint">Optional extras — they don't count toward your {{ maxPrompts }} prompts.</p>
+            <h2>{{ config.copy.submitBonusesTitle }}</h2>
+            <p class="step-hint">{{ t(String(config.copy.submitBonusesHint)) }}</p>
           </div>
           <span v-if="bonusCount" class="counter-pill">{{ bonusCount }} selected</span>
         </div>
 
         <div class="pick-list">
           <button
+            v-for="gb in config.globalBonuses"
+            :key="gb.id"
             type="button"
             class="pick-item bonus"
-            :class="{ selected: bonusCompetition }"
-            :aria-pressed="bonusCompetition"
-            @click="bonusCompetition = !bonusCompetition"
+            :class="{ selected: isGlobalBonusSelected(gb.id) }"
+            :aria-pressed="isGlobalBonusSelected(gb.id)"
+            @click="toggleGlobalBonus(gb.id)"
           >
-            <span class="pick-check" aria-hidden="true">{{ bonusCompetition ? '✓' : '' }}</span>
+            <span class="pick-check" aria-hidden="true">{{ isGlobalBonusSelected(gb.id) ? '✓' : '' }}</span>
             <span class="pick-content">
               <span class="pick-top">
-                <span class="badge badge-positive">±10</span>
-                <strong>Competition / trials in the book</strong>
+                <span class="badge badge-positive">{{ globalBonusLabel(gb) }}</span>
+                <strong>{{ gb.label }}</strong>
               </span>
-              <span class="pick-sub">Applies if the story features contests, trials, or games</span>
+              <span class="pick-sub">{{ gb.description }}</span>
             </span>
           </button>
 
           <template v-if="userTeam">
-            <p class="bonus-section-label">{{ userTeam.name }} team bonuses</p>
+            <p class="bonus-section-label">{{ t(String(config.copy.submitTeamBonusesLabel), { teamName: userTeam.name }) }}</p>
             <button
               v-for="tp in userTeam.bonusPrompts"
               :key="tp.id"
@@ -423,35 +449,35 @@ function reset() {
                   <span class="badge badge-positive">±10</span>
                   <strong>{{ tp.label }}</strong>
                 </span>
-                <span class="pick-sub">Team bonus prompt</span>
+                <span class="pick-sub">{{ config.copy.submitTeamBonusSub }}</span>
               </span>
             </button>
           </template>
         </div>
 
-        <p class="xp-preview">Page count bonus (always your team): <strong>+{{ pageBonus }} XP</strong></p>
+        <p class="xp-preview">{{ config.copy.submitPageBonusPreview }} <strong>+{{ pageBonus }} XP</strong></p>
       </section>
 
       <!-- Step 5: Review -->
       <section v-show="step === 5" class="wizard-step">
-        <h2>Review & submit</h2>
-        <p class="step-hint">Double-check everything — submissions can't be edited after sending.</p>
+        <h2>{{ config.copy.submitReviewTitle }}</h2>
+        <p class="step-hint">{{ config.copy.submitReviewHint }}</p>
 
         <div class="review card">
           <dl class="review-grid">
             <div>
-              <dt>Book</dt>
+              <dt>{{ config.copy.submitReviewBook }}</dt>
               <dd><strong>{{ bookTitle }}</strong> by {{ bookAuthor }}</dd>
             </div>
             <div>
-              <dt>Details</dt>
+              <dt>{{ config.copy.submitReviewDetails }}</dt>
               <dd>{{ pageCount }} pages · {{ format }}</dd>
             </div>
             <div>
-              <dt>Type</dt>
-              <dd v-if="submissionType === 'add'">Adding XP to your team</dd>
+              <dt>{{ config.copy.submitReviewType }}</dt>
+              <dd v-if="submissionType === 'add'">{{ config.copy.submitReviewAdding }}</dd>
               <dd v-else>
-                Sabotaging
+                {{ config.copy.submitReviewSabotaging }}
                 <strong
                   v-if="targetTeamId"
                   class="target-team-inline"
@@ -459,23 +485,23 @@ function reset() {
                 >
                   {{ getTeam(targetTeamId)?.name }}
                 </strong>
-                <template v-else>another team</template>
+                <template v-else>{{ config.copy.submitReviewAnotherTeam }}</template>
               </dd>
             </div>
             <div>
-              <dt>Prompts</dt>
+              <dt>{{ config.copy.submitReviewPrompts }}</dt>
               <dd>{{ selectedPromptIds.length }} selected ({{ estimatedPromptPoints > 0 ? '+' : '' }}{{ estimatedPromptPoints }} XP)</dd>
             </div>
             <div v-if="bonusCount">
-              <dt>Bonuses</dt>
+              <dt>{{ config.copy.submitReviewBonuses }}</dt>
               <dd>
-                {{ bonusCompetition ? 'Competition/trials' : '' }}
+                <template v-if="bonusCompetition">{{ config.globalBonuses[0]?.label }}</template>
                 <template v-if="bonusCompetition && bonusTeamPromptIds.length"> · </template>
                 <template v-if="bonusTeamPromptIds.length">{{ bonusTeamPromptIds.length }} team bonus(es)</template>
               </dd>
             </div>
             <div>
-              <dt>Page bonus</dt>
+              <dt>{{ config.copy.submitReviewPageBonus }}</dt>
               <dd>+{{ pageBonus }} XP</dd>
             </div>
           </dl>
@@ -490,8 +516,8 @@ function reset() {
         >
           <span class="toggle-check" aria-hidden="true">{{ confirmed ? '✓' : '' }}</span>
           <span class="toggle-body">
-            <strong>I'm ready to submit</strong>
-            <span>I understand submissions cannot be edited after sending.</span>
+            <strong>{{ config.copy.submitConfirmTitle }}</strong>
+            <span>{{ config.copy.submitConfirmHint }}</span>
           </span>
         </button>
       </section>
@@ -500,20 +526,20 @@ function reset() {
       <section v-show="step === 6 && success" class="wizard-step">
         <div class="success-box">
           <div class="success-icon" aria-hidden="true">✓</div>
-          <h2>Submitted!</h2>
-          <p>Your book has been logged. Go forth and read more.</p>
+          <h2>{{ config.copy.submitSuccessTitle }}</h2>
+          <p>{{ config.copy.submitSuccessBody }}</p>
           <div class="success-actions">
-            <button type="button" class="btn btn-primary" @click="reset">Submit another</button>
+            <button type="button" class="btn btn-primary" @click="reset">{{ config.copy.submitAnother }}</button>
             <button type="button" class="btn btn-secondary" @click="router.push('/profile?tab=books')">
-              View my books
+              {{ config.copy.submitViewBooks }}
             </button>
           </div>
         </div>
       </section>
 
       <div v-if="step < 6" class="wizard-nav">
-        <button v-if="step > 1" type="button" class="btn btn-ghost" @click="step--">Back</button>
-        <button v-if="step < 5" type="button" class="btn btn-primary" @click="nextStep">Continue</button>
+        <button v-if="step > 1" type="button" class="btn btn-ghost" @click="step--">{{ config.copy.submitBack }}</button>
+        <button v-if="step < 5" type="button" class="btn btn-primary" @click="nextStep">{{ config.copy.submitContinue }}</button>
         <button
           v-if="step === 5"
           type="button"
@@ -521,7 +547,7 @@ function reset() {
           :disabled="!confirmed || submitting"
           @click="submit"
         >
-          {{ submitting ? 'Submitting…' : 'Submit book' }}
+          {{ submitting ? config.copy.submitSubmitting : config.copy.submitSubmitButton }}
         </button>
       </div>
     </div>

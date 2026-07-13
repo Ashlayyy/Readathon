@@ -10,7 +10,7 @@ onMounted(loadConfig)
 
 <template>
   <main v-if="config" class="page">
-    <h1 class="page-title">How It Works</h1>
+    <h1 class="page-title">{{ config.copy.howItWorksPageTitle }}</h1>
     <p class="page-lead">{{ t(config.copy.howItWorksLead) }}</p>
 
     <ol class="steps">

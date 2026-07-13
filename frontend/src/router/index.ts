@@ -6,7 +6,11 @@ const router = createRouter({
     { path: '/', name: 'home', component: () => import('../views/HomeView.vue') },
     { path: '/how-it-works', name: 'how-it-works', component: () => import('../views/HowItWorksView.vue') },
     { path: '/teams', name: 'teams', component: () => import('../views/TeamsView.vue') },
-    { path: '/rosters', name: 'rosters', component: () => import('../views/TeamRosterView.vue') },
+    {
+      path: '/rosters',
+      name: 'rosters',
+      redirect: (to) => ({ name: 'teams', query: { ...to.query, tab: 'rosters' } }),
+    },
     { path: '/prompts', name: 'prompts', component: () => import('../views/PromptsView.vue') },
     { path: '/faq', name: 'faq', component: () => import('../views/FaqView.vue') },
     { path: '/standings', name: 'standings', component: () => import('../views/StandingsView.vue') },
@@ -27,7 +31,13 @@ router.beforeEach(async (to) => {
   await Promise.all([fetchUser(), loadConfig()])
 
   if (to.name === 'login' && user.value) return '/'
-  if (to.name === 'rosters' && !config.value?.site?.showTeamRosters) return '/'
+  if (
+    to.name === 'teams' &&
+    to.query.tab === 'rosters' &&
+    !config.value?.site?.showTeamRosters
+  ) {
+    return { name: 'teams' }
+  }
   if (to.meta.requiresAdmin && !user.value?.isAdmin) return '/'
   if (to.meta.requiresAuth && !user.value) return '/login'
   if (to.meta.requiresAssigned && user.value?.status !== 'assigned') {

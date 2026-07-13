@@ -20,6 +20,7 @@ const notifyAnswers = ref(false)
 const loading = ref(true)
 const saving = ref(false)
 const message = ref('')
+const messageIsError = ref(false)
 
 const totalImpact = computed(() =>
   submissions.value.reduce((sum, s) => sum + s.totalImpact, 0),
@@ -52,6 +53,7 @@ watch(activeTab, async (tab) => {
 async function loadProfile() {
   loading.value = true
   message.value = ''
+  messageIsError.value = false
   try {
     const data = await api<{
       user: {
@@ -66,6 +68,9 @@ async function loadProfile() {
     questions.value = data.questions
     notifyStandings.value = data.user.notifyStandings
     notifyAnswers.value = data.user.notifyAnswers
+  } catch (e) {
+    message.value = e instanceof Error ? e.message : 'Failed to load profile'
+    messageIsError.value = true
   } finally {
     loading.value = false
   }
@@ -83,6 +88,7 @@ async function markUnseenAnswersRead() {
 async function saveSettings() {
   saving.value = true
   message.value = ''
+  messageIsError.value = false
   try {
     await api('/profile/settings', {
       method: 'PATCH',
@@ -94,6 +100,7 @@ async function saveSettings() {
     message.value = 'Settings saved.'
   } catch (e) {
     message.value = e instanceof Error ? e.message : 'Failed to save'
+    messageIsError.value = true
   } finally {
     saving.value = false
   }
@@ -129,6 +136,10 @@ async function saveSettings() {
         {{ config.copy.profileSettingsTab }}
       </button>
     </nav>
+
+    <div v-if="message && activeTab !== 'settings'" class="alert" :class="messageIsError ? 'alert-error' : 'alert-success'">
+      {{ message }}
+    </div>
 
     <div v-if="loading" class="alert alert-info">Loading profile…</div>
 
@@ -227,7 +238,7 @@ async function saveSettings() {
       <h2>{{ config.copy.profileSettingsTitle }}</h2>
       <p class="section-desc">{{ config.copy.profileSettingsLead }}</p>
 
-      <div v-if="message" class="alert" :class="message.includes('saved') ? 'alert-success' : 'alert-error'">
+      <div v-if="message" class="alert" :class="messageIsError ? 'alert-error' : 'alert-success'">
         {{ message }}
       </div>
 

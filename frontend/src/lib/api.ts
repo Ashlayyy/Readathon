@@ -22,7 +22,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
       throw new Error(
         res.ok
           ? 'Server returned an invalid response'
-          : `Server error (${res.status}). Is the API running on port 3001?`,
+          : `Server error (${res.status}). Please try again later.`,
       )
     }
   }
@@ -76,17 +76,19 @@ export type TeamConfig = {
   color: string
   accent: string
   icon: string
-  leads: string[]
   bonusPrompts: { id: string; label: string; points: number }[]
 }
 
 export type SiteCopy = {
-  [key: string]: string | string[] | Record<string, string> | undefined
+  [key: string]: string | string[] | Record<string, string> | AdminCopyBlock | undefined
   scoringSummary: string[]
   homeQuickLinks: Record<string, string>
   nav: Record<string, string>
   notifications: Record<string, string>
+  admin?: AdminCopyBlock
 }
+
+export type AdminCopyBlock = Record<string, string | Record<string, string>>
 
 export type AdminSiteSettings = {
   showTeamRosters: boolean

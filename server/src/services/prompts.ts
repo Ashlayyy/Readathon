@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { parsePromptPackJson } from './promptImport.js'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -219,6 +220,56 @@ export async function deletePrompt(mongoId: string): Promise<void> {
   await refreshPromptsCache()
 }
 
+async function upsertPromptRows(rows: PromptInput[]): Promise<number> {
+  for (const row of rows) {
+    const error = validatePromptInput(row)
+    if (error) throw new Error(`${row.promptId}: ${error}`)
+  }
+
+  let imported = 0
+  for (const row of rows) {
+    await Prompt.findOneAndUpdate(
+      { promptId: row.promptId },
+      {
+        promptId: row.promptId,
+        kind: row.kind,
+        teamId: row.teamId ?? null,
+        gameName: row.gameName ?? '',
+        label: row.label,
+        description: row.description ?? '',
+        points: row.points,
+        link: row.link ?? null,
+        isActive: row.isActive ?? true,
+        goesLiveAt: row.goesLiveAt?.trim() ? new Date(row.goesLiveAt) : null,
+        sortOrder: row.sortOrder ?? 0,
+      },
+      { upsert: true, new: true },
+    )
+    imported++
+  }
+
+  await refreshPromptsCache()
+  return imported
+}
+
+export async function importPromptsFromJson(
+  data: unknown,
+  replaceExisting: boolean,
+): Promise<{ imported: number; scheduled: number }> {
+  const rows = parsePromptPackJson(data)
+
+  if (replaceExisting) {
+    await Prompt.deleteMany({})
+  }
+
+  const imported = await upsertPromptRows(rows)
+  const scheduled = rows.filter(
+    (r) => r.goesLiveAt && new Date(r.goesLiveAt) > new Date(),
+  ).length
+
+  return { imported, scheduled }
+}
+
 export async function importPromptsFromConfigFile(replaceExisting: boolean): Promise<{ imported: number }> {
   const raw = JSON.parse(readFileSync(configPath, 'utf-8')) as RealmathonConfig
 
@@ -267,27 +318,6 @@ export async function importPromptsFromConfigFile(replaceExisting: boolean): Pro
     }
   }
 
-  let imported = 0
-  for (const row of rows) {
-    await Prompt.findOneAndUpdate(
-      { promptId: row.promptId },
-      {
-        promptId: row.promptId,
-        kind: row.kind,
-        teamId: row.teamId ?? null,
-        gameName: row.gameName ?? '',
-        label: row.label,
-        description: row.description ?? '',
-        points: row.points,
-        link: row.link ?? null,
-        isActive: row.isActive ?? true,
-        goesLiveAt: null,
-      },
-      { upsert: true, new: true },
-    )
-    imported++
-  }
-
-  await refreshPromptsCache()
+  const imported = await upsertPromptRows(rows)
   return { imported }
 }

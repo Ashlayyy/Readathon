@@ -10,7 +10,6 @@ defineProps<{ team: TeamConfig }>()
       <span class="icon">{{ team.icon }}</span>
       <h3>{{ team.name }}</h3>
     </header>
-    <p v-if="team.leads.length" class="leads"><strong>Team Leads:</strong> {{ team.leads.join(', ') }}</p>
     <div class="bonus">
       <h4>Bonus Prompts <span class="badge badge-positive">±10 each</span></h4>
       <ul>
@@ -41,12 +40,6 @@ header {
 h3 {
   color: var(--realm-text);
   font-family: var(--font-display);
-}
-
-.leads {
-  color: var(--realm-text-muted);
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
 }
 
 .bonus h4 {

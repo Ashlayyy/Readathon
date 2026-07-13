@@ -34,6 +34,7 @@ import {
   createPrompt,
   deletePrompt,
   importPromptsFromConfigFile,
+  importPromptsFromJson,
   isPromptLive,
   promptToAdminPublic,
   promptsUseDatabase,
@@ -375,6 +376,19 @@ adminRoutes.delete('/prompts/:id', async (c) => {
     return c.json({ ok: true })
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : 'Failed to delete prompt' }, 400)
+  }
+})
+
+adminRoutes.post('/prompts/import-json', async (c) => {
+  try {
+    const { replaceExisting, pack } = await c.req.json<{ replaceExisting?: boolean; pack: unknown }>()
+    if (pack === undefined || pack === null) {
+      return c.json({ error: 'Upload a JSON prompt pack in the request body.' }, 400)
+    }
+    const result = await importPromptsFromJson(pack, Boolean(replaceExisting))
+    return c.json(result)
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Import failed' }, 400)
   }
 })
 

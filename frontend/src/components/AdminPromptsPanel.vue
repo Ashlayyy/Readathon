@@ -2,6 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { api, type TeamConfig } from '../lib/api'
 import { useConfig } from '../composables/useConfig'
+import { useAdminCopy } from '../composables/useAdminCopy'
+import { useCopy } from '../composables/useCopy'
 
 export type AdminPrompt = {
   id: string
@@ -19,9 +21,11 @@ export type AdminPrompt = {
   isLive: boolean
 }
 
-const emit = defineEmits<{ message: [text: string] }>()
+const emit = defineEmits<{ message: [text: string, isError?: boolean] }>()
 
 const { config } = useConfig()
+const { section, msg, confirmMsg } = useAdminCopy()
+const { t } = useCopy()
 const prompts = ref<AdminPrompt[]>([])
 const usingDatabase = ref(false)
 const stats = ref({ liveCount: 0, scheduledCount: 0, draftCount: 0 })
@@ -30,8 +34,15 @@ const filter = ref<'all' | 'live' | 'scheduled' | 'draft'>('all')
 
 const editModal = ref<AdminPrompt | null>(null)
 const createMode = ref(false)
-const importModal = ref(false)
+const addMenuOpen = ref(false)
+const uploadModalOpen = ref(false)
+const importConfigModal = ref(false)
 const importReplace = ref(false)
+const uploadFile = ref<File | null>(null)
+const uploadPack = ref<unknown>(null)
+const uploadPreview = ref<{ total: number; scheduled: number } | null>(null)
+const uploadError = ref('')
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
 const blankForm = () => ({
   promptId: '',
@@ -68,6 +79,12 @@ const grouped = computed(() => {
   return { positive, negative, teamBonus }
 })
 
+const promptSections = computed(() => [
+  { key: 'positive', title: section('prompts').groupPositive, items: grouped.value.positive },
+  { key: 'negative', title: section('prompts').groupNegative, items: grouped.value.negative },
+  { key: 'teamBonus', title: section('prompts').groupTeamBonus, items: grouped.value.teamBonus },
+])
+
 onMounted(loadPrompts)
 
 async function loadPrompts() {
@@ -98,16 +115,135 @@ function teamName(teamId: string | null) {
 }
 
 function statusLabel(p: AdminPrompt) {
-  if (p.isLive) return 'Live'
-  if (p.isActive && p.goesLiveAt && new Date(p.goesLiveAt) > new Date()) return 'Scheduled'
-  if (!p.isActive) return 'Draft'
-  return 'Hidden'
+  const pcopy = section('prompts')
+  if (p.isLive) return pcopy.statusLive
+  if (p.isActive && p.goesLiveAt && new Date(p.goesLiveAt) > new Date()) return pcopy.statusScheduled
+  if (!p.isActive) return pcopy.statusDraft
+  return pcopy.statusHidden
 }
 
 function statusClass(p: AdminPrompt) {
   if (p.isLive) return 'badge-positive'
   if (!p.isActive) return 'badge-negative'
   return ''
+}
+
+function openAddMenu() {
+  addMenuOpen.value = true
+}
+
+function closeAddMenu() {
+  addMenuOpen.value = false
+}
+
+function chooseManual() {
+  closeAddMenu()
+  openCreate()
+}
+
+function chooseUpload() {
+  closeAddMenu()
+  uploadModalOpen.value = true
+  uploadFile.value = null
+  uploadPack.value = null
+  uploadPreview.value = null
+  uploadError.value = ''
+  importReplace.value = false
+}
+
+function chooseConfigImport() {
+  closeAddMenu()
+  importConfigModal.value = true
+  importReplace.value = false
+}
+
+function closeUploadModal() {
+  uploadModalOpen.value = false
+  uploadFile.value = null
+  uploadPack.value = null
+  uploadPreview.value = null
+  uploadError.value = ''
+}
+
+async function onUploadFileSelected(event: Event) {
+  uploadError.value = ''
+  uploadPreview.value = null
+  uploadPack.value = null
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  uploadFile.value = file
+  if (!file) return
+
+  try {
+    const text = await file.text()
+    const parsed = JSON.parse(text) as unknown
+    uploadPack.value = parsed
+    uploadPreview.value = previewPackClient(parsed)
+  } catch {
+    uploadError.value = section('prompts').uploadInvalidJson ?? 'Invalid JSON file.'
+    uploadFile.value = null
+    uploadPack.value = null
+  }
+}
+
+function previewPackClient(data: unknown): { total: number; scheduled: number } {
+  const pack = data as {
+    kind?: string
+    sets?: { goesLiveAt?: string; prompts?: unknown[] }[]
+    prompts?: unknown[] | { positive?: unknown[]; negative?: unknown[] }
+    teams?: { bonusPrompts?: unknown[] }[]
+  }
+
+  let total = 0
+  let scheduled = 0
+  const now = Date.now()
+
+  const countPrompt = (p: { goesLiveAt?: string }, setLive?: string) => {
+    total++
+    const liveAt = p.goesLiveAt ?? setLive
+    if (liveAt && new Date(liveAt).getTime() > now) scheduled++
+  }
+
+  for (const set of pack.sets ?? []) {
+    for (const p of (set.prompts ?? []) as { goesLiveAt?: string }[]) {
+      countPrompt(p, set.goesLiveAt)
+    }
+  }
+
+  if (Array.isArray(pack.prompts)) {
+    for (const p of pack.prompts as { goesLiveAt?: string }[]) countPrompt(p)
+  } else if (pack.prompts && typeof pack.prompts === 'object') {
+    for (const p of [...(pack.prompts.positive ?? []), ...(pack.prompts.negative ?? [])] as {
+      goesLiveAt?: string
+    }[]) {
+      countPrompt(p)
+    }
+  }
+
+  for (const team of pack.teams ?? []) {
+    for (const p of (team.bonusPrompts ?? []) as { goesLiveAt?: string }[]) countPrompt(p)
+  }
+
+  if (total === 0) throw new Error('empty')
+  return { total, scheduled }
+}
+
+async function runJsonUpload() {
+  if (!uploadPack.value) return
+  loading.value = 'import'
+  try {
+    const result = await api<{ imported: number; scheduled: number }>('/admin/prompts/import-json', {
+      method: 'POST',
+      body: JSON.stringify({ replaceExisting: importReplace.value, pack: uploadPack.value }),
+    })
+    emit('message', msg('jsonImported', { count: result.imported, scheduled: result.scheduled }))
+    closeUploadModal()
+    await loadPrompts()
+  } catch (e) {
+    emit('message', e instanceof Error ? e.message : msg('importFailed'), true)
+  } finally {
+    loading.value = ''
+  }
 }
 
 function openCreate() {
@@ -158,32 +294,32 @@ async function savePrompt() {
 
     if (createMode.value) {
       await api('/admin/prompts', { method: 'POST', body: JSON.stringify(body) })
-      emit('message', 'Prompt created.')
+      emit('message', msg('promptCreated'))
     } else if (editModal.value) {
       await api(`/admin/prompts/${editModal.value.id}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       })
-      emit('message', 'Prompt updated.')
+      emit('message', msg('promptUpdated'))
     }
     closeModal()
     await loadPrompts()
   } catch (e) {
-    emit('message', e instanceof Error ? e.message : 'Failed to save prompt')
+    emit('message', e instanceof Error ? e.message : msg('promptSaveFailed'), true)
   } finally {
     loading.value = ''
   }
 }
 
 async function removePrompt(p: AdminPrompt) {
-  if (!confirm(`Delete prompt "${p.label}"? This cannot be undone.`)) return
+  if (!confirm(confirmMsg('deletePrompt', { label: p.label }))) return
   loading.value = `del-${p.id}`
   try {
     await api(`/admin/prompts/${p.id}`, { method: 'DELETE' })
-    emit('message', 'Prompt deleted.')
+    emit('message', msg('promptDeleted'))
     await loadPrompts()
   } catch (e) {
-    emit('message', e instanceof Error ? e.message : 'Failed to delete')
+    emit('message', e instanceof Error ? e.message : msg('promptDeleteFailed'), true)
   } finally {
     loading.value = ''
   }
@@ -196,12 +332,12 @@ async function runImport() {
       method: 'POST',
       body: JSON.stringify({ replaceExisting: importReplace.value }),
     })
-    emit('message', `Imported ${result.imported} prompts from data/realmathon.json.`)
-    importModal.value = false
+    emit('message', msg('promptImported', { count: result.imported }))
+    importConfigModal.value = false
     importReplace.value = false
     await loadPrompts()
   } catch (e) {
-    emit('message', e instanceof Error ? e.message : 'Import failed')
+    emit('message', e instanceof Error ? e.message : msg('importFailed'), true)
   } finally {
     loading.value = ''
   }
@@ -212,44 +348,39 @@ async function runImport() {
   <section class="card admin-section prompts-panel">
     <div class="prompts-header">
       <div>
-        <h2>Prompt library</h2>
+        <h2>{{ section('prompts').title }}</h2>
         <p class="section-desc">
-          Prompts are stored in the database.
-          <span v-if="usingDatabase">{{ stats.liveCount }} live</span>
-          <span v-else>Using JSON file until you import.</span>
-          <span v-if="stats.scheduledCount"> · {{ stats.scheduledCount }} scheduled</span>
-          <span v-if="stats.draftCount"> · {{ stats.draftCount }} draft</span>
+          {{ section('prompts').leadDb }}
+          <span v-if="usingDatabase">{{ t(section('prompts').statLive, { count: stats.liveCount }) }}</span>
+          <span v-else>{{ section('prompts').leadJson }}</span>
+          <span v-if="stats.scheduledCount"> · {{ t(section('prompts').statScheduled, { count: stats.scheduledCount }) }}</span>
+          <span v-if="stats.draftCount"> · {{ t(section('prompts').statDraft, { count: stats.draftCount }) }}</span>
         </p>
       </div>
       <div class="prompts-actions">
-        <button type="button" class="btn btn-secondary btn-sm" @click="importModal = true">
-          Import from config file
+        <button type="button" class="btn btn-primary btn-sm" @click="openAddMenu">
+          {{ section('prompts').addButton }}
         </button>
-        <button type="button" class="btn btn-primary btn-sm" @click="openCreate">Add prompt</button>
       </div>
     </div>
 
     <div class="prompt-filters">
-      <button type="button" :class="{ active: filter === 'all' }" @click="filter = 'all'">All</button>
-      <button type="button" :class="{ active: filter === 'live' }" @click="filter = 'live'">Live</button>
+      <button type="button" :class="{ active: filter === 'all' }" @click="filter = 'all'">{{ section('prompts').filterAll }}</button>
+      <button type="button" :class="{ active: filter === 'live' }" @click="filter = 'live'">{{ section('prompts').filterLive }}</button>
       <button type="button" :class="{ active: filter === 'scheduled' }" @click="filter = 'scheduled'">
-        Scheduled
+        {{ section('prompts').filterScheduled }}
       </button>
-      <button type="button" :class="{ active: filter === 'draft' }" @click="filter = 'draft'">Draft</button>
+      <button type="button" :class="{ active: filter === 'draft' }" @click="filter = 'draft'">{{ section('prompts').filterDraft }}</button>
     </div>
 
-    <div v-if="loading === 'load'" class="alert alert-info">Loading prompts…</div>
+    <div v-if="loading === 'load'" class="alert alert-info">{{ section('prompts').loading }}</div>
 
     <template v-else>
-      <div v-for="section in [
-        { key: 'positive', title: 'Add XP (+)', items: grouped.positive },
-        { key: 'negative', title: 'Sabotage (-)', items: grouped.negative },
-        { key: 'teamBonus', title: 'Team bonuses', items: grouped.teamBonus },
-      ]" :key="section.key" class="prompt-group">
-        <h3>{{ section.title }} <span class="count">({{ section.items.length }})</span></h3>
-        <div v-if="section.items.length === 0" class="empty-group">None in this filter.</div>
+      <div v-for="sec in promptSections" :key="sec.key" class="prompt-group">
+        <h3>{{ sec.title }} <span class="count">({{ sec.items.length }})</span></h3>
+        <div v-if="sec.items.length === 0" class="empty-group">{{ section('prompts').emptyFilter }}</div>
         <ul v-else class="prompt-list">
-          <li v-for="p in section.items" :key="p.id" class="prompt-row">
+          <li v-for="p in sec.items" :key="p.id" class="prompt-row">
             <div class="prompt-main">
               <span class="badge" :class="statusClass(p)">{{ statusLabel(p) }}</span>
               <strong>{{ p.label }}</strong>
@@ -259,14 +390,14 @@ async function runImport() {
               <code class="pid">{{ p.promptId }}</code>
             </div>
             <div class="row-actions">
-              <button type="button" class="btn btn-secondary btn-sm" @click="openEdit(p)">Edit</button>
+              <button type="button" class="btn btn-secondary btn-sm" @click="openEdit(p)">{{ section('prompts').edit }}</button>
               <button
                 type="button"
                 class="btn btn-ghost btn-sm danger"
                 :disabled="loading === `del-${p.id}`"
                 @click="removePrompt(p)"
               >
-                Delete
+                {{ section('prompts').delete }}
               </button>
             </div>
           </li>
@@ -277,93 +408,158 @@ async function runImport() {
     <!-- Create / edit modal -->
     <div v-if="createMode || editModal" class="modal-backdrop" @click.self="closeModal">
       <div class="modal card prompt-modal">
-        <h2>{{ createMode ? 'Add prompt' : 'Edit prompt' }}</h2>
+        <h2>{{ createMode ? section('prompts').addTitle : section('prompts').editTitle }}</h2>
         <form class="prompt-form" @submit.prevent="savePrompt">
           <label>
-            ID (slug)
+            {{ section('prompts').idLabel }}
             <input v-model="form.promptId" type="text" required :disabled="!createMode" pattern="[a-z0-9-]+" />
           </label>
           <label>
-            Kind
+            {{ section('prompts').kindLabel }}
             <select v-model="form.kind">
-              <option value="positive">Add XP (+)</option>
-              <option value="negative">Sabotage (-)</option>
-              <option value="team_bonus">Team bonus</option>
+              <option value="positive">{{ section('prompts').kindPositive }}</option>
+              <option value="negative">{{ section('prompts').kindNegative }}</option>
+              <option value="team_bonus">{{ section('prompts').kindTeamBonus }}</option>
             </select>
           </label>
           <label v-if="form.kind === 'team_bonus'">
-            Team
+            {{ section('prompts').teamLabel }}
             <select v-model="form.teamId" required>
               <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
             </select>
           </label>
           <label v-if="form.kind !== 'team_bonus'">
-            Game name
+            {{ section('prompts').gameNameLabel }}
             <input v-model="form.gameName" type="text" />
           </label>
           <label>
-            Label
+            {{ section('prompts').labelLabel }}
             <input v-model="form.label" type="text" required />
           </label>
           <label>
-            Description
+            {{ section('prompts').descriptionLabel }}
             <textarea v-model="form.description" rows="3" />
           </label>
           <label>
-            Points
+            {{ section('prompts').pointsLabel }}
             <input v-model.number="form.points" type="number" required />
           </label>
           <label v-if="form.kind !== 'team_bonus'">
-            Link (optional)
-            <input v-model="form.link" type="url" placeholder="https://…" />
+            {{ section('prompts').linkLabel }}
+            <input v-model="form.link" type="url" :placeholder="section('prompts').linkPlaceholder" />
           </label>
           <label class="check-row">
             <input v-model="form.isActive" type="checkbox" />
-            Active (visible when go-live date passes)
+            {{ section('prompts').activeLabel }}
           </label>
           <label>
-            Go live at (optional)
+            {{ section('prompts').goLiveLabel }}
             <input v-model="form.goesLiveAt" type="datetime-local" />
-            <span class="field-hint">Hidden until this date/time, even if active.</span>
+            <span class="field-hint">{{ section('prompts').goLiveHint }}</span>
           </label>
           <label>
-            Sort order
+            {{ section('prompts').sortOrderLabel }}
             <input v-model.number="form.sortOrder" type="number" />
           </label>
           <div class="modal-actions">
-            <button type="button" class="btn btn-ghost" @click="closeModal">Cancel</button>
+            <button type="button" class="btn btn-ghost" @click="closeModal">{{ section('prompts').cancel }}</button>
             <button type="submit" class="btn btn-primary" :disabled="loading === 'save'">
-              {{ loading === 'save' ? 'Saving…' : 'Save' }}
+              {{ loading === 'save' ? section('prompts').saving : section('prompts').save }}
             </button>
           </div>
         </form>
       </div>
     </div>
 
-    <!-- Import modal -->
-    <div v-if="importModal" class="modal-backdrop" @click.self="importModal = false">
+    <!-- Add menu -->
+    <div v-if="addMenuOpen" class="modal-backdrop" @click.self="closeAddMenu">
+      <div class="modal card prompt-modal add-menu-modal">
+        <h2>{{ section('prompts').addMenuTitle }}</h2>
+        <p class="section-desc">{{ section('prompts').addMenuLead }}</p>
+        <div class="add-menu-options">
+          <button type="button" class="add-menu-option" @click="chooseManual">
+            <strong>{{ section('prompts').addMenuManualTitle }}</strong>
+            <span>{{ section('prompts').addMenuManualLead }}</span>
+          </button>
+          <button type="button" class="add-menu-option" @click="chooseUpload">
+            <strong>{{ section('prompts').addMenuUploadTitle }}</strong>
+            <span>{{ section('prompts').addMenuUploadLead }}</span>
+          </button>
+          <button type="button" class="add-menu-option subtle" @click="chooseConfigImport">
+            <strong>{{ section('prompts').addMenuConfigTitle }}</strong>
+            <span>{{ section('prompts').addMenuConfigLead }}</span>
+          </button>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" @click="closeAddMenu">{{ section('prompts').cancel }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- JSON upload modal -->
+    <div v-if="uploadModalOpen" class="modal-backdrop" @click.self="closeUploadModal">
       <div class="modal card prompt-modal">
-        <h2>Import from config file</h2>
-        <p class="section-desc">
-          Load global and team bonus prompts from <code>data/realmathon.json</code> into the database.
-          This does <strong>not</strong> run automatically.
+        <h2>{{ section('prompts').uploadTitle }}</h2>
+        <p class="section-desc">{{ section('prompts').uploadLead }}</p>
+
+        <div class="file-upload">
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept=".json,application/json"
+            class="hidden-file-input"
+            @change="onUploadFileSelected"
+          />
+          <button type="button" class="btn btn-secondary btn-sm" @click="fileInputRef?.click()">
+            {{ section('prompts').uploadChooseFile }}
+          </button>
+          <span class="file-name">{{ uploadFile?.name ?? section('prompts').uploadNoFile }}</span>
+        </div>
+
+        <div v-if="uploadError" class="alert alert-error">{{ uploadError }}</div>
+        <p v-else-if="uploadPreview" class="upload-preview">
+          {{ t(section('prompts').uploadPreview, { count: uploadPreview.total, scheduled: uploadPreview.scheduled }) }}
         </p>
+
         <label class="check-row danger-check">
           <input v-model="importReplace" type="checkbox" />
-          Replace all existing prompts first (destructive)
+          {{ section('prompts').importReplace }}
         </label>
-        <p class="field-hint">
-          Without replace, prompts are merged by ID — existing entries with the same ID get updated.
-        </p>
+        <p class="field-hint">{{ section('prompts').importMergeHint }}</p>
+
         <div class="modal-actions">
-          <button type="button" class="btn btn-ghost" @click="importModal = false">Cancel</button>
+          <button type="button" class="btn btn-ghost" @click="closeUploadModal">{{ section('prompts').cancel }}</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="loading === 'import' || !uploadPack"
+            @click="runJsonUpload"
+          >
+            {{ loading === 'import' ? section('prompts').uploadImporting : section('prompts').uploadImport }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import from realmathon.json -->
+    <div v-if="importConfigModal" class="modal-backdrop" @click.self="importConfigModal = false">
+      <div class="modal card prompt-modal">
+        <h2>{{ section('prompts').importTitle }}</h2>
+        <p class="section-desc">{{ section('prompts').importLead }}</p>
+        <label class="check-row danger-check">
+          <input v-model="importReplace" type="checkbox" />
+          {{ section('prompts').importReplace }}
+        </label>
+        <p class="field-hint">{{ section('prompts').importMergeHint }}</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" @click="importConfigModal = false">{{ section('prompts').cancel }}</button>
           <button
             type="button"
             class="btn btn-primary"
             :disabled="loading === 'import'"
             @click="runImport"
           >
-            {{ loading === 'import' ? 'Importing…' : 'Import prompts' }}
+            {{ loading === 'import' ? section('prompts').importing : section('prompts').importSubmit }}
           </button>
         </div>
       </div>
@@ -517,6 +713,76 @@ async function runImport() {
 
 .danger-check {
   color: var(--realm-text);
+}
+
+.add-menu-modal {
+  max-width: 28rem;
+}
+
+.add-menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.add-menu-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--realm-border);
+  border-radius: var(--radius);
+  background: var(--realm-bg);
+  color: var(--realm-text);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.add-menu-option:hover {
+  border-color: var(--realm-accent);
+  background: rgba(212, 99, 74, 0.08);
+}
+
+.add-menu-option strong {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+}
+
+.add-menu-option span {
+  color: var(--realm-text-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.add-menu-option.subtle {
+  opacity: 0.9;
+}
+
+.file-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.file-name {
+  color: var(--realm-text-muted);
+  font-size: 0.88rem;
+  word-break: break-all;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.upload-preview {
+  color: var(--realm-success);
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
 }
 
 .modal-backdrop {

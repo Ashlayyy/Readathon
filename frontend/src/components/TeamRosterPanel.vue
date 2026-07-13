@@ -1,22 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { api, type RosterTeam } from '../lib/api'
-import { useConfig } from '../composables/useConfig'
-import { useCopy } from '../composables/useCopy'
 
-const { config, loadConfig } = useConfig()
-const { t } = useCopy()
 const teams = ref<RosterTeam[]>([])
 const loading = ref(true)
 const error = ref('')
 
 onMounted(async () => {
-  await loadConfig()
-  if (!config.value?.site?.showTeamRosters) {
-    error.value = 'Team rosters are not public right now.'
-    loading.value = false
-    return
-  }
   try {
     const data = await api<{ teams: RosterTeam[] }>('/roster')
     teams.value = data.teams
@@ -29,37 +19,32 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main v-if="config" class="page">
-    <h1 class="page-title">{{ config.copy.rosterPageTitle }}</h1>
-    <p class="page-lead">{{ t(String(config.copy.rosterPageLead)) }}</p>
+  <div v-if="loading" class="alert alert-info">Loading rosters…</div>
+  <div v-else-if="error" class="alert alert-warning">{{ error }}</div>
 
-    <div v-if="loading" class="alert alert-info">Loading rosters…</div>
-    <div v-else-if="error" class="alert alert-warning">{{ error }}</div>
-
-    <div v-else class="roster-grid">
-      <section
-        v-for="team in teams"
-        :key="team.id"
-        class="roster-card card"
-        :style="{ '--team-color': team.color }"
-      >
-        <header class="roster-header">
-          <span class="icon">{{ team.icon }}</span>
-          <div>
-            <h2>{{ team.name }}</h2>
-            <p class="member-count">
-              {{ team.members.length }}
-              {{ team.members.length === 1 ? 'member' : 'members' }}
-            </p>
-          </div>
-        </header>
-        <ul v-if="team.members.length" class="member-list">
-          <li v-for="member in team.members" :key="member.id">{{ member.displayName }}</li>
-        </ul>
-        <p v-else class="empty-team">No members assigned yet.</p>
-      </section>
-    </div>
-  </main>
+  <div v-else class="roster-grid">
+    <section
+      v-for="team in teams"
+      :key="team.id"
+      class="roster-card card"
+      :style="{ '--team-color': team.color }"
+    >
+      <header class="roster-header">
+        <span class="icon">{{ team.icon }}</span>
+        <div>
+          <h2>{{ team.name }}</h2>
+          <p class="member-count">
+            {{ team.members.length }}
+            {{ team.members.length === 1 ? 'member' : 'members' }}
+          </p>
+        </div>
+      </header>
+      <ul v-if="team.members.length" class="member-list">
+        <li v-for="member in team.members" :key="member.id">{{ member.displayName }}</li>
+      </ul>
+      <p v-else class="empty-team">No members assigned yet.</p>
+    </section>
+  </div>
 </template>
 
 <style scoped>

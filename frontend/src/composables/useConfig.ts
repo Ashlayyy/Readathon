@@ -1,7 +1,10 @@
 import { ref } from 'vue'
 import { api, type RealmathonConfig, type TeamConfig } from '../lib/api'
+import { applyBrandingTheme } from '../lib/branding'
 
 const config = ref<RealmathonConfig | null>(null)
+const configLoading = ref(false)
+const configError = ref<string | null>(null)
 let loadPromise: Promise<RealmathonConfig | null> | null = null
 
 export function useConfig() {
@@ -9,12 +12,20 @@ export function useConfig() {
     if (!force && config.value) return config.value
     if (!force && loadPromise) return loadPromise
 
+    configLoading.value = true
+    configError.value = null
+
     loadPromise = (async () => {
       try {
-        config.value = await api<RealmathonConfig>('/config')
+        const data = await api<RealmathonConfig>('/config')
+        config.value = data
+        applyBrandingTheme(data.branding.theme)
       } catch (e) {
         console.error('Failed to load config:', e)
+        configError.value =
+          e instanceof Error ? e.message : 'Failed to load event configuration'
       } finally {
+        configLoading.value = false
         loadPromise = null
       }
       return config.value
@@ -27,5 +38,5 @@ export function useConfig() {
     return config.value?.teams.find((t) => t.id === teamId)
   }
 
-  return { config, loadConfig, getTeam }
+  return { config, configLoading, configError, loadConfig, getTeam }
 }

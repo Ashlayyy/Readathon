@@ -27,7 +27,7 @@ const prompts = computed(() => {
 
 <template>
   <main v-if="config" class="page">
-    <h1 class="page-title">Prompts</h1>
+    <h1 class="page-title">{{ config.copy.promptsPageTitle }}</h1>
     <p class="page-lead">{{ t(config.copy.promptsLead) }}</p>
 
     <div class="toolbar">
@@ -41,6 +41,7 @@ const prompts = computed(() => {
     <div class="grid">
       <PromptCard v-for="p in prompts" :key="p.id" :prompt="p" />
     </div>
+    <p v-if="prompts.length === 0" class="empty-search">{{ config.copy.promptsEmpty }}</p>
   </main>
 </template>
 
@@ -84,6 +85,12 @@ const prompts = computed(() => {
 .grid {
   display: grid;
   gap: 1rem;
+}
+
+.empty-search {
+  text-align: center;
+  color: var(--realm-text-muted);
+  padding: 2rem 1rem;
 }
 
 @media (min-width: 768px) {

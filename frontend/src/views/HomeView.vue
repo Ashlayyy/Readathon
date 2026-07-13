@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api, type TeamStanding } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
@@ -8,14 +8,37 @@ import { useCopy } from '../composables/useCopy'
 import StandingsPanel from '../components/StandingsPanel.vue'
 
 const { config, loadConfig } = useConfig()
-const { user } = useAuth()
+const { user, fetchUser } = useAuth()
 const { t } = useCopy()
 const standings = ref<TeamStanding[] | null>(null)
 const standingsSvg = ref<string | null>(null)
 const publishedAt = ref<string | null>(null)
 
+const canSubmit = computed(() => user.value?.status === 'assigned')
+
+const submitBannerTitle = computed(
+  () =>
+    (config.value?.copy.homeSubmitBanner as { title?: string } | undefined)?.title ??
+    'Finished a book?',
+)
+
+const submitBannerBody = computed(
+  () =>
+    (config.value?.copy.homeSubmitBanner as { body?: string } | undefined)?.body ??
+    'Log it here to add XP for your realm or sabotage a rival.',
+)
+
+const submitQuickTitle = computed(
+  () => String(config.value?.copy.homeQuickLinks?.submitTitle ?? 'Submit a book'),
+)
+
+const submitQuickDescription = computed(
+  () =>
+    String(config.value?.copy.homeQuickLinks?.submitDescription ?? 'Log your read and claim prompts.'),
+)
+
 onMounted(async () => {
-  await loadConfig()
+  await Promise.all([loadConfig(), fetchUser()])
   try {
     const data = await api<{
       published: boolean
@@ -43,10 +66,13 @@ onMounted(async () => {
       <p class="schedule">{{ config.event.month }}</p>
       <div class="hero-actions">
         <RouterLink v-if="!user" to="/login" class="btn btn-primary">{{ config.copy.enterCta }}</RouterLink>
-        <RouterLink v-else-if="user.status === 'assigned'" to="/submit" class="btn btn-primary">
+        <RouterLink v-else-if="canSubmit" to="/submit" class="btn btn-primary">
           {{ config.copy.submitCta }}
         </RouterLink>
-        <RouterLink v-else to="/profile" class="btn btn-primary">{{ config.copy.profileBooksTab }}</RouterLink>
+        <template v-else>
+          <p class="hero-pending">{{ config.copy.pendingBanner }}</p>
+          <RouterLink to="/profile" class="btn btn-primary">{{ config.copy.profileBooksTab }}</RouterLink>
+        </template>
         <RouterLink to="/how-it-works" class="btn btn-secondary">{{ config.copy.howItWorksCta }}</RouterLink>
       </div>
     </section>
@@ -64,7 +90,19 @@ onMounted(async () => {
       :published-at="publishedAt"
     />
 
-    <section class="quick-links">
+    <section v-if="canSubmit" class="submit-banner card">
+      <div>
+        <h2>{{ submitBannerTitle }}</h2>
+        <p>{{ submitBannerBody }}</p>
+      </div>
+      <RouterLink to="/submit" class="btn btn-primary">{{ config.copy.submitCta }}</RouterLink>
+    </section>
+
+    <section class="quick-links" :class="{ 'has-submit': canSubmit }">
+      <RouterLink v-if="canSubmit" to="/submit" class="link-card link-card-featured card">
+        <h3>{{ submitQuickTitle }}</h3>
+        <p>{{ submitQuickDescription }}</p>
+      </RouterLink>
       <RouterLink to="/teams" class="link-card card">
         <h3>{{ t(config.copy.homeQuickLinks.teamsTitle) }}</h3>
         <p>{{ config.copy.homeQuickLinks.teamsDescription }}</p>
@@ -123,6 +161,54 @@ onMounted(async () => {
   gap: 1rem;
   justify-content: center;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.hero-pending {
+  width: 100%;
+  max-width: 28rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  background: rgba(212, 99, 74, 0.1);
+  border: 1px solid var(--realm-border);
+  color: var(--realm-text-muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.submit-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  margin-bottom: 2rem;
+  padding: 1.25rem 1.5rem;
+  border-color: color-mix(in srgb, var(--realm-accent) 40%, var(--realm-border));
+  background: linear-gradient(
+    135deg,
+    var(--realm-surface) 0%,
+    color-mix(in srgb, var(--realm-accent) 8%, var(--realm-surface)) 100%
+  );
+}
+
+.submit-banner h2 {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--realm-text);
+}
+
+.submit-banner p {
+  margin: 0;
+  color: var(--realm-text-muted);
+  font-size: 0.95rem;
+  max-width: 36rem;
+}
+
+.submit-banner .btn {
+  flex-shrink: 0;
 }
 
 .lore h2 {
@@ -155,6 +241,16 @@ onMounted(async () => {
   .quick-links {
     grid-template-columns: repeat(3, 1fr);
   }
+
+  .quick-links.has-submit {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .quick-links.has-submit {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .link-card {
@@ -164,6 +260,19 @@ onMounted(async () => {
 .link-card:hover {
   border-color: var(--realm-accent);
   transform: translateY(-2px);
+}
+
+.link-card-featured {
+  border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
+  background: linear-gradient(
+    135deg,
+    var(--realm-surface) 0%,
+    color-mix(in srgb, var(--realm-accent) 10%, var(--realm-surface)) 100%
+  );
+}
+
+.link-card-featured h3 {
+  color: var(--realm-accent-glow);
 }
 
 .link-card h3 {
@@ -193,6 +302,15 @@ onMounted(async () => {
   .tagline {
     font-size: 1rem;
     padding: 0 0.5rem;
+  }
+
+  .submit-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .submit-banner .btn {
+    width: 100%;
   }
 }
 </style>
