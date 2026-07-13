@@ -84,12 +84,19 @@ adminRoutes.get('/settings', (c) => {
 })
 
 adminRoutes.patch('/settings', async (c) => {
-  const body = await c.req.json<{ showTeamRosters?: boolean; discordWebhookUrl?: string }>()
+  const body = await c.req.json<{
+    showTeamRosters?: boolean
+    discordWebhookUrl?: string
+    discordRoleId?: string
+  }>()
   try {
     const settings = await updateSiteSettings(body)
     return c.json({ settings })
   } catch (e) {
     if (e instanceof Error && e.message === 'Invalid Discord webhook URL') {
+      return c.json({ error: e.message }, 400)
+    }
+    if (e instanceof Error && e.message === 'Invalid Discord role ID') {
       return c.json({ error: e.message }, 400)
     }
     throw e

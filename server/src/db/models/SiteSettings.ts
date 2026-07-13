@@ -4,6 +4,7 @@ const siteSettingsSchema = new Schema(
   {
     showTeamRosters: { type: Boolean, default: false },
     discordWebhookUrl: { type: String, default: '' },
+    discordRoleId: { type: String, default: '' },
   },
   { timestamps: true },
 )

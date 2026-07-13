@@ -93,6 +93,7 @@ export type AdminCopyBlock = Record<string, string | Record<string, string>>
 export type AdminSiteSettings = {
   showTeamRosters: boolean
   discordWebhookUrl: string
+  discordRoleId: string
 }
 
 export type RealmathonConfig = {
