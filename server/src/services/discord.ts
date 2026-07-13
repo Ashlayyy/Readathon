@@ -1,4 +1,5 @@
 import { getDiscordWebhookUrl } from './siteSettings.js'
+import { svgToPng } from './svgToPng.js'
 
 function weekNumberLabel(weekKey: string): string {
   const match = weekKey.match(/W(\d+)$/i)
@@ -14,11 +15,14 @@ export async function notifyDiscordStandingsPublished(
   if (!webhookUrl) return { sent: false }
 
   const content = weekNumberLabel(weekKey)
+  const filename = `standings-${weekKey.toLowerCase()}.png`
 
   try {
+    const png = svgToPng(svg)
+
     const form = new FormData()
     form.append('payload_json', JSON.stringify({ content }))
-    form.append('files[0]', new Blob([svg], { type: 'image/svg+xml' }), 'standings.svg')
+    form.append('files[0]', new Blob([new Uint8Array(png)], { type: 'image/png' }), filename)
 
     const res = await fetch(webhookUrl, {
       method: 'POST',

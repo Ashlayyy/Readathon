@@ -194,7 +194,7 @@
 				"liveTitle": "Live Standings",
 				"loading": "Loading standings…",
 				"discordTitle": "Discord notifications",
-				"discordLead": "When standings are published, the standings SVG is posted to this webhook with the week number. Leave blank to disable. Create a webhook in your Discord channel settings.",
+				"discordLead": "When standings are published, a PNG of the leaderboard is posted to this webhook with the week number. Leave blank to disable. Create a webhook in your Discord channel settings.",
 				"webhookLabel": "Webhook URL",
 				"webhookPlaceholder": "https://discord.com/api/webhooks/…",
 				"saveWebhook": "Save webhook",

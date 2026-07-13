@@ -183,6 +183,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 1rem 1.5rem;
+  margin-top: 2rem;
   margin-bottom: 2rem;
   padding: 1.25rem 1.5rem;
   border-color: color-mix(in srgb, var(--realm-accent) 40%, var(--realm-border));
@@ -227,6 +228,7 @@ onMounted(async () => {
   font-style: italic;
   opacity: 0.85;
   margin-top: 1rem;
+  margin-bottom: 0;
   padding-top: 1rem;
   border-top: 1px solid var(--realm-border);
 }
