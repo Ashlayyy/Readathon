@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { api, type TeamStanding } from '../lib/api'
+import { api, type StandingsBreakdown, type TeamStanding } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 import StandingsPanel from '../components/StandingsPanel.vue'
+import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue'
 
 const { config, loadConfig } = useConfig()
 const { user, fetchUser } = useAuth()
 const { t } = useCopy()
 const standings = ref<TeamStanding[] | null>(null)
 const standingsSvg = ref<string | null>(null)
+const breakdown = ref<StandingsBreakdown | null>(null)
+const breakdownSvg = ref<string | null>(null)
 const publishedAt = ref<string | null>(null)
 
 const canSubmit = computed(() => user.value?.status === 'assigned')
@@ -44,11 +47,15 @@ onMounted(async () => {
       published: boolean
       standings?: TeamStanding[]
       svg?: string
+      breakdown?: StandingsBreakdown | null
+      breakdownSvg?: string | null
       publishedAt?: string
     }>('/standings')
     if (data.published) {
       standings.value = data.standings ?? null
       standingsSvg.value = data.svg ?? null
+      breakdown.value = data.breakdown ?? null
+      breakdownSvg.value = data.breakdownSvg ?? null
       publishedAt.value = data.publishedAt ?? null
     }
   } catch {
@@ -83,12 +90,25 @@ onMounted(async () => {
       <p class="note">{{ config.event.characterCreationNote }}</p>
     </section>
 
-    <StandingsPanel
-      v-if="standings"
-      :standings="standings"
-      :svg="standingsSvg"
-      :published-at="publishedAt"
-    />
+    <section v-if="standings" class="home-standings">
+      <details class="collapse" open>
+        <summary class="collapse-summary">Latest standings</summary>
+        <StandingsPanel
+          :standings="standings"
+          :svg="standingsSvg"
+          :published-at="publishedAt"
+        />
+      </details>
+
+      <details v-if="breakdown" class="collapse">
+        <summary class="collapse-summary">Score breakdown</summary>
+        <StandingsBreakdownPanel
+          :breakdown="breakdown"
+          :breakdown-svg="breakdownSvg"
+          title="Score breakdown"
+        />
+      </details>
+    </section>
 
     <section v-if="canSubmit" class="submit-banner card">
       <div>
@@ -120,6 +140,48 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.home-standings {
+  margin-top: 1.5rem;
+}
+
+.collapse {
+  margin-bottom: 0.75rem;
+}
+
+.collapse-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--realm-border);
+  background: var(--realm-surface);
+  color: var(--realm-text);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.collapse-summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapse-summary::after {
+  content: '▾';
+  color: var(--realm-text-muted);
+  font-weight: 700;
+}
+
+details[open] > .collapse-summary::after {
+  content: '▴';
+}
+
+.collapse :deep(.card) {
+  margin-top: 0.75rem;
+}
+
 .hero {
   text-align: center;
   padding: 2rem 0 3rem;
