@@ -41,5 +41,9 @@ describe('svgToPng', () => {
     assert.ok(Buffer.isBuffer(png))
     assert.ok(isPngBuffer(png))
     assert.ok(png.length > 1000)
+
+    const svgEmpty = svg.replace(/<text[^>]*>[\s\S]*?<\/text>/g, '')
+    const pngEmpty = svgToPng(svgEmpty)
+    assert.ok(png.length > pngEmpty.length + 500, 'PNG with text should be substantially larger')
   })
 })

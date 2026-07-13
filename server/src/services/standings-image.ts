@@ -1,4 +1,5 @@
 import { getStaticConfig } from '../config.js'
+import { SVG_FONT_SANS } from '../lib/svgFonts.js'
 import type { TeamStanding } from './scoring.js'
 
 export function getStandingsImageTitle(weekLabel: string): string {
@@ -44,11 +45,11 @@ export function generateStandingsSvg(standings: TeamStanding[], weekLabel: strin
       return `
     <g>
       <rect x="40" y="${y}" width="720" height="60" rx="8" fill="${rowFill}" stroke="${team.color}" stroke-width="${strokeWidth}"/>
-      <text x="70" y="${y + 38}" fill="${team.color}" font-size="28" font-family="Georgia, serif">${team.icon}</text>
-      <text x="110" y="${y + 28}" fill="#f0ebe3" font-size="18" font-weight="bold" font-family="system-ui, sans-serif">${rankLabel}</text>
-      <text x="110" y="${y + 48}" fill="#a89f94" font-size="13" font-family="system-ui, sans-serif">${detailLine}</text>
-      <text x="680" y="${y + 38}" fill="${team.color}" font-size="22" font-weight="bold" text-anchor="end" font-family="system-ui, sans-serif">${team.totalTeamXp}</text>
-      <text x="680" y="${y + 52}" fill="#a89f94" font-size="11" text-anchor="end" font-family="system-ui, sans-serif">team XP</text>
+      <text x="70" y="${y + 38}" fill="${team.color}" font-size="28" font-family="${SVG_FONT_SANS}">${team.icon}</text>
+      <text x="110" y="${y + 28}" fill="#f0ebe3" font-size="18" font-weight="bold" font-family="${SVG_FONT_SANS}">${rankLabel}</text>
+      <text x="110" y="${y + 48}" fill="#a89f94" font-size="13" font-family="${SVG_FONT_SANS}">${detailLine}</text>
+      <text x="680" y="${y + 38}" fill="${team.color}" font-size="22" font-weight="bold" text-anchor="end" font-family="${SVG_FONT_SANS}">${team.totalTeamXp}</text>
+      <text x="680" y="${y + 52}" fill="#a89f94" font-size="11" text-anchor="end" font-family="${SVG_FONT_SANS}">team XP</text>
     </g>`
     })
     .join('')
@@ -56,8 +57,8 @@ export function generateStandingsSvg(standings: TeamStanding[], weekLabel: strin
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="#0f0e14"/>
-  <text x="400" y="45" fill="#c45c3e" font-size="26" font-weight="bold" text-anchor="middle" font-family="Georgia, serif">${escapeXml(resolvedTitle)}</text>
-  <text x="400" y="72" fill="#a89f94" font-size="13" text-anchor="middle" font-family="system-ui, sans-serif">${leaderSubtitle(standings)}</text>
+  <text x="400" y="45" fill="#c45c3e" font-size="26" font-weight="bold" text-anchor="middle" font-family="${SVG_FONT_SANS}">${escapeXml(resolvedTitle)}</text>
+  <text x="400" y="72" fill="#a89f94" font-size="13" text-anchor="middle" font-family="${SVG_FONT_SANS}">${leaderSubtitle(standings)}</text>
   ${rows}
 </svg>`
 }

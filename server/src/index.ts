@@ -17,6 +17,7 @@ import { authRoutes } from './routes/auth.js'
 import { profileRoutes } from './routes/profile.js'
 import { questionRoutes } from './routes/questions.js'
 import { submissionRoutes } from './routes/submissions.js'
+import { APP_VERSION } from './lib/version.js'
 
 loadEnv({ path: join(dirname(fileURLToPath(import.meta.url)), '../.env') })
 
@@ -34,7 +35,7 @@ app.use(
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, keyPrefix: 'write' })
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyPrefix: 'admin' })
 
-app.get('/api/health', (c) => c.json({ status: 'ok' }))
+app.get('/api/health', (c) => c.json({ status: 'ok', version: APP_VERSION }))
 
 app.get('/api/config', (c) => c.json(getConfig()))
 
