@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { api, type TeamStanding } from '../lib/api'
+import { api, type StandingsBreakdown, type TeamStanding } from '../lib/api'
 import { useConfig } from '../composables/useConfig'
 import StandingsPanel from '../components/StandingsPanel.vue'
+import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue'
 
 const { config, loadConfig } = useConfig()
 const standings = ref<TeamStanding[] | null>(null)
 const svg = ref<string | null>(null)
+const breakdown = ref<StandingsBreakdown | null>(null)
+const breakdownSvg = ref<string | null>(null)
 const publishedAt = ref<string | null>(null)
 const published = ref(false)
 const loading = ref(true)
@@ -19,11 +22,15 @@ onMounted(async () => {
       published: boolean
       standings?: TeamStanding[]
       svg?: string
+      breakdown?: StandingsBreakdown | null
+      breakdownSvg?: string | null
       publishedAt?: string
     }>('/standings')
     published.value = data.published
     standings.value = data.standings ?? null
     svg.value = data.svg ?? null
+    breakdown.value = data.breakdown ?? null
+    breakdownSvg.value = data.breakdownSvg ?? null
     publishedAt.value = data.publishedAt ?? null
   } catch {
     error.value = String(config.value?.copy.standingsLoadError ?? "Couldn't load standings.")
@@ -44,11 +51,18 @@ onMounted(async () => {
     <div v-else-if="!published" class="alert alert-info card">
       <p>{{ config.copy.standingsUnpublished }}</p>
     </div>
-    <StandingsPanel
-      v-else-if="standings"
-      :standings="standings"
-      :svg="svg"
-      :published-at="publishedAt"
-    />
+    <template v-else-if="standings">
+      <StandingsPanel
+        :standings="standings"
+        :svg="svg"
+        :published-at="publishedAt"
+      />
+      <StandingsBreakdownPanel
+        v-if="breakdown"
+        :breakdown="breakdown"
+        :breakdown-svg="breakdownSvg"
+        :title="String(config.copy.standingsBreakdownTitle ?? 'Score breakdown')"
+      />
+    </template>
   </main>
 </template>

@@ -10,9 +10,11 @@ import {
   type AdminUser,
   type PublishedWeek,
   type StandingsHistoryEntry,
+  type StandingsBreakdown,
   type TeamStanding,
 } from '../lib/api'
 import StandingsPanel from '../components/StandingsPanel.vue'
+import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue'
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
@@ -33,6 +35,8 @@ const questions = ref<AdminQuestion[]>([])
 const unreadQuestions = ref(0)
 const standings = ref<TeamStanding[] | null>(null)
 const standingsSvg = ref<string | null>(null)
+const standingsBreakdown = ref<StandingsBreakdown | null>(null)
+const standingsBreakdownSvg = ref<string | null>(null)
 const activeWeeks = ref<PublishedWeek[]>([])
 const standingsHistory = ref<StandingsHistoryEntry[]>([])
 const answerModal = ref<AdminQuestion | null>(null)
@@ -352,6 +356,8 @@ async function loadStandings() {
     const data = await api<AdminStandingsData>('/admin/standings/current')
     standings.value = data.current.standings
     standingsSvg.value = data.current.svg
+    standingsBreakdown.value = data.current.breakdown
+    standingsBreakdownSvg.value = data.current.breakdownSvg
     activeWeeks.value = data.activeWeeks
     standingsHistory.value = data.history
   } finally {
@@ -692,6 +698,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
         :standings="standings"
         :svg="standingsSvg"
         :title="section('standings').liveTitle"
+      />
+
+      <StandingsBreakdownPanel
+        v-if="standingsBreakdown && !loading"
+        :breakdown="standingsBreakdown"
+        :breakdown-svg="standingsBreakdownSvg"
+        :title="section('standings').breakdownTitle"
       />
 
       <section class="card admin-section history-section">

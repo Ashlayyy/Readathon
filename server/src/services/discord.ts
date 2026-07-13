@@ -9,20 +9,35 @@ function weekNumberLabel(weekKey: string): string {
 
 export async function notifyDiscordStandingsPublished(
   weekKey: string,
-  svg: string,
+  standingsSvg: string,
+  breakdownSvg?: string,
 ): Promise<{ sent: boolean }> {
   const webhookUrl = getDiscordWebhookUrl()
   if (!webhookUrl) return { sent: false }
 
-  const content = weekNumberLabel(weekKey)
-  const filename = `standings-${weekKey.toLowerCase()}.png`
+  const content = `Standings for **${weekNumberLabel(weekKey)}**!`
+  const standingsFilename = `standings-${weekKey.toLowerCase()}.png`
+  const breakdownFilename = `standings-breakdown-${weekKey.toLowerCase()}.png`
 
   try {
-    const png = svgToPng(svg)
-
     const form = new FormData()
     form.append('payload_json', JSON.stringify({ content }))
-    form.append('files[0]', new Blob([new Uint8Array(png)], { type: 'image/png' }), filename)
+
+    const standingsPng = svgToPng(standingsSvg)
+    form.append(
+      'files[0]',
+      new Blob([new Uint8Array(standingsPng)], { type: 'image/png' }),
+      standingsFilename,
+    )
+
+    if (breakdownSvg?.trim()) {
+      const breakdownPng = svgToPng(breakdownSvg)
+      form.append(
+        'files[1]',
+        new Blob([new Uint8Array(breakdownPng)], { type: 'image/png' }),
+        breakdownFilename,
+      )
+    }
 
     const res = await fetch(webhookUrl, {
       method: 'POST',

@@ -56,6 +56,7 @@
 		"faqModalCancel": "Cancel",
 		"faqModalDone": "Done",
 		"standingsPageTitle": "Standings",
+		"standingsBreakdownTitle": "Score breakdown",
 		"standingsUnpublished": "Standings haven't been published yet. Check back once the hosts release them!",
 		"standingsLoadError": "Couldn't load standings. Please try again in a moment.",
 		"faqPageTitle": "FAQ",
@@ -84,6 +85,9 @@
 		"submitPageBonusPreview": "Page bonus for your team:",
 		"submitTypeTitle": "Add XP or sabotage?",
 		"submitTypeHint": "Positive prompts help your team. Negative prompts attack another realm.",
+		"submitStrategyLabel": "Strategy tip",
+		"submitStrategyUseAdd": "Use Add XP",
+		"submitStrategyUseAttack": "Attack {team}",
 		"submitAddXp": "Add XP",
 		"submitAddXpHint": "Help your team",
 		"submitSabotage": "Sabotage",
@@ -192,9 +196,11 @@
 				"publishedAt": "Published",
 				"unpublish": "Unpublish",
 				"liveTitle": "Live Standings",
+				"breakdownTitle": "Score breakdown",
+				"breakdownLead": "Who gained XP and who dealt sabotage for each realm.",
 				"loading": "Loading standings…",
 				"discordTitle": "Discord notifications",
-				"discordLead": "When standings are published, a PNG of the leaderboard is posted to this webhook with the week number. Leave blank to disable. Create a webhook in your Discord channel settings.",
+				"discordLead": "When standings are published, PNGs of the leaderboard and score breakdown are posted to this webhook with the week number. Leave blank to disable. Create a webhook in your Discord channel settings.",
 				"webhookLabel": "Webhook URL",
 				"webhookPlaceholder": "https://discord.com/api/webhooks/…",
 				"saveWebhook": "Save webhook",
@@ -377,7 +383,7 @@
 			"Bonus prompts layer on top (team prompts, page count, competition/trials)",
 			"Page-count bonus always goes to your team",
 			"One book = add XP or sabotage — never both",
-			"Standings use average XP per member for fairness"
+			"Standings rank by avg gain + attack per member (400 team XP pool is separate)"
 		],
 		"homeSubmitBanner": {
 			"title": "Finished a book?",
@@ -736,6 +742,7 @@
 	],
 	"scoringRules": {
 		"maxPromptsPerBook": 5,
+		"startingTeamXp": 400,
 		"promptsMustBeSameSign": true,
 		"pageBonusAlwaysPositiveToOwnTeam": true,
 		"standingsUseAveragePerMember": true,

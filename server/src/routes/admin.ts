@@ -24,6 +24,8 @@ import {
   type SubmissionInput,
 } from '../services/scoring.js'
 import { generateStandingsSvg } from '../services/standings-image.js'
+import { calculateStandingsBreakdown } from '../services/standings-breakdown.js'
+import { generateBreakdownSvg } from '../services/standings-breakdown-image.js'
 import { maybeNotifyQuestionAnswered, notifyStandingsPublished } from '../services/notifications.js'
 import { notifyDiscordStandingsPublished } from '../services/discord.js'
 import {
@@ -202,13 +204,16 @@ function svgAttachment(c: Context, filename: string, svg: string) {
 
 adminRoutes.get('/standings/current', async (c) => {
   const standings = await calculateStandings()
-  const svg = generateStandingsSvg(standings)
+  const breakdown = await calculateStandingsBreakdown()
+  const { weekLabel } = getWeekInfo()
+  const svg = generateStandingsSvg(standings, weekLabel)
+  const breakdownSvg = generateBreakdownSvg(breakdown, weekLabel)
   const active = await PublishedStandings.findOne({ isActive: true }).sort({ createdAt: -1 })
   const activeWeeks = await PublishedStandings.find({ isActive: true }).sort({ createdAt: -1 })
   const history = await StandingsEvent.find().sort({ createdAt: -1 }).limit(100)
 
   return c.json({
-    current: { standings, svg },
+    current: { standings, svg, breakdown, breakdownSvg },
     activePublication: active
       ? {
           id: active._id.toString(),
@@ -237,8 +242,8 @@ adminRoutes.get('/standings/current', async (c) => {
 
 adminRoutes.get('/standings/current.svg', async (c) => {
   const standings = await calculateStandings()
-  const { weekKey } = getWeekInfo()
-  const svg = generateStandingsSvg(standings)
+  const { weekKey, weekLabel } = getWeekInfo()
+  const svg = generateStandingsSvg(standings, weekLabel)
   return svgAttachment(c, `standings-${weekKey}.svg`, svg)
 })
 
@@ -257,8 +262,10 @@ adminRoutes.post('/standings/publish', async (c) => {
   const { weekKey, weekLabel } = getWeekInfo()
 
   const standings = await calculateStandings()
-  const eventName = getStaticConfig().event.name as string
-  const svg = generateStandingsSvg(standings, `${eventName} — ${weekLabel}`)
+  const breakdown = await calculateStandingsBreakdown()
+  const svg = generateStandingsSvg(standings, weekLabel)
+  const breakdownSvg = generateBreakdownSvg(breakdown, weekLabel)
+  const breakdownJson = JSON.stringify(breakdown)
 
   await PublishedStandings.updateMany({ isActive: true }, { isActive: false, unpublishedAt: new Date() })
 
@@ -267,6 +274,8 @@ adminRoutes.post('/standings/publish', async (c) => {
     weekLabel,
     standingsJson: JSON.stringify(standings),
     svgData: svg,
+    breakdownJson,
+    breakdownSvgData: breakdownSvg,
     isActive: true,
   })
 
@@ -276,6 +285,8 @@ adminRoutes.post('/standings/publish', async (c) => {
     weekLabel,
     standingsJson: JSON.stringify(standings),
     svgData: svg,
+    breakdownJson,
+    breakdownSvgData: breakdownSvg,
     adminName: admin.displayName,
     adminEmail: admin.email,
     publicationId: doc._id,
@@ -286,7 +297,7 @@ adminRoutes.post('/standings/publish', async (c) => {
     return { sent: 0, skipped: 0 }
   })
 
-  const discordResult = await notifyDiscordStandingsPublished(weekKey, svg).catch((e) => {
+  const discordResult = await notifyDiscordStandingsPublished(weekKey, svg, breakdownSvg).catch((e) => {
     console.error('[discord] Standings webhook failed:', e)
     return { sent: false }
   })

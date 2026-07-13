@@ -180,8 +180,10 @@ export type TeamStanding = {
   teamName: string
   memberCount: number
   xpGained: number
+  xpDealt: number
   xpLost: number
   netXp: number
+  totalTeamXp: number
   averagePerMember: number
   color: string
   icon: string
@@ -203,6 +205,7 @@ export async function calculateStandings(): Promise<TeamStanding[]> {
 
   const gained = new Map<string, number>()
   const lost = new Map<string, number>()
+  const dealt = new Map<string, number>()
 
   const allSubs = await Submission.find()
   for (const sub of allSubs) {
@@ -216,6 +219,7 @@ export async function calculateStandings(): Promise<TeamStanding[]> {
     } else if (sub.submissionType === 'sabotage' && sub.targetTeamId) {
       const attackPoints = Math.abs(promptAndBonus)
       lost.set(sub.targetTeamId, (lost.get(sub.targetTeamId) ?? 0) + attackPoints)
+      dealt.set(teamId, (dealt.get(teamId) ?? 0) + attackPoints)
       gained.set(teamId, (gained.get(teamId) ?? 0) + sub.pageBonus)
     }
   }
@@ -224,16 +228,24 @@ export async function calculateStandings(): Promise<TeamStanding[]> {
     .map((team) => {
       const members = memberCounts.get(team.id) ?? 0
       const xpGained = gained.get(team.id) ?? 0
+      const xpDealt = dealt.get(team.id) ?? 0
       const xpLost = lost.get(team.id) ?? 0
       const netXp = xpGained - xpLost
+      const startingTeamXp =
+        (config.scoringRules as { startingTeamXp?: number }).startingTeamXp ?? 0
+      const totalTeamXp = startingTeamXp + netXp
+      const activityPerMember = xpGained + xpDealt
       return {
         teamId: team.id,
         teamName: team.name,
         memberCount: members,
         xpGained,
+        xpDealt,
         xpLost,
         netXp,
-        averagePerMember: members > 0 ? Math.round((netXp / members) * 10) / 10 : 0,
+        totalTeamXp,
+        averagePerMember:
+          members > 0 ? Math.round((activityPerMember / members) * 10) / 10 : 0,
         color: team.color ?? '#888',
         icon: team.icon ?? '◆',
       }

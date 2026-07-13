@@ -7,6 +7,7 @@ import {
   validateSubmission,
   type SubmissionInput,
 } from '../services/scoring.js'
+import { getSubmitStrategy } from '../services/submit-strategy.js'
 
 function optionalDate(value: string | null | undefined): string | null {
   const trimmed = value?.trim()
@@ -19,6 +20,24 @@ submissionRoutes.get('/mine', async (c) => {
   const user = requireAuth(await getSessionUser(c))
   const rows = await Submission.find({ userId: user._id }).sort({ createdAt: -1 })
   return c.json({ submissions: rows.map(submissionToPublic) })
+})
+
+submissionRoutes.get('/strategy', async (c) => {
+  const user = requireAuth(await getSessionUser(c))
+  if (user.status !== 'assigned' || !user.teamId) {
+    return c.json({
+      standingsAvailable: false,
+      yourRank: null,
+      yourTeamId: user.teamId,
+      yourTeamName: null,
+      suggestion: null,
+      targetTeamId: null,
+      targetTeamName: null,
+      reason: 'Get assigned to a realm first — then we can suggest gain vs attack.',
+    })
+  }
+  const strategy = await getSubmitStrategy(user.teamId)
+  return c.json(strategy)
 })
 
 submissionRoutes.post('/', async (c) => {

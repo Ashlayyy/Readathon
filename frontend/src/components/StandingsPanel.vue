@@ -11,12 +11,15 @@ defineProps<{
 
 <template>
   <section class="standings-panel card">
-    <header>
+    <header v-if="!svg">
       <h2>{{ title ?? 'Realm Standings' }}</h2>
       <p v-if="publishedAt" class="published-at">
         Published {{ new Date(publishedAt).toLocaleString() }}
       </p>
     </header>
+    <p v-else-if="publishedAt" class="published-at published-at-only">
+      Published {{ new Date(publishedAt).toLocaleString() }}
+    </p>
 
     <div v-if="svg" class="svg-wrap" v-html="svg" />
 
@@ -25,17 +28,18 @@ defineProps<{
         v-for="(team, i) in standings"
         :key="team.teamId"
         class="standing-row"
+        :class="{ leader: i === 0 }"
         :style="{ '--team-color': team.color }"
       >
         <span class="rank">#{{ i + 1 }}</span>
         <span class="icon">{{ team.icon }}</span>
         <div class="info">
-          <strong>{{ team.teamName }}</strong>
-          <span>{{ team.memberCount }} members · +{{ team.xpGained }} / −{{ team.xpLost }}</span>
+          <strong>{{ team.teamName }}<span v-if="i === 0" class="leader-mark"> ★</span></strong>
+          <span>{{ team.memberCount }} members · {{ team.averagePerMember }} avg/person · +{{ team.xpGained ?? 0 }} gain · +{{ team.xpDealt ?? 0 }} attack</span>
         </div>
         <div class="score">
-          <strong>{{ team.averagePerMember }}</strong>
-          <small>avg/person</small>
+          <strong>{{ team.totalTeamXp ?? 400 }}</strong>
+          <small>team XP</small>
         </div>
       </li>
     </ol>
@@ -56,6 +60,10 @@ h2 {
   color: var(--realm-text-muted);
   font-size: 0.85rem;
   margin-top: 0.25rem;
+}
+
+.published-at-only {
+  margin: 0 0 1rem;
 }
 
 .svg-wrap {
@@ -88,6 +96,11 @@ h2 {
   border-left: 3px solid var(--team-color);
 }
 
+.standing-row.leader {
+  border-left-width: 4px;
+  background: color-mix(in srgb, var(--team-color) 6%, var(--realm-bg));
+}
+
 .rank {
   color: var(--realm-text-muted);
   font-weight: 700;
@@ -110,9 +123,17 @@ h2 {
   color: var(--realm-text);
 }
 
+.leader-mark {
+  color: var(--realm-accent-glow);
+}
+
 .info span {
   font-size: 0.8rem;
   color: var(--realm-text-muted);
+}
+
+.avg-line {
+  font-size: 0.75rem !important;
 }
 
 .score {
