@@ -379,7 +379,13 @@
 			"One book = add XP or sabotage — never both",
 			"Standings use average XP per member for fairness"
 		],
+		"homeSubmitBanner": {
+			"title": "Finished a book?",
+			"body": "Log it here to add XP for your realm or sabotage a rival."
+		},
 		"homeQuickLinks": {
+			"submitTitle": "Submit a book",
+			"submitDescription": "Log your read and claim prompts.",
 			"teamsTitle": "{teamsLabel}",
 			"teamsDescription": "Meet the realms and their bonus prompts.",
 			"promptsTitle": "{promptsLabel}",
