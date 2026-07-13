@@ -816,9 +816,9 @@ function reset() {
 
 .step-hint {
   color: var(--realm-text-muted);
-  font-size: 0.9rem;
-  margin-bottom: 1.25rem;
-  line-height: 1.55;
+  font-size: 0.82rem;
+  margin-bottom: 0.85rem;
+  line-height: 1.45;
 }
 
 .step-header-row {
@@ -945,8 +945,8 @@ function reset() {
 
 /* Strategy hint */
 .strategy-hint {
-  margin-bottom: 1.25rem;
-  padding: 1rem 1.15rem;
+  margin-bottom: 0.85rem;
+  padding: 0.7rem 0.85rem;
   border-color: color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
   background: linear-gradient(
     135deg,
@@ -956,8 +956,8 @@ function reset() {
 }
 
 .strategy-label {
-  margin: 0 0 0.35rem;
-  font-size: 0.75rem;
+  margin: 0 0 0.25rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -965,9 +965,10 @@ function reset() {
 }
 
 .strategy-reason {
-  margin: 0 0 0.75rem;
-  color: var(--realm-text);
-  line-height: 1.5;
+  margin: 0 0 0.6rem;
+  color: var(--realm-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
 /* Add / sabotage */
@@ -1045,7 +1046,7 @@ function reset() {
 
 @media (min-width: 500px) {
   .target-team-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
   }
 }
 

@@ -11,6 +11,23 @@ defineProps<{
 function memberLabel(count: number) {
   return count === 1 ? '1 member' : `${count} members`
 }
+
+function standingsDetailLine(team: TeamStanding, index: number, standings: TeamStanding[]) {
+  const activity = `+${team.xpGained ?? 0} gain · +${team.xpDealt ?? 0} attack`
+  if (team.memberCount <= 0) return ''
+
+  const members = memberLabel(team.memberCount)
+  if (standings.length < 2) return `${members} · ${activity}`
+
+  const leader = standings[0]!
+  if (index === 0) {
+    const gap = leader.totalTeamXp - standings[1]!.totalTeamXp
+    return `${members} · ${gap} XP ahead · ${activity}`
+  }
+
+  const gap = leader.totalTeamXp - team.totalTeamXp
+  return `${members} · ${gap} XP behind leader · ${activity}`
+}
 </script>
 
 <template>
@@ -39,7 +56,7 @@ function memberLabel(count: number) {
         <span class="icon">{{ team.icon }}</span>
         <div class="info">
           <strong>{{ team.teamName }}<span v-if="i === 0" class="leader-mark"> ★</span></strong>
-          <span v-if="team.memberCount > 0">{{ memberLabel(team.memberCount) }} · {{ team.averagePerMember }} avg/person · +{{ team.xpGained ?? 0 }} gain · +{{ team.xpDealt ?? 0 }} attack</span>
+          <span v-if="team.memberCount > 0">{{ standingsDetailLine(team, i, standings) }}</span>
           <span v-else>No members assigned yet</span>
         </div>
         <div class="score">
