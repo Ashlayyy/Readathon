@@ -13,6 +13,15 @@ export type Prompt = {
   link?: string
 }
 
+export type PromptXpTier = {
+  points: number
+  label: string
+  gainColor: string
+  gainGlow: string
+  attackColor: string
+  attackGlow: string
+}
+
 export type Team = {
   id: string
   name: string
@@ -30,6 +39,7 @@ export type RealmathonConfig = {
   teams: Team[]
   pageCountBonuses: { min: number; max: number | null; points: number; label: string }[]
   globalBonuses: { id: string; label: string; description: string; points: number }[]
+  promptXpTiers?: PromptXpTier[]
   prompts: { positive: Prompt[]; negative: Prompt[] }
   howItWorks: { step: number; title: string; body: string }[]
   scoringRules: Record<string, unknown>

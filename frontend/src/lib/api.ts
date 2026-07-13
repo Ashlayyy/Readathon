@@ -61,6 +61,15 @@ export type RosterTeam = {
   members: RosterMember[]
 }
 
+export type PromptXpTier = {
+  points: number
+  label: string
+  gainColor: string
+  gainGlow: string
+  attackColor: string
+  attackGlow: string
+}
+
 export type Prompt = {
   id: string
   gameName: string
@@ -114,6 +123,7 @@ export type RealmathonConfig = {
   teams: TeamConfig[]
   pageCountBonuses: { min: number; max: number | null; points: number; label: string }[]
   globalBonuses: { id: string; label: string; description: string; points: number }[]
+  promptXpTiers?: PromptXpTier[]
   prompts: { positive: Prompt[]; negative: Prompt[] }
   howItWorks: { step: number; title: string; body: string }[]
   scoringRules: { maxPromptsPerBook: number }
