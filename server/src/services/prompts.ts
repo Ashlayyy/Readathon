@@ -55,12 +55,23 @@ function toPublicGlobalPrompt(p: IPrompt): PublicPrompt {
 }
 
 function mergeTeams(baseTeams: Team[], pool: IPrompt[]): Team[] {
-  return baseTeams.map((team) => ({
-    ...team,
-    bonusPrompts: pool
+  return baseTeams.map((team) => {
+    const fromDb = pool
       .filter((p) => p.kind === 'team_bonus' && p.teamId === team.id)
-      .map((p) => ({ id: p.promptId, label: p.label, points: p.points })),
-  }))
+      .map((p) => ({ id: p.promptId, label: p.label, points: p.points }))
+
+    if (fromDb.length === 0) {
+      return team
+    }
+
+    const dbIds = new Set(fromDb.map((p) => p.id))
+    const fromStatic = team.bonusPrompts.filter((p) => !dbIds.has(p.id))
+
+    return {
+      ...team,
+      bonusPrompts: [...fromDb, ...fromStatic],
+    }
+  })
 }
 
 export function getConfigWithPrompts(publicOnly = true): RealmathonConfig {
