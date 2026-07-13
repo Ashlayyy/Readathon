@@ -19,10 +19,12 @@ import AdminPromptsPanel from '../components/AdminPromptsPanel.vue'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 import { useAdminCopy } from '../composables/useAdminCopy'
+import { useAuth } from '../composables/useAuth'
 
 const { config, loadConfig } = useConfig()
 const { t } = useCopy()
 const { admin, section, msg, confirmMsg } = useAdminCopy()
+const { user: me } = useAuth()
 const users = ref<AdminUser[]>([])
 const pending = ref(0)
 const showTeamRosters = ref(false)
@@ -151,6 +153,23 @@ async function setUserTeam(userId: string, teamId: string) {
     await loadAll()
   } catch (e) {
     showMessage(e instanceof Error ? e.message : msg('teamUpdateFailed'), true)
+  } finally {
+    loading.value = ''
+  }
+}
+
+async function setUserAdmin(userId: string, isAdmin: boolean) {
+  loading.value = `admin-${userId}`
+  showMessage('')
+  try {
+    await api(`/admin/users/${userId}/admin`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isAdmin }),
+    })
+    showMessage('Admin status updated.')
+    await loadAll()
+  } catch (e) {
+    showMessage(e instanceof Error ? e.message : 'Failed to update admin status', true)
   } finally {
     loading.value = ''
   }
@@ -836,7 +855,18 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
                   {{ u.status }}
                 </span>
               </td>
-              <td>{{ u.isAdmin ? '✓' : '—' }}</td>
+              <td>
+                <label class="setting-toggle admin-toggle">
+                  <input
+                    type="checkbox"
+                    :checked="u.isAdmin"
+                    :disabled="loading === `admin-${u.id}` || u.id === me?.id"
+                    @change="setUserAdmin(u.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                  <span>{{ u.isAdmin ? 'Admin' : 'User' }}</span>
+                </label>
+                <small v-if="u.id === me?.id" class="hint">You can't change your own admin.</small>
+              </td>
               <td>
                 <time v-if="u.createdAt">{{ new Date(u.createdAt).toLocaleDateString() }}</time>
                 <span v-else>—</span>

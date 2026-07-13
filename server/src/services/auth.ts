@@ -32,17 +32,8 @@ function getSessionSecret(): string {
   return secret
 }
 
-export function getAdminEmails(): Set<string> {
-  const raw = process.env.ADMIN_EMAILS ?? ''
-  return new Set(raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean))
-}
-
 export function userIsAdmin(user: IUser): boolean {
-  return getAdminEmails().has(user.email.trim().toLowerCase())
-}
-
-function isAdminEmail(email: string): boolean {
-  return getAdminEmails().has(email.trim().toLowerCase())
+  return Boolean(user.isAdmin)
 }
 
 export function getGoogleClient() {
@@ -126,15 +117,6 @@ function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
 }
 
-async function applyAdminStatus(user: UserDoc): Promise<UserDoc> {
-  const shouldBeAdmin = isAdminEmail(user.email)
-  if (user.isAdmin !== shouldBeAdmin) {
-    user.isAdmin = shouldBeAdmin
-    await user.save()
-  }
-  return user
-}
-
 export async function registerWithEmail(displayName: string, email: string): Promise<UserDoc> {
   const trimmedName = displayName.trim()
   const normalizedEmail = email.trim().toLowerCase()
@@ -150,7 +132,7 @@ export async function registerWithEmail(displayName: string, email: string): Pro
   const user = await User.create({
     displayName: trimmedName,
     email: normalizedEmail,
-    isAdmin: isAdminEmail(normalizedEmail),
+    isAdmin: false,
     status: 'pending',
   })
 
@@ -216,7 +198,7 @@ export async function verifyMagicLink(token: string): Promise<UserDoc> {
   record.usedAt = new Date()
   await record.save()
 
-  return applyAdminStatus(user)
+  return user
 }
 
 export async function findOrCreateGoogleUser(
@@ -227,21 +209,21 @@ export async function findOrCreateGoogleUser(
   const normalizedEmail = email.trim().toLowerCase()
 
   const byGoogle = await User.findOne({ googleId })
-  if (byGoogle) return applyAdminStatus(byGoogle)
+  if (byGoogle) return byGoogle
 
   const byEmail = await User.findOne({ email: normalizedEmail })
   if (byEmail) {
     byEmail.googleId = googleId
     if (!byEmail.displayName && displayName) byEmail.displayName = displayName
     await byEmail.save()
-    return applyAdminStatus(byEmail)
+    return byEmail
   }
 
   const user = await User.create({
     displayName: displayName.trim() || normalizedEmail.split('@')[0],
     email: normalizedEmail,
     googleId,
-    isAdmin: isAdminEmail(normalizedEmail),
+    isAdmin: false,
     status: 'pending',
   })
 
