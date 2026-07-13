@@ -25,17 +25,17 @@ async function postWebhookImage(
   webhookUrl: string,
   png: Buffer,
   filename: string,
-  content?: string,
+  content: string,
 ): Promise<boolean> {
   assertDiscordPng(png, filename)
 
-  const payload: Record<string, unknown> = {
-    embeds: [{ image: { url: `attachment://${filename}` } }],
+  const message = content.trim()
+  if (!message) {
+    throw new Error(`[discord] Refusing to post ${filename} with empty message content`)
   }
-  if (content) payload.content = content
 
   const form = new FormData()
-  form.append('payload_json', JSON.stringify(payload))
+  form.append('payload_json', JSON.stringify({ content: message }))
   form.append('files[0]', png, {
     filename,
     contentType: 'image/png',
@@ -106,10 +106,11 @@ export async function notifyDiscordStandingsPublished(
         webhookUrl,
         breakdownPng,
         breakdownFilename,
-        '**Score breakdown**',
+        `**${weekLabel} score breakdown**`,
       )
       if (!breakdownSent) {
         console.error('[discord] Breakdown image webhook failed after standings was sent')
+        return { sent: false }
       }
     }
 
