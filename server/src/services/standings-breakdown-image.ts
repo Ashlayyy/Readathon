@@ -1,4 +1,5 @@
 import { getStaticConfig } from '../config.js'
+import { SVG_FONT_SANS } from '../lib/svgFonts.js'
 import type { StandingsBreakdown, TeamBreakdown } from './standings-breakdown.js'
 
 const width = 800
@@ -45,8 +46,8 @@ export function generateBreakdownSvg(breakdown: StandingsBreakdown, weekLabel: s
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="#0f0e14"/>
-  <text x="400" y="42" fill="#c45c3e" font-size="24" font-weight="bold" text-anchor="middle" font-family="Georgia, serif">${escapeXml(title)}</text>
-  <text x="400" y="68" fill="#a89f94" font-size="12" text-anchor="middle" font-family="system-ui, sans-serif">Gained = add XP for your realm · Dealt = sabotage damage sent</text>
+  <text x="400" y="42" fill="#c45c3e" font-size="24" font-weight="bold" text-anchor="middle" font-family="${SVG_FONT_SANS}">${escapeXml(title)}</text>
+  <text x="400" y="68" fill="#a89f94" font-size="12" text-anchor="middle" font-family="${SVG_FONT_SANS}">Gained = add XP for your realm · Dealt = sabotage damage sent</text>
   ${teamBlocks}
 </svg>`
 }
@@ -57,29 +58,29 @@ function renderTeamBlock(team: TeamBreakdown, startY: number): string {
 
   lines.push(`
   <rect x="32" y="${y}" width="736" height="${teamBlockHeight(team) - 8}" rx="8" fill="#181622" stroke="${team.color}" stroke-width="2"/>
-  <text x="48" y="${y + 24}" fill="${team.color}" font-size="20" font-family="Georgia, serif">${team.icon}</text>
-  <text x="78" y="${y + 24}" fill="#f0ebe3" font-size="16" font-weight="bold" font-family="system-ui, sans-serif">${escapeXml(team.teamName)}</text>`)
+  <text x="48" y="${y + 24}" fill="${team.color}" font-size="20" font-family="${SVG_FONT_SANS}">${team.icon}</text>
+  <text x="78" y="${y + 24}" fill="#f0ebe3" font-size="16" font-weight="bold" font-family="${SVG_FONT_SANS}">${escapeXml(team.teamName)}</text>`)
   y += teamHeaderH
 
   lines.push(`
-  <text x="48" y="${y + 16}" fill="#a89f94" font-size="11" font-weight="bold" font-family="system-ui, sans-serif">Member</text>
-  <text x="420" y="${y + 16}" fill="#a89f94" font-size="11" font-weight="bold" text-anchor="end" font-family="system-ui, sans-serif">Gained</text>
-  <text x="540" y="${y + 16}" fill="#a89f94" font-size="11" font-weight="bold" text-anchor="end" font-family="system-ui, sans-serif">Dealt</text>
-  <text x="720" y="${y + 16}" fill="#a89f94" font-size="11" font-weight="bold" text-anchor="end" font-family="system-ui, sans-serif">Books</text>`)
+  <text x="48" y="${y + 16}" fill="#a89f94" font-size="11" font-weight="bold" font-family="${SVG_FONT_SANS}">Member</text>
+  <text x="420" y="${y + 16}" fill="#a89f94" font-size="11" font-weight="bold" text-anchor="end" font-family="${SVG_FONT_SANS}">Gained</text>
+  <text x="540" y="${y + 16}" fill="#a89f94" font-size="11" font-weight="bold" text-anchor="end" font-family="${SVG_FONT_SANS}">Dealt</text>
+  <text x="720" y="${y + 16}" fill="#a89f94" font-size="11" font-weight="bold" text-anchor="end" font-family="${SVG_FONT_SANS}">Books</text>`)
   y += tableHeaderH
 
   if (team.members.length === 0) {
     lines.push(`
-  <text x="48" y="${y + 14}" fill="#6a635a" font-size="12" font-style="italic" font-family="system-ui, sans-serif">No members assigned yet</text>`)
+  <text x="48" y="${y + 14}" fill="#6a635a" font-size="12" font-style="italic" font-family="${SVG_FONT_SANS}">No members assigned yet</text>`)
     y += rowH
   } else {
     for (const m of team.members) {
       const books = `${m.addCount} add · ${m.sabotageCount} atk`
       lines.push(`
-  <text x="48" y="${y + 14}" fill="#f0ebe3" font-size="12" font-family="system-ui, sans-serif">${escapeXml(m.displayName)}</text>
-  <text x="420" y="${y + 14}" fill="#7ec89a" font-size="12" text-anchor="end" font-family="system-ui, sans-serif">+${m.xpGained}</text>
-  <text x="540" y="${y + 14}" fill="#d4634a" font-size="12" text-anchor="end" font-family="system-ui, sans-serif">${m.xpDealt > 0 ? `−${m.xpDealt}` : '0'}</text>
-  <text x="720" y="${y + 14}" fill="#a89f94" font-size="11" text-anchor="end" font-family="system-ui, sans-serif">${books}</text>`)
+  <text x="48" y="${y + 14}" fill="#f0ebe3" font-size="12" font-family="${SVG_FONT_SANS}">${escapeXml(m.displayName)}</text>
+  <text x="420" y="${y + 14}" fill="#7ec89a" font-size="12" text-anchor="end" font-family="${SVG_FONT_SANS}">+${m.xpGained}</text>
+  <text x="540" y="${y + 14}" fill="#d4634a" font-size="12" text-anchor="end" font-family="${SVG_FONT_SANS}">${m.xpDealt > 0 ? `−${m.xpDealt}` : '0'}</text>
+  <text x="720" y="${y + 14}" fill="#a89f94" font-size="11" text-anchor="end" font-family="${SVG_FONT_SANS}">${books}</text>`)
       y += rowH
     }
   }
@@ -87,11 +88,11 @@ function renderTeamBlock(team: TeamBreakdown, startY: number): string {
   if (team.attacksFromOthers.length > 0) {
     y += 4
     lines.push(`
-  <text x="48" y="${y + 12}" fill="#a89f94" font-size="11" font-weight="bold" font-family="system-ui, sans-serif">Attacked by rivals</text>`)
+  <text x="48" y="${y + 12}" fill="#a89f94" font-size="11" font-weight="bold" font-family="${SVG_FONT_SANS}">Attacked by rivals</text>`)
     y += attackSectionH
     for (const atk of team.attacksFromOthers) {
       lines.push(`
-  <text x="56" y="${y + 12}" fill="#d4634a" font-size="11" font-family="system-ui, sans-serif">${escapeXml(atk.displayName)} (${escapeXml(atk.attackerTeamName)}) — −${atk.damage} XP</text>`)
+  <text x="56" y="${y + 12}" fill="#d4634a" font-size="11" font-family="${SVG_FONT_SANS}">${escapeXml(atk.displayName)} (${escapeXml(atk.attackerTeamName)}) — −${atk.damage} XP</text>`)
       y += rowH
     }
   }

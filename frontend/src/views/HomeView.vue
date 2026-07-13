@@ -90,23 +90,22 @@ onMounted(async () => {
       <p class="note">{{ config.event.characterCreationNote }}</p>
     </section>
 
-    <section v-if="standings" class="home-standings">
-      <details class="collapse" open>
-        <summary class="collapse-summary">Latest standings</summary>
-        <StandingsPanel
-          :standings="standings"
-          :svg="standingsSvg"
-          :published-at="publishedAt"
-        />
-      </details>
-
-      <details v-if="breakdown" class="collapse">
-        <summary class="collapse-summary">Score breakdown</summary>
-        <StandingsBreakdownPanel
-          :breakdown="breakdown"
-          :breakdown-svg="breakdownSvg"
-          title="Score breakdown"
-        />
+    <section v-if="standings" class="home-standings card">
+      <details class="collapse">
+        <summary class="collapse-summary">Standings &amp; score breakdown</summary>
+        <div class="collapse-body">
+          <StandingsPanel
+            :standings="standings"
+            :svg="standingsSvg"
+            :published-at="publishedAt"
+          />
+          <StandingsBreakdownPanel
+            v-if="breakdown"
+            :breakdown="breakdown"
+            :breakdown-svg="breakdownSvg"
+            title="Score breakdown"
+          />
+        </div>
       </details>
     </section>
 
@@ -142,21 +141,22 @@ onMounted(async () => {
 <style scoped>
 .home-standings {
   margin-top: 1.5rem;
+  padding: 0;
+  overflow: hidden;
 }
 
 .collapse {
-  margin-bottom: 0.75rem;
+  margin: 0;
 }
 
 .collapse-summary {
   list-style: none;
   cursor: pointer;
   user-select: none;
-  padding: 0.8rem 1rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--realm-border);
-  background: var(--realm-surface);
+  padding: 1rem 1.15rem;
   color: var(--realm-text);
+  font-family: var(--font-display);
+  font-size: 1.05rem;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -178,8 +178,16 @@ details[open] > .collapse-summary::after {
   content: '▴';
 }
 
-.collapse :deep(.card) {
-  margin-top: 0.75rem;
+.collapse-body {
+  padding: 0 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.collapse-body :deep(.standings-panel),
+.collapse-body :deep(.breakdown-panel) {
+  margin-top: 0;
 }
 
 .hero {

@@ -7,6 +7,7 @@ import { useConfig } from './composables/useConfig';
 import { useAdminCopy } from './composables/useAdminCopy';
 import { closeAllNavDropdowns } from './composables/useNavDropdown';
 import SiteNavDropdown from './components/SiteNavDropdown.vue';
+import { APP_VERSION } from './lib/version';
 
 const { user, logout } = useAuth();
 const { config, configLoading, configError, loadConfig } = useConfig();
@@ -248,6 +249,7 @@ function closeMenu() {
 			<p>
 				{{ config.event.name }} — <em>{{ config.event.subtitle }}</em>
 			</p>
+			<p class="app-version">v{{ APP_VERSION }}</p>
 		</footer>
 	</div>
 </template>
@@ -641,6 +643,13 @@ function closeMenu() {
 .site-footer em {
 	color: var(--realm-accent);
 	font-style: normal;
+}
+
+.app-version {
+	margin-top: 0.35rem;
+	font-size: 0.75rem;
+	opacity: 0.85;
+	font-family: ui-monospace, monospace;
 }
 
 /* Tablet */
