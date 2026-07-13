@@ -2,8 +2,13 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { generateStandingsSvg } from './standings-image.js'
 import { isPngBuffer, svgToPng } from './svgToPng.js'
+import { loadBundledFontBuffers } from '../lib/svgFonts.js'
 
 describe('svgToPng', () => {
+  it('has bundled fonts available for PNG rendering', () => {
+    assert.ok(loadBundledFontBuffers().length >= 2, 'expected DejaVu font files in server/assets/fonts')
+  })
+
   it('converts standings SVG to a valid PNG buffer', () => {
     const svg = generateStandingsSvg(
       [

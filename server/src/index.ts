@@ -18,6 +18,7 @@ import { profileRoutes } from './routes/profile.js'
 import { questionRoutes } from './routes/questions.js'
 import { submissionRoutes } from './routes/submissions.js'
 import { APP_VERSION } from './lib/version.js'
+import { getSvgFontStatus } from './lib/svgFonts.js'
 
 loadEnv({ path: join(dirname(fileURLToPath(import.meta.url)), '../.env') })
 
@@ -35,7 +36,13 @@ app.use(
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, keyPrefix: 'write' })
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyPrefix: 'admin' })
 
-app.get('/api/health', (c) => c.json({ status: 'ok', version: APP_VERSION }))
+app.get('/api/health', (c) =>
+  c.json({
+    status: 'ok',
+    version: APP_VERSION,
+    pngFonts: getSvgFontStatus(),
+  }),
+)
 
 app.get('/api/config', (c) => c.json(getConfig()))
 
@@ -118,6 +125,14 @@ async function main() {
 
   await connectDb()
   await Promise.all([refreshPromptsCache(), refreshSiteSettingsCache()])
+
+  const pngFonts = getSvgFontStatus()
+  if (!pngFonts.ready) {
+    console.warn(
+      '[png] DejaVu fonts missing from server/assets/fonts — Discord standings images may render without text.',
+    )
+  }
+
   serve({ fetch: app.fetch, port }, () => {
     const mode = isProduction ? 'production' : 'development'
     console.log(`Server running (${mode}) at http://localhost:${port}`)

@@ -1,34 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { createRequire } from 'node:module'
 import { Resvg } from '@resvg/resvg-js'
-
-const require = createRequire(import.meta.url)
-
-function bundledFontBuffers(): Buffer[] {
-  let pkgDir: string
-  try {
-    pkgDir = dirname(require.resolve('@fontsource/dejavu-sans/package.json'))
-  } catch {
-    return []
-  }
-
-  const filesDir = join(pkgDir, 'files')
-  const candidates = [
-    'dejavu-sans-latin-400-normal.woff2',
-    'dejavu-sans-latin-700-normal.woff2',
-  ]
-
-  return candidates
-    .map((name) => join(filesDir, name))
-    .filter((path) => existsSync(path))
-    .map((path) => readFileSync(path))
-}
+import { injectSvgFonts, loadBundledFontBuffers } from '../lib/svgFonts.js'
 
 function resvgFontOptions() {
-  const fontBuffers = bundledFontBuffers()
+  const fontBuffers = loadBundledFontBuffers()
   return {
-    loadSystemFonts: false,
+    loadSystemFonts: fontBuffers.length === 0,
     fontBuffers,
     defaultFontFamily: 'DejaVu Sans',
     sansSerifFamily: 'DejaVu Sans',
@@ -39,7 +15,7 @@ function resvgFontOptions() {
 
 /** Rasterize standings SVG to PNG for Discord (SVG uploads are unreliable in webhooks). */
 export function svgToPng(svg: string, width = 1200): Buffer {
-  const resvg = new Resvg(svg, {
+  const resvg = new Resvg(injectSvgFonts(svg), {
     background: '#0f0e14',
     fitTo: { mode: 'width', value: width },
     font: resvgFontOptions(),
