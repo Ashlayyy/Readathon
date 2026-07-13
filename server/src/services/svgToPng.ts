@@ -5,6 +5,13 @@ export function svgToPng(svg: string, width = 1200): Buffer {
   const resvg = new Resvg(svg, {
     background: '#0f0e14',
     fitTo: { mode: 'width', value: width },
+    font: {
+      // In minimal server/container images there may be no fonts available.
+      // Resvg will render *no text* if it can't resolve a font, so we opt into
+      // system fonts and provide a reasonable default family.
+      loadSystemFonts: true,
+      defaultFontFamily: 'DejaVu Sans',
+    },
   })
   return resvg.render().asPng()
 }
