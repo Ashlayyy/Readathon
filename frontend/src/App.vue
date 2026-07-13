@@ -680,10 +680,6 @@ function closeMenu() {
 }
 
 @media (max-width: 900px) {
-	.header-actions:not(.open) .logout-btn {
-		display: none;
-	}
-
 	.action-buttons {
 		border-right: none;
 		padding-right: 0;

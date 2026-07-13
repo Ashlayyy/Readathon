@@ -1286,7 +1286,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
   font-size: 1.5rem;
   line-height: 1;
   cursor: pointer;
-  padding: 0.25rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius);
 }
 
 .modal-close:hover {
@@ -1445,6 +1451,7 @@ small {
     flex-shrink: 0;
     padding: 0.6rem 0.85rem;
     font-size: 0.82rem;
+    min-height: 2.75rem;
   }
 
   .standings-actions-top {
@@ -1478,6 +1485,7 @@ small {
     flex: 1;
     text-align: center;
     padding: 0.55rem 0.5rem;
+    min-height: 2.75rem;
   }
 
   .inbox-actions {

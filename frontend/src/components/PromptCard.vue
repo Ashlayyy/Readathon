@@ -183,14 +183,14 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.45rem 0.75rem;
+  padding: 0.55rem 0.85rem;
   border-radius: 999px;
   border: 1px solid rgba(212, 99, 74, 0.35);
   background: rgba(212, 99, 74, 0.08);
   color: var(--realm-accent-glow);
   font-size: 0.82rem;
   font-weight: 700;
-  min-height: auto;
+  min-height: 2.75rem;
   line-height: 1.2;
   transition: background 0.15s ease, border-color 0.15s ease;
 }

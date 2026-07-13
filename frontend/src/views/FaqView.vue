@@ -303,7 +303,13 @@ async function submitQuestion() {
 	font-size: 1.5rem;
 	line-height: 1;
 	cursor: pointer;
-	padding: 0.25rem;
+	min-width: 2.75rem;
+	min-height: 2.75rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border-radius: var(--radius);
 }
 
 .modal-close:hover {

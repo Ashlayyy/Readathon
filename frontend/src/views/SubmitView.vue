@@ -1455,8 +1455,13 @@ function reset() {
     max-width: 100%;
   }
 
+  .progress-step:not(.current) .progress-label {
+    display: none;
+  }
+
   .progress-label {
-    font-size: 0.6rem;
+    font-size: 0.72rem;
+    max-width: 4.5rem;
   }
 
   .wizard-nav {

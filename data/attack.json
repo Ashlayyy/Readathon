@@ -3,15 +3,13 @@
 	"kind": "negative",
 	"description": "Scheduled sabotage prompts for the Attack campaign. Each set of 5 unlocks exactly 2 weeks (14 days) after the previous set. Points are stored negative for the sabotage flow; absolute value is the XP dealt to the target realm.",
 	"schedule": {
-		"firstSetLiveAt": "2026-07-27T00:00:00.000Z",
 		"weeksBetweenSets": 2,
 		"daysBetweenSets": 14,
-		"note": "Set 1 goes live on readathon start. Sets 2–12 unlock exactly 14 days apart — no more, no less."
+		"note": "Set 1 is live immediately. Sets 2–12 unlock exactly 14 days apart starting 27 Jul 2026."
 	},
 	"sets": [
 		{
 			"set": 1,
-			"goesLiveAt": "2026-07-27T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s01-finish-4plus-series",
@@ -57,7 +55,7 @@
 		},
 		{
 			"set": 2,
-			"goesLiveAt": "2026-08-10T00:00:00.000Z",
+			"goesLiveAt": "2026-07-27T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s02-yellow-cover",
@@ -103,7 +101,7 @@
 		},
 		{
 			"set": 3,
-			"goesLiveAt": "2026-08-24T00:00:00.000Z",
+			"goesLiveAt": "2026-08-10T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s03-secret-lair",
@@ -149,7 +147,7 @@
 		},
 		{
 			"set": 4,
-			"goesLiveAt": "2026-09-07T00:00:00.000Z",
+			"goesLiveAt": "2026-08-24T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s04-retelling",
@@ -195,7 +193,7 @@
 		},
 		{
 			"set": 5,
-			"goesLiveAt": "2026-09-21T00:00:00.000Z",
+			"goesLiveAt": "2026-09-07T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s05-friends-with-benefits",
@@ -241,7 +239,7 @@
 		},
 		{
 			"set": 6,
-			"goesLiveAt": "2026-10-05T00:00:00.000Z",
+			"goesLiveAt": "2026-09-21T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s06-brown-cover",
@@ -287,7 +285,7 @@
 		},
 		{
 			"set": 7,
-			"goesLiveAt": "2026-10-19T00:00:00.000Z",
+			"goesLiveAt": "2026-10-05T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s07-mc-is-a-ghost",
@@ -333,7 +331,7 @@
 		},
 		{
 			"set": 8,
-			"goesLiveAt": "2026-11-02T00:00:00.000Z",
+			"goesLiveAt": "2026-10-19T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s08-published-before-2015",
@@ -379,7 +377,7 @@
 		},
 		{
 			"set": 9,
-			"goesLiveAt": "2026-11-16T00:00:00.000Z",
+			"goesLiveAt": "2026-11-02T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s09-five-word-title",
@@ -425,7 +423,7 @@
 		},
 		{
 			"set": 10,
-			"goesLiveAt": "2026-11-30T00:00:00.000Z",
+			"goesLiveAt": "2026-11-16T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s10-time-travel",
@@ -471,7 +469,7 @@
 		},
 		{
 			"set": 11,
-			"goesLiveAt": "2026-12-14T00:00:00.000Z",
+			"goesLiveAt": "2026-11-30T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s11-someone-dies-early",
@@ -517,7 +515,7 @@
 		},
 		{
 			"set": 12,
-			"goesLiveAt": "2026-12-28T00:00:00.000Z",
+			"goesLiveAt": "2026-12-14T00:00:00.000Z",
 			"prompts": [
 				{
 					"id": "attack-s12-matches-your-outfit",

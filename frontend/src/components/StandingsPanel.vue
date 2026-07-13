@@ -135,6 +135,8 @@ h2 {
 .info span {
   font-size: 0.8rem;
   color: var(--realm-text-muted);
+  word-break: break-word;
+  line-height: 1.4;
 }
 
 .avg-line {

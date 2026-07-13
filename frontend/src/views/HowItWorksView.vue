@@ -30,17 +30,19 @@ onMounted(loadConfig)
       </ul>
 
       <h3>Page Count Bonuses</h3>
-      <table class="data-table">
-        <thead>
-          <tr><th>Pages</th><th>Bonus XP</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="tier in config.pageCountBonuses" :key="tier.label">
-            <td>{{ tier.label }}</td>
-            <td>+{{ tier.points }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Pages</th><th>Bonus XP</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="tier in config.pageCountBonuses" :key="tier.label">
+              <td>{{ tier.label }}</td>
+              <td>+{{ tier.points }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </section>
   </main>
 </template>
@@ -102,6 +104,12 @@ onMounted(loadConfig)
   color: var(--realm-text-muted);
   padding-left: 1.25rem;
   line-height: 1.9;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
 
 @media (max-width: 768px) {

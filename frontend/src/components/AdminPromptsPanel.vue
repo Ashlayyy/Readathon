@@ -458,8 +458,11 @@ async function runImport() {
     <!-- Create / edit modal -->
     <div v-if="createMode || editModal" class="modal-backdrop" @click.self="closeModal">
       <div class="modal card prompt-modal">
-        <h2>{{ createMode ? section('prompts').addTitle : section('prompts').editTitle }}</h2>
-        <form class="prompt-form" @submit.prevent="savePrompt">
+        <header class="modal-header">
+          <h2>{{ createMode ? section('prompts').addTitle : section('prompts').editTitle }}</h2>
+          <button type="button" class="modal-close" aria-label="Close" @click="closeModal">×</button>
+        </header>
+        <form class="prompt-form modal-body" @submit.prevent="savePrompt">
           <label>
             {{ section('prompts').idLabel }}
             <input v-model="form.promptId" type="text" required :disabled="!createMode" pattern="[a-z0-9-]+" />
@@ -524,9 +527,13 @@ async function runImport() {
     <!-- Add menu -->
     <div v-if="addMenuOpen" class="modal-backdrop" @click.self="closeAddMenu">
       <div class="modal card prompt-modal add-menu-modal">
-        <h2>{{ section('prompts').addMenuTitle }}</h2>
-        <p class="section-desc">{{ section('prompts').addMenuLead }}</p>
-        <div class="add-menu-options">
+        <header class="modal-header">
+          <h2>{{ section('prompts').addMenuTitle }}</h2>
+          <button type="button" class="modal-close" aria-label="Close" @click="closeAddMenu">×</button>
+        </header>
+        <div class="modal-body">
+          <p class="section-desc">{{ section('prompts').addMenuLead }}</p>
+          <div class="add-menu-options">
           <button type="button" class="add-menu-option" @click="chooseManual">
             <strong>{{ section('prompts').addMenuManualTitle }}</strong>
             <span>{{ section('prompts').addMenuManualLead }}</span>
@@ -543,16 +550,21 @@ async function runImport() {
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="closeAddMenu">{{ section('prompts').cancel }}</button>
         </div>
+        </div>
       </div>
     </div>
 
     <!-- JSON upload modal -->
     <div v-if="uploadModalOpen" class="modal-backdrop" @click.self="closeUploadModal">
       <div class="modal card prompt-modal">
-        <h2>{{ section('prompts').uploadTitle }}</h2>
-        <p class="section-desc">{{ section('prompts').uploadLead }}</p>
+        <header class="modal-header">
+          <h2>{{ section('prompts').uploadTitle }}</h2>
+          <button type="button" class="modal-close" aria-label="Close" @click="closeUploadModal">×</button>
+        </header>
+        <div class="modal-body">
+          <p class="section-desc">{{ section('prompts').uploadLead }}</p>
 
-        <div class="file-upload">
+          <div class="file-upload">
           <input
             ref="fileInputRef"
             type="file"
@@ -588,15 +600,20 @@ async function runImport() {
             {{ loading === 'import' ? section('prompts').uploadImporting : section('prompts').uploadImport }}
           </button>
         </div>
+        </div>
       </div>
     </div>
 
     <!-- Import from realmathon.json -->
     <div v-if="importConfigModal" class="modal-backdrop" @click.self="importConfigModal = false">
       <div class="modal card prompt-modal">
-        <h2>{{ section('prompts').importTitle }}</h2>
-        <p class="section-desc">{{ section('prompts').importLead }}</p>
-        <label class="check-row danger-check">
+        <header class="modal-header">
+          <h2>{{ section('prompts').importTitle }}</h2>
+          <button type="button" class="modal-close" aria-label="Close" @click="importConfigModal = false">×</button>
+        </header>
+        <div class="modal-body">
+          <p class="section-desc">{{ section('prompts').importLead }}</p>
+          <label class="check-row danger-check">
           <input v-model="importReplace" type="checkbox" />
           {{ section('prompts').importReplace }}
         </label>
@@ -611,6 +628,7 @@ async function runImport() {
           >
             {{ loading === 'import' ? section('prompts').importing : section('prompts').importSubmit }}
           </button>
+        </div>
         </div>
       </div>
     </div>
@@ -661,6 +679,9 @@ async function runImport() {
   color: var(--realm-text-muted);
   font-weight: 600;
   cursor: pointer;
+  min-height: 2.75rem;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
 }
 
 .prompt-filters button.active {
@@ -865,6 +886,50 @@ async function runImport() {
 .prompt-modal {
   max-width: 32rem;
   width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.15rem;
+  border-bottom: 1px solid var(--realm-border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--realm-text);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--realm-text-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+
+.modal-close:hover {
+  color: var(--realm-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.modal-body {
+  padding: 1rem 1.15rem 1.15rem;
 }
 
 .prompt-form {
@@ -919,6 +984,7 @@ async function runImport() {
   gap: 0.25rem;
   text-align: left;
   padding: 0.9rem 1rem;
+  min-height: 2.75rem;
   border: 1px solid var(--realm-border);
   border-radius: var(--radius);
   background: var(--realm-bg);
@@ -987,6 +1053,7 @@ async function runImport() {
   justify-content: flex-end;
   gap: 0.65rem;
   margin-top: 0.5rem;
+  padding-top: 0.25rem;
 }
 
 .row-actions {
@@ -999,6 +1066,41 @@ async function runImport() {
 }
 
 @media (max-width: 768px) {
+  .prompts-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .prompts-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .prompt-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-left {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .filter-left button {
+    width: 100%;
+    text-align: center;
+  }
+
+  .filter-right {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .prompt-search {
+    width: 100%;
+  }
+
   .prompt-row {
     flex-direction: column;
     align-items: stretch;
@@ -1010,6 +1112,28 @@ async function runImport() {
 
   .row-actions .btn {
     flex: 1;
+    min-height: 2.75rem;
+  }
+
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .prompt-modal {
+    max-width: 100%;
+    max-height: 92vh;
+    overflow-y: auto;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .modal-actions .btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

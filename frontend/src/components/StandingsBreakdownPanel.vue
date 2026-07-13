@@ -30,24 +30,26 @@ defineProps<{
         </header>
 
         <div v-if="team.members.length === 0" class="empty">No members assigned yet.</div>
-        <table v-else class="member-table">
-          <thead>
-            <tr>
-              <th>Member</th>
-              <th>Gained</th>
-              <th>Dealt</th>
-              <th>Books</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="m in team.members" :key="m.userId">
-              <td>{{ m.displayName }}</td>
-              <td class="gain">+{{ m.xpGained }}</td>
-              <td class="dealt">{{ m.xpDealt > 0 ? `−${m.xpDealt}` : '0' }}</td>
-              <td class="meta">{{ m.addCount }} add · {{ m.sabotageCount }} atk</td>
-            </tr>
-          </tbody>
-        </table>
+        <div v-else class="table-wrap">
+          <table class="member-table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Gained</th>
+                <th>Dealt</th>
+                <th>Books</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="m in team.members" :key="m.userId">
+                <td>{{ m.displayName }}</td>
+                <td class="gain">+{{ m.xpGained }}</td>
+                <td class="dealt">{{ m.xpDealt > 0 ? `−${m.xpDealt}` : '0' }}</td>
+                <td class="meta">{{ m.addCount }} add · {{ m.sabotageCount }} atk</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <div v-if="team.attacksFromOthers.length" class="attacks">
           <h4>Attacked by rivals</h4>
@@ -128,8 +130,15 @@ header h2 {
   font-size: 0.9rem;
 }
 
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
 .member-table {
   width: 100%;
+  min-width: 18rem;
   border-collapse: collapse;
   font-size: 0.88rem;
 }
