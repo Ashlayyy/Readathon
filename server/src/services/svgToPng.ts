@@ -1,24 +1,12 @@
 import { Resvg } from '@resvg/resvg-js'
-import { injectSvgFonts, loadBundledFontBuffers } from '../lib/svgFonts.js'
-
-function resvgFontOptions() {
-  const fontBuffers = loadBundledFontBuffers()
-  return {
-    loadSystemFonts: fontBuffers.length === 0,
-    fontBuffers,
-    defaultFontFamily: 'DejaVu Sans',
-    sansSerifFamily: 'DejaVu Sans',
-    serifFamily: 'DejaVu Sans',
-    monospaceFamily: 'DejaVu Sans',
-  }
-}
+import { outlineSvgText } from '../lib/svgTextPaths.js'
 
 /** Rasterize standings SVG to PNG for Discord (SVG uploads are unreliable in webhooks). */
 export function svgToPng(svg: string, width = 1200): Buffer {
-  const resvg = new Resvg(injectSvgFonts(svg), {
+  const resvg = new Resvg(outlineSvgText(svg), {
     background: '#0f0e14',
     fitTo: { mode: 'width', value: width },
-    font: resvgFontOptions(),
+    font: { loadSystemFonts: false },
   })
   return resvg.render().asPng()
 }

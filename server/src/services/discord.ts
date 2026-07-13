@@ -53,18 +53,22 @@ export async function notifyDiscordStandingsPublished(
   const breakdownFilename = `standings-breakdown-${weekKey.toLowerCase()}.png`
 
   try {
+    const standingsPng = svgToPng(standingsSvg)
+    console.log('[discord] standings PNG bytes:', standingsPng.length)
     const standingsSent = await postWebhookImage(
       webhookUrl,
-      svgToPng(standingsSvg),
+      standingsPng,
       standingsFilename,
       `${mention}**${weekLabel} standings are live!**`,
     )
     if (!standingsSent) return { sent: false }
 
     if (breakdownSvg?.trim()) {
+      const breakdownPng = svgToPng(breakdownSvg)
+      console.log('[discord] breakdown PNG bytes:', breakdownPng.length)
       const breakdownSent = await postWebhookImage(
         webhookUrl,
-        svgToPng(breakdownSvg),
+        breakdownPng,
         breakdownFilename,
       )
       if (!breakdownSent) {

@@ -19,6 +19,7 @@ import { questionRoutes } from './routes/questions.js'
 import { submissionRoutes } from './routes/submissions.js'
 import { APP_VERSION } from './lib/version.js'
 import { getSvgFontStatus } from './lib/svgFonts.js'
+import { getSvgTextPathStatus } from './lib/svgTextPaths.js'
 
 loadEnv({ path: join(dirname(fileURLToPath(import.meta.url)), '../.env') })
 
@@ -41,6 +42,7 @@ app.get('/api/health', (c) =>
     status: 'ok',
     version: APP_VERSION,
     pngFonts: getSvgFontStatus(),
+    pngText: getSvgTextPathStatus(),
   }),
 )
 
@@ -127,10 +129,13 @@ async function main() {
   await Promise.all([refreshPromptsCache(), refreshSiteSettingsCache()])
 
   const pngFonts = getSvgFontStatus()
-  if (!pngFonts.ready) {
+  const pngText = getSvgTextPathStatus()
+  if (!pngText.ready) {
     console.warn(
-      '[png] DejaVu fonts missing from server/assets/fonts — Discord standings images may render without text.',
+      '[png] DejaVu TTF files missing from server/assets/fonts — Discord standings images may render without text.',
     )
+  } else if (!pngFonts.ready) {
+    console.log('[png] Text path mode active (Discord PNG text does not rely on system fonts).')
   }
 
   serve({ fetch: app.fetch, port }, () => {
