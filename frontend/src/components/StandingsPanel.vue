@@ -7,6 +7,10 @@ defineProps<{
   publishedAt?: string | null
   title?: string
 }>()
+
+function memberLabel(count: number) {
+  return count === 1 ? '1 member' : `${count} members`
+}
 </script>
 
 <template>
@@ -35,7 +39,8 @@ defineProps<{
         <span class="icon">{{ team.icon }}</span>
         <div class="info">
           <strong>{{ team.teamName }}<span v-if="i === 0" class="leader-mark"> ★</span></strong>
-          <span>{{ team.memberCount }} members · {{ team.averagePerMember }} avg/person · +{{ team.xpGained ?? 0 }} gain · +{{ team.xpDealt ?? 0 }} attack</span>
+          <span v-if="team.memberCount > 0">{{ memberLabel(team.memberCount) }} · {{ team.averagePerMember }} avg/person · +{{ team.xpGained ?? 0 }} gain · +{{ team.xpDealt ?? 0 }} attack</span>
+          <span v-else>No members assigned yet</span>
         </div>
         <div class="score">
           <strong>{{ team.totalTeamXp ?? 400 }}</strong>

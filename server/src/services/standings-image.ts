@@ -6,6 +6,10 @@ export function getStandingsImageTitle(weekLabel: string): string {
   return `${eventName} — ${weekLabel}`
 }
 
+function memberLabel(count: number): string {
+  return count === 1 ? '1 member' : `${count} members`
+}
+
 function leaderSubtitle(standings: TeamStanding[]): string {
   if (standings.length < 2) {
     return 'Ranked by avg gain + attack per member (400 team XP starting pool, not counted in avg)'
@@ -34,8 +38,8 @@ export function generateStandingsSvg(standings: TeamStanding[], weekLabel: strin
       const rankLabel = isLeader ? `#${rank} ${escapeXml(team.teamName)} ★` : `#${rank} ${escapeXml(team.teamName)}`
       const detailLine =
         team.memberCount > 0
-          ? `${team.memberCount} members · ${team.averagePerMember} avg/person · +${team.xpGained} gain · +${team.xpDealt} attack`
-          : 'no members assigned yet'
+          ? `${memberLabel(team.memberCount)} · ${team.averagePerMember} avg/person · +${team.xpGained} gain · +${team.xpDealt} attack`
+          : 'No members assigned yet'
 
       return `
     <g>
