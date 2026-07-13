@@ -71,8 +71,7 @@ const filtered = computed(() => {
       if (!haystack.includes(q)) return false
     }
     if (filter.value === 'live') return p.isLive
-    if (filter.value === 'scheduled')
-      return p.isActive && p.goesLiveAt && new Date(p.goesLiveAt) > new Date()
+    if (filter.value === 'scheduled') return isScheduled(p)
     if (filter.value === 'draft') return !p.isActive
     return true
   })
@@ -123,15 +122,29 @@ function teamName(teamId: string | null) {
 function statusLabel(p: AdminPrompt) {
   const pcopy = section('prompts')
   if (p.isLive) return pcopy.statusLive
-  if (p.isActive && p.goesLiveAt && new Date(p.goesLiveAt) > new Date()) return pcopy.statusScheduled
+  if (isScheduled(p)) return pcopy.statusScheduled
   if (!p.isActive) return pcopy.statusDraft
   return pcopy.statusHidden
 }
 
+function isScheduled(p: AdminPrompt) {
+  return Boolean(p.isActive && p.goesLiveAt && new Date(p.goesLiveAt) > new Date())
+}
+
+function formatGoLiveDate(iso: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
 function statusClass(p: AdminPrompt) {
-  if (p.isLive) return 'badge-positive'
-  if (!p.isActive) return 'badge-negative'
-  return ''
+  if (p.isLive) return 'status-live'
+  if (isScheduled(p)) return 'status-scheduled'
+  if (!p.isActive) return 'status-draft'
+  return 'status-hidden'
 }
 
 function openAddMenu() {
@@ -271,7 +284,7 @@ function openEdit(p: AdminPrompt) {
     points: p.points,
     link: p.link ?? '',
     isActive: p.isActive,
-    goesLiveAt: p.goesLiveAt ? p.goesLiveAt.slice(0, 16) : '',
+    goesLiveAt: p.goesLiveAt ? p.goesLiveAt.slice(0, 10) : '',
     sortOrder: p.sortOrder,
   }
 }
@@ -294,7 +307,7 @@ async function savePrompt() {
       points: Number(form.value.points),
       link: form.value.link.trim() || null,
       isActive: form.value.isActive,
-      goesLiveAt: form.value.goesLiveAt ? new Date(form.value.goesLiveAt).toISOString() : null,
+      goesLiveAt: form.value.goesLiveAt ? new Date(`${form.value.goesLiveAt}T00:00:00.000Z`).toISOString() : null,
       sortOrder: Number(form.value.sortOrder) || 0,
     }
 
@@ -398,24 +411,23 @@ async function runImport() {
         <h3>{{ sec.title }} <span class="count">({{ sec.items.length }})</span></h3>
         <div v-if="sec.items.length === 0" class="empty-group">{{ section('prompts').emptyFilter }}</div>
         <ul v-else class="prompt-list">
-          <li v-for="p in sec.items" :key="p.id" class="prompt-row">
+          <li v-for="p in sec.items" :key="p.id" class="prompt-row" :class="p.kind">
             <div class="prompt-main">
               <div class="prompt-top">
-                <span class="badge" :class="statusClass(p)">{{ statusLabel(p) }}</span>
-                <strong class="label">{{ p.label }}</strong>
-                <span class="points">{{ p.points > 0 ? '+' : '' }}{{ p.points }} XP</span>
-                <span v-if="p.kind === 'team_bonus'" class="meta">· {{ teamName(p.teamId) }}</span>
-                <span v-else-if="p.gameName" class="meta">· {{ p.gameName }}</span>
-              </div>
-              <div class="prompt-bottom">
-                <span v-if="p.description" class="desc">{{ p.description }}</span>
-                <span class="meta-right">
-                  <span v-if="p.link" class="link-pill">link</span>
-                  <span v-if="p.goesLiveAt && new Date(p.goesLiveAt) > new Date()" class="meta"
-                    >· goes live {{ new Date(p.goesLiveAt).toLocaleString() }}</span
-                  >
-                  <code class="pid">{{ p.promptId }}</code>
+                <span class="xp-badge" :class="p.points > 0 ? 'gain' : 'attack'">
+                  {{ p.points > 0 ? '+' : '' }}{{ p.points }}
                 </span>
+                <div class="prompt-heading">
+                  <strong class="label">{{ p.label }}</strong>
+                  <span v-if="p.kind === 'team_bonus'" class="sub">{{ teamName(p.teamId) }}</span>
+                  <span v-else-if="p.gameName" class="sub">{{ p.gameName }}</span>
+                </div>
+                <span class="status-pill" :class="statusClass(p)">{{ statusLabel(p) }}</span>
+              </div>
+              <p v-if="p.description" class="desc">{{ p.description }}</p>
+              <div class="prompt-meta">
+                <span v-if="isScheduled(p)" class="schedule-pill">Unlocks {{ formatGoLiveDate(p.goesLiveAt) }}</span>
+                <span v-if="p.link" class="link-pill">Link</span>
               </div>
             </div>
             <div class="row-actions">
@@ -483,7 +495,7 @@ async function runImport() {
           </label>
           <label>
             {{ section('prompts').goLiveLabel }}
-            <input v-model="form.goesLiveAt" type="datetime-local" />
+            <input v-model="form.goesLiveAt" type="date" />
             <span class="field-hint">{{ section('prompts').goLiveHint }}</span>
           </label>
           <label>
@@ -678,61 +690,133 @@ async function runImport() {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 0.75rem;
-  align-items: center;
-  padding: 0.75rem 1rem;
+  align-items: flex-start;
+  padding: 0.9rem 1rem;
   background: var(--realm-bg);
   border: 1px solid var(--realm-border);
-  border-radius: var(--radius);
+  border-radius: 12px;
+  transition: border-color 0.2s;
+}
+
+.prompt-row:hover {
+  border-color: color-mix(in srgb, var(--realm-accent) 30%, var(--realm-border));
 }
 
 .prompt-main {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.45rem;
   min-width: 0;
   flex: 1;
-}
-
-.prompt-main strong {
-  color: var(--realm-text);
 }
 
 .prompt-top {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
+  align-items: flex-start;
+  gap: 0.65rem;
   min-width: 0;
 }
 
-.label {
-  min-width: 0;
+.xp-badge {
+  flex-shrink: 0;
+  min-width: 2.5rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
+  border: 1px solid transparent;
 }
 
-.prompt-bottom {
+.xp-badge.gain {
+  color: var(--realm-success);
+  background: rgba(110, 207, 138, 0.12);
+  border-color: rgba(110, 207, 138, 0.28);
+}
+
+.xp-badge.attack {
+  color: var(--realm-accent-glow);
+  background: rgba(212, 99, 74, 0.12);
+  border-color: rgba(212, 99, 74, 0.28);
+}
+
+.prompt-heading {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.prompt-heading .label {
+  color: var(--realm-text);
+  font-size: 0.95rem;
+  line-height: 1.3;
+}
+
+.prompt-heading .sub {
   color: var(--realm-text-muted);
+  font-size: 0.82rem;
+}
+
+.status-pill {
+  flex-shrink: 0;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.status-pill.status-live {
+  color: var(--realm-success);
+  background: rgba(110, 207, 138, 0.12);
+  border-color: rgba(110, 207, 138, 0.28);
+}
+
+.status-pill.status-scheduled {
+  color: #e8b84a;
+  background: rgba(232, 184, 74, 0.12);
+  border-color: rgba(232, 184, 74, 0.28);
+}
+
+.status-pill.status-draft,
+.status-pill.status-hidden {
+  color: var(--realm-text-muted);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--realm-border);
 }
 
 .desc {
-  flex: 1;
-  min-width: 14rem;
+  margin: 0;
   font-size: 0.85rem;
-  line-height: 1.4;
+  line-height: 1.45;
+  color: var(--realm-text-muted);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.meta-right {
-  display: inline-flex;
+.prompt-meta {
+  display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: baseline;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.schedule-pill {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e8b84a;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(232, 184, 74, 0.1);
+  border: 1px solid rgba(232, 184, 74, 0.22);
 }
 
 .link-pill {
@@ -745,22 +829,6 @@ async function runImport() {
   border: 1px solid rgba(212, 99, 74, 0.4);
   color: var(--realm-accent-glow);
   background: rgba(212, 99, 74, 0.08);
-}
-
-.points {
-  color: var(--realm-accent-glow);
-  font-weight: 700;
-  font-size: 0.88rem;
-}
-
-.meta,
-.pid {
-  font-size: 0.8rem;
-  color: var(--realm-text-muted);
-}
-
-.pid {
-  font-family: ui-monospace, monospace;
 }
 
 .prompt-search {

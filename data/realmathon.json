@@ -7,9 +7,8 @@
 		"loreTitle": "The Story So Far",
 		"characterCreationNote": "Ready? Sign up and wait for your realm assignment.",
 		"lore": [
-			"Welcome to the Readathon 2026. All the realms have been destroyed — you are being forced into The Crucible, a deadly competition where it's your character class against every other character class.",
-			"The strongest will put their books (and lives) on the line to gain XP, leveling themselves and their team up while sabotaging the XP of other teams.",
-			"First things first: you'll need a team before you're shipped off to the competition. Once accepted, you'll be sorted into one of {teamCount} realms."
+			"Welcome to the Readathon 2026. All the realms have been destroyed - you are being forced into The Crucible, a deadly competition where it's your character class against every other character class.",
+			"The strongest will put their books (and lives) on the line to gain XP, leveling themselves and their team up while sabotaging the XP of other teams."
 		]
 	},
 	"copy": {
@@ -19,7 +18,7 @@
 		"joinCta": "Join",
 		"logoutCta": "Log out",
 		"submitNav": "Submit",
-		"pendingBanner": "You're in the pool — an admin will sort you into a realm soon.",
+		"pendingBanner": "You're in the pool - an admin will sort you into a realm soon.",
 		"loginTitle": "Enter The Crucible",
 		"loginRegisterLead": "Sign up with your name and email, or continue with Google.",
 		"loginMagicLinkLead": "We'll email you a one-time sign-in link — no password needed.",
@@ -496,7 +495,7 @@
 				"id": "loot-box",
 				"gameName": "Open A Loot Box",
 				"label": "A book you didn't buy",
-				"description": "You didn't purchase this — e.g. library, KU (book returns after). Not an Audible credit where you keep it forever.",
+				"description": "You didn't purchase this - e.g. library, KU (book returns after). Not an Audible credit where you keep it forever.",
 				"points": 1
 			},
 			{
@@ -545,7 +544,7 @@
 				"id": "farm-xp",
 				"gameName": "Farm XP",
 				"label": "Randomize your TBR with a die",
-				"description": "Randomize which book you pick — titles to numbers, shelves to numbers, etc.",
+				"description": "Randomize which book you pick - titles to numbers, shelves to numbers, etc.",
 				"points": 3,
 				"link": "https://rolladie.net/"
 			},
@@ -567,7 +566,7 @@
 				"id": "npc",
 				"gameName": "Befriend An NPC",
 				"label": "Author's name is two lines on the cover",
-				"description": "Author's name is two lines — NOT one — on the cover.",
+				"description": "Author's name is two lines - NOT one - on the cover.",
 				"points": 4
 			},
 			{
@@ -581,7 +580,7 @@
 				"id": "heal",
 				"gameName": "Heal Your Teammates",
 				"label": "Read a host's 5-star read",
-				"description": "Does not have to be your team's host — any readathon host.",
+				"description": "Does not have to be your team's host - any readathon host.",
 				"points": 5
 			},
 			{
@@ -674,7 +673,7 @@
 				"id": "close-quarters",
 				"gameName": "Close Quarters",
 				"label": "No \"THE\" anywhere in the title",
-				"description": "Including as the first word — no \"the\" anywhere.",
+				"description": "Including as the first word - no \"the\" anywhere.",
 				"points": -4
 			},
 			{
