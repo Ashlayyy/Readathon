@@ -22,8 +22,20 @@ export function isPromptLive(p: Pick<IPrompt, 'isActive' | 'goesLiveAt'>): boole
   return true
 }
 
+function unlockTimestamp(p: Pick<IPrompt, 'goesLiveAt'>): number {
+  if (!p.goesLiveAt) return Number.MAX_SAFE_INTEGER
+  return new Date(p.goesLiveAt).getTime()
+}
+
+export function comparePromptsByUnlock(a: IPrompt, b: IPrompt): number {
+  const timeDiff = unlockTimestamp(a) - unlockTimestamp(b)
+  if (timeDiff !== 0) return timeDiff
+  if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+  return a.label.localeCompare(b.label)
+}
+
 export async function refreshPromptsCache(): Promise<void> {
-  cache = await Prompt.find().sort({ sortOrder: 1, kind: 1, label: 1 })
+  cache = await Prompt.find().sort({ goesLiveAt: 1, sortOrder: 1, label: 1 })
   usingDatabase = cache.length > 0
 }
 
@@ -64,8 +76,14 @@ export function getConfigWithPrompts(publicOnly = true): RealmathonConfig {
     ...base,
     teams: mergeTeams(base.teams, pool),
     prompts: {
-      positive: pool.filter((p) => p.kind === 'positive').map(toPublicGlobalPrompt),
-      negative: pool.filter((p) => p.kind === 'negative').map(toPublicGlobalPrompt),
+      positive: pool
+        .filter((p) => p.kind === 'positive')
+        .sort(comparePromptsByUnlock)
+        .map(toPublicGlobalPrompt),
+      negative: pool
+        .filter((p) => p.kind === 'negative')
+        .sort(comparePromptsByUnlock)
+        .map(toPublicGlobalPrompt),
     },
   }
 }

@@ -78,9 +78,18 @@ const filtered = computed(() => {
 })
 
 const grouped = computed(() => {
-  const positive = filtered.value.filter((p) => p.kind === 'positive')
-  const negative = filtered.value.filter((p) => p.kind === 'negative')
-  const teamBonus = filtered.value.filter((p) => p.kind === 'team_bonus')
+  const sortByUnlock = (items: AdminPrompt[]) =>
+    [...items].sort((a, b) => {
+      const ta = a.goesLiveAt ? new Date(a.goesLiveAt).getTime() : Number.MAX_SAFE_INTEGER
+      const tb = b.goesLiveAt ? new Date(b.goesLiveAt).getTime() : Number.MAX_SAFE_INTEGER
+      if (ta !== tb) return ta - tb
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+      return a.label.localeCompare(b.label)
+    })
+
+  const positive = sortByUnlock(filtered.value.filter((p) => p.kind === 'positive'))
+  const negative = sortByUnlock(filtered.value.filter((p) => p.kind === 'negative'))
+  const teamBonus = sortByUnlock(filtered.value.filter((p) => p.kind === 'team_bonus'))
   return { positive, negative, teamBonus }
 })
 

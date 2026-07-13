@@ -397,7 +397,7 @@ adminRoutes.post('/reload-config', async (c) => {
 })
 
 adminRoutes.get('/prompts', async (c) => {
-  const rows = await Prompt.find().sort({ sortOrder: 1, kind: 1, label: 1 })
+  const rows = await Prompt.find().sort({ goesLiveAt: 1, sortOrder: 1, label: 1 })
   return c.json({
     usingDatabase: promptsUseDatabase(),
     prompts: rows.map(promptToAdminPublic),
