@@ -5,6 +5,7 @@ import { api } from './lib/api';
 import { useAuth } from './composables/useAuth';
 import { useConfig } from './composables/useConfig';
 import { useAdminCopy } from './composables/useAdminCopy';
+import { closeAllNavDropdowns } from './composables/useNavDropdown';
 import SiteNavDropdown from './components/SiteNavDropdown.vue';
 
 const { user, logout } = useAuth();
@@ -47,6 +48,7 @@ watch(
 	() => route.path,
 	(path) => {
 		menuOpen.value = false;
+		closeAllNavDropdowns();
 		if (user.value?.isAdmin && path.startsWith('/admin')) {
 			loadUnreadCount();
 		}
@@ -127,11 +129,13 @@ function closeMenu() {
 
 					<div class="nav-desktop-groups">
 						<SiteNavDropdown
+							id="nav-play"
 							:label="nav.playGroup ?? 'Play'"
 							:items="playNavItems"
 							@navigate="closeMenu"
 						/>
 						<SiteNavDropdown
+							id="nav-about"
 							:label="nav.aboutGroup ?? 'About'"
 							:items="aboutNavItems"
 							@navigate="closeMenu"
@@ -140,12 +144,14 @@ function closeMenu() {
 
 					<div class="nav-mobile-groups">
 						<SiteNavDropdown
+							id="nav-play-mobile"
 							mobile
 							:label="nav.playGroup ?? 'Play'"
 							:items="playNavItems"
 							@navigate="closeMenu"
 						/>
 						<SiteNavDropdown
+							id="nav-about-mobile"
 							mobile
 							:label="nav.aboutGroup ?? 'About'"
 							:items="aboutNavItems"
@@ -393,6 +399,8 @@ function closeMenu() {
 	display: flex;
 	align-items: center;
 	gap: 0.15rem 1rem;
+	position: relative;
+	z-index: 1;
 }
 
 .nav-mobile-groups {
@@ -453,6 +461,8 @@ function closeMenu() {
 	justify-self: end;
 	gap: 0.65rem;
 	min-width: 0;
+	position: relative;
+	z-index: 0;
 }
 
 .action-buttons {

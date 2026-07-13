@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { closeAllNavDropdowns, useNavDropdown } from '../composables/useNavDropdown'
 
 export type NavDropdownItem = {
   to: string
@@ -9,6 +10,7 @@ export type NavDropdownItem = {
 }
 
 const props = defineProps<{
+  id: string
   label: string
   items: NavDropdownItem[]
   mobile?: boolean
@@ -17,7 +19,7 @@ const props = defineProps<{
 const emit = defineEmits<{ navigate: [] }>()
 
 const route = useRoute()
-const open = ref(false)
+const { isOpen, toggle, onMouseEnter, onMouseLeave } = useNavDropdown(props.id)
 
 const visibleItems = computed(() => props.items.filter((item) => item.show !== false))
 
@@ -27,16 +29,13 @@ const isGroupActive = computed(() =>
   ),
 )
 
-function toggle() {
-  open.value = !open.value
-}
-
-function close() {
-  open.value = false
+function onTriggerClick(event: MouseEvent) {
+  event.stopPropagation()
+  toggle()
 }
 
 function onNavigate() {
-  close()
+  closeAllNavDropdowns()
   emit('navigate')
 }
 
@@ -52,20 +51,22 @@ function isActive(to: string) {
   <div
     v-if="!mobile"
     class="nav-dropdown"
-    @mouseenter="open = true"
-    @mouseleave="open = false"
+    :class="{ open: isOpen }"
+    @mouseenter="onMouseEnter"
+    @mouseleave="onMouseLeave"
   >
     <button
       type="button"
       class="nav-dropdown-trigger"
-      :class="{ active: isGroupActive, open }"
-      :aria-expanded="open"
-      @click="toggle"
+      :class="{ active: isGroupActive, open: isOpen }"
+      :aria-expanded="isOpen"
+      aria-haspopup="menu"
+      @click="onTriggerClick"
     >
       {{ label }}
       <span class="chevron" aria-hidden="true">▾</span>
     </button>
-    <div v-show="open" class="nav-dropdown-menu" role="menu">
+    <div v-show="isOpen" class="nav-dropdown-menu" role="menu" @click.stop>
       <RouterLink
         v-for="item in visibleItems"
         :key="item.to"
@@ -97,6 +98,10 @@ function isActive(to: string) {
 <style scoped>
 .nav-dropdown {
   position: relative;
+}
+
+.nav-dropdown.open {
+  z-index: 210;
 }
 
 .nav-dropdown-trigger {
@@ -137,7 +142,7 @@ function isActive(to: string) {
 
 .nav-dropdown-menu {
   position: absolute;
-  top: calc(100% + 0.35rem);
+  top: 100%;
   left: 50%;
   transform: translateX(-50%);
   min-width: 10.5rem;
@@ -147,6 +152,16 @@ function isActive(to: string) {
   background: var(--realm-surface);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   z-index: 220;
+}
+
+/* Invisible bridge so the pointer can reach the menu without closing */
+.nav-dropdown-menu::before {
+  content: '';
+  position: absolute;
+  top: -0.5rem;
+  left: 0;
+  right: 0;
+  height: 0.5rem;
 }
 
 .nav-dropdown-menu a {
