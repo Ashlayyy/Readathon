@@ -106,6 +106,7 @@ export async function notifyDiscordStandingsPublished(
         webhookUrl,
         breakdownPng,
         breakdownFilename,
+        '**Score breakdown**',
       )
       if (!breakdownSent) {
         console.error('[discord] Breakdown image webhook failed after standings was sent')

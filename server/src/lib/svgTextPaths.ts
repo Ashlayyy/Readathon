@@ -88,8 +88,8 @@ function textToPathData(
     if (!glyph) continue
     const pos = run.positions[i]!
     const glyphPath = glyph.path
-      .scale(scale)
-      .translate(cursorX + pos.xOffset * scale, y + pos.yOffset * scale)
+      .scale(scale, -scale)
+      .translate(cursorX + pos.xOffset * scale, y - pos.yOffset * scale)
     parts.push(glyphPath.toSVG())
     cursorX += pos.xAdvance * scale
   }
