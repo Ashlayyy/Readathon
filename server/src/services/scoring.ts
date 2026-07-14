@@ -250,7 +250,14 @@ export async function calculateStandings(): Promise<TeamStanding[]> {
         icon: team.icon ?? '◆',
       }
     })
-    .sort((a, b) => b.averagePerMember - a.averagePerMember)
+    .sort((a, b) => {
+      const useAverage =
+        (config.scoringRules as { standingsUseAveragePerMember?: boolean })
+          .standingsUseAveragePerMember ?? false
+      return useAverage
+        ? b.averagePerMember - a.averagePerMember
+        : b.totalTeamXp - a.totalTeamXp
+    })
 }
 
 export function submissionToPublic(sub: ISubmission & { createdAt?: Date }) {

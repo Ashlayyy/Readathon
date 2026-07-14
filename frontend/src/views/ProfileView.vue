@@ -338,6 +338,7 @@ async function saveSettings() {
   font-weight: 600;
   font-size: 0.88rem;
   cursor: pointer;
+  min-height: 2.75rem;
 }
 
 .profile-tabs button.active {
@@ -574,7 +575,9 @@ time {
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    padding-bottom: 0.25rem;
+    padding-bottom: 0.35rem;
+    margin-bottom: 1.25rem;
+    scrollbar-width: thin;
   }
 
   .profile-tabs button {

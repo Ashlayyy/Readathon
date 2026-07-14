@@ -18,6 +18,9 @@ const unreadQuestions = ref(0);
 const menuOpen = ref(false);
 let unreadPromise: Promise<void> | null = null;
 
+const isMaintenancePage = computed(() => route.name === 'maintenance');
+const downtimeActive = computed(() => config.value?.site?.downtimeMode === true);
+
 const nav = computed(() => config.value?.copy.nav ?? {});
 
 const playNavItems = computed(() => [
@@ -93,7 +96,7 @@ function closeMenu() {
 
 <template>
 	<div class="app-shell">
-		<header class="site-header">
+		<header v-if="!isMaintenancePage" class="site-header">
 			<div class="header-inner">
 				<div class="header-top">
 					<RouterLink to="/" class="brand" @click="closeMenu">
@@ -222,6 +225,14 @@ function closeMenu() {
 
 		<div class="app-content">
 			<div
+				v-if="downtimeActive && user?.isAdmin && !isMaintenancePage"
+				class="alert alert-warning status-banner"
+			>
+				<strong>Downtime mode is on.</strong>
+				Only admins can use the site. Turn it off in Admin → Teams when you're done.
+			</div>
+
+			<div
 				v-if="user?.status === 'pending' && config"
 				class="alert alert-warning status-banner"
 			>
@@ -245,7 +256,7 @@ function closeMenu() {
 			<RouterView v-else />
 		</div>
 
-		<footer v-if="config" class="site-footer">
+		<footer v-if="config && !isMaintenancePage" class="site-footer">
 			<p>
 				{{ config.event.name }} — <em>{{ config.event.subtitle }}</em>
 			</p>
@@ -680,10 +691,6 @@ function closeMenu() {
 }
 
 @media (max-width: 900px) {
-	.header-actions:not(.open) .logout-btn {
-		display: none;
-	}
-
 	.action-buttons {
 		border-right: none;
 		padding-right: 0;

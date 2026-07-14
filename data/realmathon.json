@@ -7,9 +7,8 @@
 		"loreTitle": "The Story So Far",
 		"characterCreationNote": "Ready? Sign up and wait for your realm assignment.",
 		"lore": [
-			"Welcome to the Readathon 2026. All the realms have been destroyed — you are being forced into The Crucible, a deadly competition where it's your character class against every other character class.",
-			"The strongest will put their books (and lives) on the line to gain XP, leveling themselves and their team up while sabotaging the XP of other teams.",
-			"First things first: you'll need a team before you're shipped off to the competition. Once accepted, you'll be sorted into one of {teamCount} realms."
+			"Welcome to the Readathon 2026. All the realms have been destroyed - you are being forced into The Crucible, a deadly competition where it's your character class against every other character class.",
+			"The strongest will put their books (and lives) on the line to gain XP, leveling themselves and their team up while sabotaging the XP of other teams."
 		]
 	},
 	"copy": {
@@ -19,7 +18,7 @@
 		"joinCta": "Join",
 		"logoutCta": "Log out",
 		"submitNav": "Submit",
-		"pendingBanner": "You're in the pool — an admin will sort you into a realm soon.",
+		"pendingBanner": "You're in the pool - an admin will sort you into a realm soon.",
 		"loginTitle": "Enter The Crucible",
 		"loginRegisterLead": "Sign up with your name and email, or continue with Google.",
 		"loginMagicLinkLead": "We'll email you a one-time sign-in link — no password needed.",
@@ -37,6 +36,14 @@
 		"loginFinePrintRegister": "After signing up we'll email you a sign-in link. You won't be logged in until you click it.",
 		"loginRegisterSuccess": "Account created! Check your email for a sign-in link to continue.",
 		"loginFinePrintMagicLink": "Check your inbox (and spam folder). Links expire after 15 minutes.",
+		"maintenance": {
+			"title": "We'll be right back",
+			"lead": "The readathon site is briefly down for maintenance.",
+			"body": "Please wait - we know about this and are working on it.",
+			"adminNote": "You are signed in as an admin - head to the dashboard to manage the site.",
+			"loginHint": "Admins can sign in to manage the site.",
+			"loginLink": "Sign in"
+		},
 		"faqLoginToAsk": "Log in to ask",
 		"teamsPageTitle": "The Realms",
 		"teamsPageLead": "Once accepted, you'll be randomly sorted into one of {teamCount} realms. Each has optional bonus prompts worth ±10 XP.",
@@ -182,6 +189,9 @@
 				"statAssigned": "assigned",
 				"statSubmissions": "book submissions",
 				"statUnread": "unread messages",
+				"downtimeLabel": "Downtime mode",
+				"downtimeHint": "When enabled, everyone except admins sees a maintenance page and cannot use the site. Admins keep full access.",
+				"downtimeToggle": "Lock out non-admins (maintenance page)",
 				"rostersLabel": "Show public team rosters",
 				"rostersHint": "When enabled, a Rosters page and nav link appear so everyone can see who is on each team.",
 				"rostersToggle": "Enable team rosters page"
@@ -340,6 +350,9 @@
 				"rostersPublic": "Team rosters are now public.",
 				"rostersHidden": "Team rosters are hidden.",
 				"rosterSettingFailed": "Failed to update setting",
+				"downtimeOn": "Downtime mode enabled - non-admins are locked out.",
+				"downtimeOff": "Downtime mode disabled - the site is open again.",
+				"downtimeSettingFailed": "Failed to update downtime setting",
 				"webhookSaved": "Discord webhook saved. Standings will post there when published.",
 				"webhookRemoved": "Discord webhook removed.",
 				"webhookFailed": "Failed to update webhook",
@@ -383,7 +396,7 @@
 			"Bonus prompts layer on top (team prompts, page count, competition/trials)",
 			"Page-count bonus always goes to your team",
 			"One book = add XP or sabotage — never both",
-			"Standings rank by avg gain + attack per member (400 team XP pool is separate)"
+			"Standings rank by total team XP (each realm starts with 400 team XP)"
 		],
 		"homeSubmitBanner": {
 			"title": "Finished a book?",
@@ -473,6 +486,25 @@
 					"points": 10
 				}
 			]
+		},
+		{
+			"id": "explorers",
+			"name": "Explorers",
+			"color": "#278fc9",
+			"accent": "#b8d4ed",
+			"icon": "‡",
+			"bonusPrompts": [
+				{
+					"id": "explorers-more-than-50-chapters",
+					"label": "The book has more then 50 chapters",
+					"points": 20
+				},
+				{
+					"id": "wielders-published-10-years-ago",
+					"label": "The book was published more then 10 years ago",
+					"points": 10
+				}
+			]
 		}
 	],
 	"pageCountBonuses": [
@@ -496,7 +528,7 @@
 				"id": "loot-box",
 				"gameName": "Open A Loot Box",
 				"label": "A book you didn't buy",
-				"description": "You didn't purchase this — e.g. library, KU (book returns after). Not an Audible credit where you keep it forever.",
+				"description": "You didn't purchase this - e.g. library, KU (book returns after). Not an Audible credit where you keep it forever.",
 				"points": 1
 			},
 			{
@@ -545,7 +577,7 @@
 				"id": "farm-xp",
 				"gameName": "Farm XP",
 				"label": "Randomize your TBR with a die",
-				"description": "Randomize which book you pick — titles to numbers, shelves to numbers, etc.",
+				"description": "Randomize which book you pick - titles to numbers, shelves to numbers, etc.",
 				"points": 3,
 				"link": "https://rolladie.net/"
 			},
@@ -567,7 +599,7 @@
 				"id": "npc",
 				"gameName": "Befriend An NPC",
 				"label": "Author's name is two lines on the cover",
-				"description": "Author's name is two lines — NOT one — on the cover.",
+				"description": "Author's name is two lines - NOT one - on the cover.",
 				"points": 4
 			},
 			{
@@ -581,7 +613,7 @@
 				"id": "heal",
 				"gameName": "Heal Your Teammates",
 				"label": "Read a host's 5-star read",
-				"description": "Does not have to be your team's host — any readathon host.",
+				"description": "Does not have to be your team's host - any readathon host.",
 				"points": 5
 			},
 			{
@@ -674,7 +706,7 @@
 				"id": "close-quarters",
 				"gameName": "Close Quarters",
 				"label": "No \"THE\" anywhere in the title",
-				"description": "Including as the first word — no \"the\" anywhere.",
+				"description": "Including as the first word - no \"the\" anywhere.",
 				"points": -4
 			},
 			{
@@ -740,9 +772,43 @@
 		"startingTeamXp": 400,
 		"promptsMustBeSameSign": true,
 		"pageBonusAlwaysPositiveToOwnTeam": true,
-		"standingsUseAveragePerMember": true,
+		"standingsUseAveragePerMember": false,
 		"oneAttackTargetPerBook": true
 	},
+	"promptXpTiers": [
+		{
+			"points": 5,
+			"label": "Minor",
+			"gainColor": "#7ec89a",
+			"gainGlow": "rgba(110, 207, 138, 0.14)",
+			"attackColor": "#e88a72",
+			"attackGlow": "rgba(232, 138, 114, 0.14)"
+		},
+		{
+			"points": 10,
+			"label": "Major",
+			"gainColor": "#8fd4ff",
+			"gainGlow": "rgba(143, 212, 255, 0.14)",
+			"attackColor": "#ff9a6a",
+			"attackGlow": "rgba(255, 154, 106, 0.14)"
+		},
+		{
+			"points": 15,
+			"label": "Critical",
+			"gainColor": "#e8c547",
+			"gainGlow": "rgba(232, 197, 71, 0.16)",
+			"attackColor": "#ff6b4a",
+			"attackGlow": "rgba(255, 107, 74, 0.16)"
+		},
+		{
+			"points": 20,
+			"label": "Legendary",
+			"gainColor": "#d4a5ff",
+			"gainGlow": "rgba(212, 165, 255, 0.14)",
+			"attackColor": "#ff4d6d",
+			"attackGlow": "rgba(255, 77, 109, 0.14)"
+		}
+	],
 	"faq": [
 		{
 			"q": "Can I use more than one prompt?",

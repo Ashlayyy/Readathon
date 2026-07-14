@@ -11,15 +11,31 @@ function memberLabel(count: number): string {
   return count === 1 ? '1 member' : `${count} members`
 }
 
+function standingsDetailLine(team: TeamStanding, index: number, standings: TeamStanding[]): string {
+  const activity = `+${team.xpGained} gain · +${team.xpDealt} attack`
+  if (team.memberCount <= 0) return 'No members assigned yet'
+
+  const members = memberLabel(team.memberCount)
+  if (standings.length < 2) return `${members} · ${activity}`
+
+  const leader = standings[0]!
+  if (index === 0) {
+    const gap = leader.totalTeamXp - standings[1]!.totalTeamXp
+    return `${members} · ${gap} XP ahead · ${activity}`
+  }
+
+  const gap = leader.totalTeamXp - team.totalTeamXp
+  return `${members} · ${gap} XP behind leader · ${activity}`
+}
+
 function leaderSubtitle(standings: TeamStanding[]): string {
   if (standings.length < 2) {
-    return 'Ranked by avg gain + attack per member (400 team XP starting pool, not counted in avg)'
+    return 'Ranked by total team XP (400 starting pool per realm)'
   }
   const leader = standings[0]!
   const runnerUp = standings[1]!
-  const avgGap = Math.round((leader.averagePerMember - runnerUp.averagePerMember) * 10) / 10
   const xpGap = leader.totalTeamXp - runnerUp.totalTeamXp
-  return `${escapeXml(leader.teamName)} leads by ${avgGap} avg/person (+${leader.xpGained} gain, +${leader.xpDealt} attack) · ${xpGap} team XP ahead`
+  return `${escapeXml(leader.teamName)} leads by ${xpGap} team XP (+${leader.xpGained} gain, +${leader.xpDealt} attack)`
 }
 
 export function generateStandingsSvg(standings: TeamStanding[], weekLabel: string): string {
@@ -37,10 +53,7 @@ export function generateStandingsSvg(standings: TeamStanding[], weekLabel: strin
       const strokeWidth = isLeader ? 3 : 2
       const rowFill = isLeader ? '#2a2438' : '#242033'
       const rankLabel = isLeader ? `#${rank} ${escapeXml(team.teamName)} ★` : `#${rank} ${escapeXml(team.teamName)}`
-      const detailLine =
-        team.memberCount > 0
-          ? `${memberLabel(team.memberCount)} · ${team.averagePerMember} avg/person · +${team.xpGained} gain · +${team.xpDealt} attack`
-          : 'No members assigned yet'
+      const detailLine = standingsDetailLine(team, i, standings)
 
       return `
     <g>

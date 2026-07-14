@@ -77,7 +77,6 @@ onMounted(async () => {
           {{ config.copy.submitCta }}
         </RouterLink>
         <template v-else>
-          <p class="hero-pending">{{ config.copy.pendingBanner }}</p>
           <RouterLink to="/profile" class="btn btn-primary">{{ config.copy.profileBooksTab }}</RouterLink>
         </template>
         <RouterLink to="/how-it-works" class="btn btn-secondary">{{ config.copy.howItWorksCta }}</RouterLink>
@@ -232,19 +231,6 @@ details[open] > .collapse-summary::after {
   justify-content: center;
   flex-wrap: wrap;
   align-items: center;
-}
-
-.hero-pending {
-  width: 100%;
-  max-width: 28rem;
-  margin: 0;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius);
-  background: rgba(212, 99, 74, 0.1);
-  border: 1px solid var(--realm-border);
-  color: var(--realm-text-muted);
-  font-size: 0.92rem;
-  line-height: 1.5;
 }
 
 .submit-banner {

@@ -6,8 +6,8 @@ import { buildSubmitStrategy } from './submit-strategy.js'
 function team(
   id: string,
   name: string,
-  averagePerMember: number,
-  totalTeamXp = 400,
+  totalTeamXp: number,
+  averagePerMember = totalTeamXp - 400,
 ): TeamStanding {
   return {
     teamId: id,
@@ -25,17 +25,25 @@ function team(
 }
 
 describe('buildSubmitStrategy', () => {
-  it('suggests sabotage when leading but runner-up is close', () => {
-    const standings = [team('sun', 'Sun', 410, 810), team('moon', 'Moon', 405, 805)]
+  it('suggests sabotage when leading but closest rival is close in team XP', () => {
+    const standings = [team('sun', 'Sun', 810), team('moon', 'Moon', 780), team('star', 'Star', 650)]
     const result = buildSubmitStrategy(standings, 'sun')
     assert.equal(result.suggestion, 'sabotage')
     assert.equal(result.targetTeamId, 'moon')
   })
 
   it('suggests add when behind the leader', () => {
-    const standings = [team('sun', 'Sun', 420), team('moon', 'Moon', 400)]
+    const standings = [team('sun', 'Sun', 820), team('moon', 'Moon', 760), team('star', 'Star', 700)]
     const result = buildSubmitStrategy(standings, 'moon')
     assert.equal(result.suggestion, 'add')
     assert.equal(result.yourRank, 2)
+    assert.match(result.reason, /60 team XP/)
+  })
+
+  it('targets the highest team XP rival when leading among three teams', () => {
+    const standings = [team('sun', 'Sun', 900), team('moon', 'Moon', 850), team('star', 'Star', 820)]
+    const result = buildSubmitStrategy(standings, 'sun')
+    assert.equal(result.suggestion, 'add')
+    assert.match(result.reason, /Moon/)
   })
 })

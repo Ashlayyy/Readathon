@@ -61,6 +61,15 @@ export type RosterTeam = {
   members: RosterMember[]
 }
 
+export type PromptXpTier = {
+  points: number
+  label: string
+  gainColor: string
+  gainGlow: string
+  attackColor: string
+  attackGlow: string
+}
+
 export type Prompt = {
   id: string
   gameName: string
@@ -92,6 +101,7 @@ export type AdminCopyBlock = Record<string, string | Record<string, string>>
 
 export type AdminSiteSettings = {
   showTeamRosters: boolean
+  downtimeMode: boolean
   discordWebhookUrl: string
   discordRoleId: string
 }
@@ -114,11 +124,12 @@ export type RealmathonConfig = {
   teams: TeamConfig[]
   pageCountBonuses: { min: number; max: number | null; points: number; label: string }[]
   globalBonuses: { id: string; label: string; description: string; points: number }[]
+  promptXpTiers?: PromptXpTier[]
   prompts: { positive: Prompt[]; negative: Prompt[] }
   howItWorks: { step: number; title: string; body: string }[]
   scoringRules: { maxPromptsPerBook: number }
   faq: { q: string; a: string }[]
-  site?: { showTeamRosters: boolean }
+  site?: { showTeamRosters: boolean; downtimeMode: boolean }
 }
 
 export type TeamStanding = {

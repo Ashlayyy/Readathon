@@ -83,6 +83,7 @@ watch(showRosters, (visible) => {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
+  min-height: 2.75rem;
   transition:
     color 0.2s,
     border-color 0.2s,
@@ -120,5 +121,17 @@ watch(showRosters, (visible) => {
 .roster-lead {
   margin: 0;
   color: var(--realm-text-muted);
+}
+
+@media (max-width: 768px) {
+  .page-tabs {
+    width: 100%;
+  }
+
+  .page-tabs button {
+    flex: 1;
+    justify-content: center;
+    text-align: center;
+  }
 }
 </style>

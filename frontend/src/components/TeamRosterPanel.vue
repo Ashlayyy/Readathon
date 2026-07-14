@@ -55,7 +55,7 @@ onMounted(async () => {
 
 @media (min-width: 768px) {
   .roster-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 

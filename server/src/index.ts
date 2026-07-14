@@ -6,6 +6,7 @@ import { config as loadEnv } from 'dotenv'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { downtimeGuard } from './middleware/downtime.js'
 import { rateLimit } from './middleware/rateLimit.js'
 import { connectDb } from './db/connect.js'
 import { User } from './db/models/User.js'
@@ -36,6 +37,8 @@ app.use(
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, keyPrefix: 'write' })
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyPrefix: 'admin' })
+
+app.use('/api/*', downtimeGuard)
 
 app.get('/api/health', (c) =>
   c.json({

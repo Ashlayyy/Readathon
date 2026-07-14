@@ -8,7 +8,7 @@ const { register, login, googleLoginUrl } = useAuth()
 const { config, loadConfig, configLoading } = useConfig()
 const route = useRoute()
 
-const mode = ref<'register' | 'login'>('register')
+const mode = ref<'register' | 'login'>('login')
 const displayName = ref('')
 const email = ref('')
 const error = ref('')

@@ -1,6 +1,6 @@
-import { calculateStandings } from './scoring.js'
+import { calculateStandings, type TeamStanding } from './scoring.js'
 
-const CLOSE_AVG_GAP = 10
+const CLOSE_TEAM_XP_GAP = 40
 
 export type SubmitStrategy = {
   standingsAvailable: boolean
@@ -16,6 +16,18 @@ export type SubmitStrategy = {
 export async function getSubmitStrategy(userTeamId: string): Promise<SubmitStrategy> {
   const standings = await calculateStandings()
   return buildSubmitStrategy(standings, userTeamId)
+}
+
+function teamXpGap(ahead: TeamStanding, behind: TeamStanding): number {
+  return ahead.totalTeamXp - behind.totalTeamXp
+}
+
+function closestRivalByTeamXp(standings: TeamStanding[], myTeamId: string): TeamStanding | null {
+  return (
+    standings
+      .filter((t) => t.teamId !== myTeamId)
+      .sort((a, b) => b.totalTeamXp - a.totalTeamXp)[0] ?? null
+  )
 }
 
 export function buildSubmitStrategy(
@@ -39,36 +51,36 @@ export function buildSubmitStrategy(
 
   const my = standings[myIndex]!
   const leader = standings[0]!
-  const runnerUp = standings[1]
   const rank = myIndex + 1
+  const closestRival = closestRivalByTeamXp(standings, my.teamId)
 
-  if (rank === 1 && runnerUp) {
-    const avgGap = leader.averagePerMember - runnerUp.averagePerMember
-    if (avgGap <= CLOSE_AVG_GAP) {
+  if (rank === 1) {
+    if (closestRival) {
+      const xpGap = teamXpGap(my, closestRival)
+      if (xpGap <= CLOSE_TEAM_XP_GAP) {
+        return {
+          standingsAvailable: true,
+          yourRank: rank,
+          yourTeamId: my.teamId,
+          yourTeamName: my.teamName,
+          suggestion: 'sabotage',
+          targetTeamId: closestRival.teamId,
+          targetTeamName: closestRival.teamName,
+          reason: `${closestRival.teamName} is only ${xpGap} team XP behind. Sabotage protects your lead.`,
+        }
+      }
       return {
         standingsAvailable: true,
         yourRank: rank,
         yourTeamId: my.teamId,
         yourTeamName: my.teamName,
-        suggestion: 'sabotage',
-        targetTeamId: runnerUp.teamId,
-        targetTeamName: runnerUp.teamName,
-        reason: `${runnerUp.teamName} is close behind (${avgGap} avg/person). Sabotage protects your lead.`,
+        suggestion: 'add',
+        targetTeamId: null,
+        targetTeamName: null,
+        reason: `You're in the lead by ${xpGap} team XP over ${closestRival.teamName}. Adding XP widens the gap.`,
       }
     }
-    return {
-      standingsAvailable: true,
-      yourRank: rank,
-      yourTeamId: my.teamId,
-      yourTeamName: my.teamName,
-      suggestion: 'add',
-      targetTeamId: null,
-      targetTeamName: null,
-      reason: `You're in the lead. Adding XP widens the gap over ${runnerUp.teamName}.`,
-    }
-  }
 
-  if (rank === 1) {
     return {
       standingsAvailable: true,
       yourRank: rank,
@@ -81,9 +93,11 @@ export function buildSubmitStrategy(
     }
   }
 
-  const gapToLeader = leader.averagePerMember - my.averagePerMember
+  const gapToLeader = teamXpGap(leader, my)
+  const teamAbove = myIndex > 0 ? standings[myIndex - 1]! : null
+  const gapToTeamAbove = teamAbove ? teamXpGap(teamAbove, my) : null
 
-  if (rank === 2 && gapToLeader <= CLOSE_AVG_GAP) {
+  if (gapToLeader <= CLOSE_TEAM_XP_GAP) {
     return {
       standingsAvailable: true,
       yourRank: rank,
@@ -92,7 +106,33 @@ export function buildSubmitStrategy(
       suggestion: 'add',
       targetTeamId: null,
       targetTeamName: null,
-      reason: `You're #2, only ${gapToLeader} avg/person behind ${leader.teamName}. Adding XP is the fastest way to catch up.`,
+      reason: `You're #${rank}, only ${gapToLeader} team XP behind ${leader.teamName}. Adding XP is the fastest way to catch up.`,
+    }
+  }
+
+  if (rank >= 3 && teamAbove && gapToTeamAbove !== null && gapToTeamAbove <= CLOSE_TEAM_XP_GAP) {
+    return {
+      standingsAvailable: true,
+      yourRank: rank,
+      yourTeamId: my.teamId,
+      yourTeamName: my.teamName,
+      suggestion: 'add',
+      targetTeamId: null,
+      targetTeamName: null,
+      reason: `You're #${rank} — ${gapToTeamAbove} team XP behind ${teamAbove.teamName} and ${gapToLeader} behind ${leader.teamName}. Adding XP helps you climb.`,
+    }
+  }
+
+  if (rank === 2) {
+    return {
+      standingsAvailable: true,
+      yourRank: rank,
+      yourTeamId: my.teamId,
+      yourTeamName: my.teamName,
+      suggestion: 'add',
+      targetTeamId: null,
+      targetTeamName: null,
+      reason: `You're #2, ${gapToLeader} team XP behind ${leader.teamName}. Adding XP helps ${my.teamName} take the lead.`,
     }
   }
 
@@ -104,6 +144,6 @@ export function buildSubmitStrategy(
     suggestion: 'add',
     targetTeamId: null,
     targetTeamName: null,
-    reason: `You're #${rank}. Adding XP helps ${my.teamName} climb — sabotage only helps if you want to slow a specific rival.`,
+    reason: `You're #${rank}, ${gapToLeader} team XP behind ${leader.teamName}. Adding XP helps ${my.teamName} climb — sabotage slows a specific rival.`,
   }
 }

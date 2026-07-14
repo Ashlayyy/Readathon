@@ -15,6 +15,7 @@ const router = createRouter({
     { path: '/faq', name: 'faq', component: () => import('../views/FaqView.vue') },
     { path: '/standings', name: 'standings', component: () => import('../views/StandingsView.vue') },
     { path: '/login', name: 'login', component: () => import('../views/LoginView.vue') },
+    { path: '/maintenance', name: 'maintenance', component: () => import('../views/MaintenanceView.vue') },
     { path: '/submit', name: 'submit', component: () => import('../views/SubmitView.vue'), meta: { requiresAssigned: true } },
     { path: '/profile', name: 'profile', component: () => import('../views/ProfileView.vue'), meta: { requiresAuth: true } },
     { path: '/my-reads', redirect: (to) => ({ name: 'profile', query: { ...to.query, tab: 'books' } }) },
@@ -29,6 +30,18 @@ router.beforeEach(async (to) => {
   const { config, loadConfig } = useConfig()
 
   await Promise.all([fetchUser(), loadConfig()])
+
+  const downtime = config.value?.site?.downtimeMode === true
+  const isAdmin = user.value?.isAdmin === true
+
+  if (downtime && !isAdmin) {
+    const allowed = new Set(['maintenance', 'login'])
+    if (!allowed.has(String(to.name))) return { name: 'maintenance' }
+  }
+
+  if (to.name === 'maintenance' && (!downtime || isAdmin)) {
+    return isAdmin ? '/admin' : '/'
+  }
 
   if (to.name === 'login' && user.value) return '/'
   if (

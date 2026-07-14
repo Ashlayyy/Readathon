@@ -1,9 +1,9 @@
 /**
  * Public API base URL (no trailing slash). Used for magic links and OAuth callbacks.
  *
- * IMPORTANT: This should match your *public* routing.
- * - If your API is served at `https://api.bookbaddies.net/` (no `/api` prefix), set `API_URL` to that.
- * - If your API is served at `https://api.bookbaddies.net/api`, set `API_URL` to that.
+ * Set `API_URL` to the API subdomain root, e.g. `https://api.bookbaddies.net`.
+ * Public paths are `/auth/verify`, `/config`, etc. — nginx proxies them to the
+ * Hono app's internal `/api/*` routes.
  */
 export function getApiPublicBase(): string {
   const raw = process.env.API_URL?.trim() || 'http://localhost:3001/api'

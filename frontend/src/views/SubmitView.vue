@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { api, type SubmitStrategy } from '../lib/api'
+import { api, type PromptXpTier, type SubmitStrategy } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
+import SubmitXpPreview from '../components/SubmitXpPreview.vue'
 import type { Prompt } from '../lib/api'
 
 const { user } = useAuth()
@@ -112,6 +113,68 @@ const estimatedPromptPoints = computed(() => {
   }, 0)
 })
 
+const submissionSign = computed(() => (submissionType.value === 'add' ? 1 : submissionType.value === 'sabotage' ? -1 : 0))
+
+const estimatedBonusPoints = computed(() => {
+  if (!config.value || !userTeam.value || !submissionSign.value) return 0
+  let sum = 0
+  if (bonusCompetition.value) {
+    sum += (config.value.globalBonuses[0]?.points ?? 10) * submissionSign.value
+  }
+  for (const id of bonusTeamPromptIds.value) {
+    const tp = userTeam.value.bonusPrompts.find((p) => p.id === id)
+    if (tp) sum += tp.points * submissionSign.value
+  }
+  return sum
+})
+
+const targetTeam = computed(() =>
+  targetTeamId.value ? config.value?.teams.find((t) => t.id === targetTeamId.value) : undefined,
+)
+
+const selectedPromptDetails = computed(() => {
+  if (!config.value) return []
+  const all = [...config.value.prompts.positive, ...config.value.prompts.negative]
+  return selectedPromptIds.value
+    .map((id) => all.find((p) => p.id === id))
+    .filter((p): p is Prompt => Boolean(p))
+})
+
+const selectedBonusDetails = computed(() => {
+  if (!config.value || !userTeam.value || !submissionSign.value) return [] as Array<{ label: string; points: number }>
+  const rows: Array<{ label: string; points: number }> = []
+  if (bonusCompetition.value && config.value.globalBonuses[0]) {
+    rows.push({
+      label: config.value.globalBonuses[0].label,
+      points: config.value.globalBonuses[0].points * submissionSign.value,
+    })
+  }
+  for (const id of bonusTeamPromptIds.value) {
+    const tp = userTeam.value.bonusPrompts.find((p) => p.id === id)
+    if (tp) rows.push({ label: tp.label, points: tp.points * submissionSign.value })
+  }
+  return rows
+})
+
+function formatSignedXp(value: number): string {
+  return value > 0 ? `+${value}` : `${value}`
+}
+
+function promptBadgeStyle(points: number, xpTiers?: PromptXpTier[]) {
+  const tier = xpTiers?.find((row) => row.points === Math.abs(points))
+  if (!tier) return undefined
+  const isGain = points >= 0
+  return {
+    color: isGain ? tier.gainColor : tier.attackColor,
+    background: isGain ? tier.gainGlow : tier.attackGlow,
+    borderColor: `color-mix(in srgb, ${isGain ? tier.gainColor : tier.attackColor} 35%, transparent)`,
+  }
+}
+
+function bonusPointsLabel(points: number): string {
+  return formatSignedXp(points * (submissionSign.value || 1))
+}
+
 const bonusCount = computed(
   () =>
     bonusTeamPromptIds.value.length +
@@ -131,7 +194,8 @@ function isGlobalBonusSelected(bonusId: string) {
 }
 
 function globalBonusLabel(bonus: { points: number }) {
-  return `±${Math.abs(bonus.points)}`
+  if (!submissionSign.value) return `±${Math.abs(bonus.points)}`
+  return formatSignedXp(bonus.points * submissionSign.value)
 }
 
 function isPromptSelected(id: string) {
@@ -312,9 +376,13 @@ function reset() {
           </label>
         </div>
 
-        <p class="xp-preview">
-          {{ config.copy.submitPageBonusPreview }} <strong>+{{ pageBonus }} XP</strong>
-        </p>
+        <SubmitXpPreview
+          :submission-type="null"
+          :user-team="userTeam"
+          :prompt-points="0"
+          :bonus-points="0"
+          :page-bonus="pageBonus"
+        />
       </section>
 
       <!-- Step 2: Add or Sabotage -->
@@ -391,6 +459,16 @@ function reset() {
             </button>
           </div>
         </div>
+
+        <SubmitXpPreview
+          v-if="submissionType"
+          :submission-type="submissionType"
+          :user-team="userTeam"
+          :target-team="targetTeam"
+          :prompt-points="estimatedPromptPoints"
+          :bonus-points="estimatedBonusPoints"
+          :page-bonus="pageBonus"
+        />
       </section>
 
       <!-- Step 3: Prompts -->
@@ -400,7 +478,12 @@ function reset() {
             <h2>{{ config.copy.submitPromptsTitle }}</h2>
             <p class="step-hint">{{ t(String(config.copy.submitPromptsHint)) }}</p>
           </div>
-          <span class="counter-pill">{{ selectedPromptIds.length }} / {{ maxPrompts }}</span>
+          <span class="counter-pill">
+            {{ selectedPromptIds.length }} / {{ maxPrompts }}
+            <template v-if="estimatedPromptPoints !== 0">
+              · {{ formatSignedXp(estimatedPromptPoints) }} XP
+            </template>
+          </span>
         </div>
 
         <input
@@ -422,7 +505,7 @@ function reset() {
             type="button"
             role="listitem"
             class="pick-item"
-            :class="{ selected: isPromptSelected(p.id) }"
+            :class="{ selected: isPromptSelected(p.id), 'add-pick': submissionType === 'add' }"
             :aria-pressed="isPromptSelected(p.id)"
             :disabled="!isPromptSelected(p.id) && selectedPromptIds.length >= maxPrompts"
             @click="togglePrompt(p.id)"
@@ -430,7 +513,10 @@ function reset() {
             <span class="pick-check" aria-hidden="true">{{ isPromptSelected(p.id) ? '✓' : '' }}</span>
             <span class="pick-content">
               <span class="pick-top">
-                <span class="badge" :class="p.points > 0 ? 'badge-positive' : 'badge-negative'">
+                <span
+                  class="xp-pill"
+                  :style="promptBadgeStyle(p.points, config.promptXpTiers)"
+                >
                   {{ p.points > 0 ? '+' : '' }}{{ p.points }}
                 </span>
                 <strong>{{ p.label }}</strong>
@@ -439,6 +525,16 @@ function reset() {
             </span>
           </button>
         </div>
+
+        <SubmitXpPreview
+          v-if="submissionType"
+          :submission-type="submissionType"
+          :user-team="userTeam"
+          :target-team="targetTeam"
+          :prompt-points="estimatedPromptPoints"
+          :bonus-points="estimatedBonusPoints"
+          :page-bonus="pageBonus"
+        />
       </section>
 
       <!-- Step 4: Bonuses -->
@@ -464,7 +560,7 @@ function reset() {
             <span class="pick-check" aria-hidden="true">{{ isGlobalBonusSelected(gb.id) ? '✓' : '' }}</span>
             <span class="pick-content">
               <span class="pick-top">
-                <span class="badge badge-positive">{{ globalBonusLabel(gb) }}</span>
+                <span class="xp-pill gain">{{ globalBonusLabel(gb) }} XP</span>
                 <strong>{{ gb.label }}</strong>
               </span>
               <span class="pick-sub">{{ gb.description }}</span>
@@ -485,7 +581,7 @@ function reset() {
               <span class="pick-check" aria-hidden="true">{{ isTeamBonusSelected(tp.id) ? '✓' : '' }}</span>
               <span class="pick-content">
                 <span class="pick-top">
-                  <span class="badge badge-positive">±10</span>
+                  <span class="xp-pill gain">{{ bonusPointsLabel(tp.points) }} XP</span>
                   <strong>{{ tp.label }}</strong>
                 </span>
                 <span class="pick-sub">{{ config.copy.submitTeamBonusSub }}</span>
@@ -494,7 +590,15 @@ function reset() {
           </template>
         </div>
 
-        <p class="xp-preview">{{ config.copy.submitPageBonusPreview }} <strong>+{{ pageBonus }} XP</strong></p>
+        <SubmitXpPreview
+          v-if="submissionType"
+          :submission-type="submissionType"
+          :user-team="userTeam"
+          :target-team="targetTeam"
+          :prompt-points="estimatedPromptPoints"
+          :bonus-points="estimatedBonusPoints"
+          :page-bonus="pageBonus"
+        />
       </section>
 
       <!-- Step 5: Review -->
@@ -502,48 +606,79 @@ function reset() {
         <h2>{{ config.copy.submitReviewTitle }}</h2>
         <p class="step-hint">{{ config.copy.submitReviewHint }}</p>
 
-        <div class="review card">
-          <dl class="review-grid">
-            <div>
-              <dt>{{ config.copy.submitReviewBook }}</dt>
-              <dd><strong>{{ bookTitle }}</strong> by {{ bookAuthor }}</dd>
+        <div class="review-layout">
+          <div class="review card">
+            <dl class="review-grid">
+              <div>
+                <dt>{{ config.copy.submitReviewBook }}</dt>
+                <dd><strong>{{ bookTitle }}</strong> by {{ bookAuthor }}</dd>
+              </div>
+              <div>
+                <dt>{{ config.copy.submitReviewDetails }}</dt>
+                <dd>{{ pageCount }} pages · {{ format }}</dd>
+              </div>
+              <div>
+                <dt>{{ config.copy.submitReviewType }}</dt>
+                <dd v-if="submissionType === 'add'">{{ config.copy.submitReviewAdding }}</dd>
+                <dd v-else>
+                  {{ config.copy.submitReviewSabotaging }}
+                  <strong
+                    v-if="targetTeamId"
+                    class="target-team-inline"
+                    :style="{ color: getTeam(targetTeamId)?.color }"
+                  >
+                    {{ getTeam(targetTeamId)?.name }}
+                  </strong>
+                  <template v-else>{{ config.copy.submitReviewAnotherTeam }}</template>
+                </dd>
+              </div>
+            </dl>
+
+            <div v-if="selectedPromptDetails.length" class="review-breakdown">
+              <h3 class="review-breakdown-title">{{ config.copy.submitReviewPrompts }}</h3>
+              <ul class="review-breakdown-list">
+                <li v-for="p in selectedPromptDetails" :key="p.id">
+                  <span>{{ p.label }}</span>
+                  <span class="review-xp" :class="p.points > 0 ? 'gain' : 'attack'">
+                    {{ formatSignedXp(p.points) }} XP
+                  </span>
+                </li>
+              </ul>
             </div>
-            <div>
-              <dt>{{ config.copy.submitReviewDetails }}</dt>
-              <dd>{{ pageCount }} pages · {{ format }}</dd>
+
+            <div v-if="selectedBonusDetails.length" class="review-breakdown">
+              <h3 class="review-breakdown-title">{{ config.copy.submitReviewBonuses }}</h3>
+              <ul class="review-breakdown-list">
+                <li v-for="(b, i) in selectedBonusDetails" :key="i">
+                  <span>{{ b.label }}</span>
+                  <span class="review-xp" :class="b.points > 0 ? 'gain' : 'attack'">
+                    {{ formatSignedXp(b.points) }} XP
+                  </span>
+                </li>
+              </ul>
             </div>
-            <div>
-              <dt>{{ config.copy.submitReviewType }}</dt>
-              <dd v-if="submissionType === 'add'">{{ config.copy.submitReviewAdding }}</dd>
-              <dd v-else>
-                {{ config.copy.submitReviewSabotaging }}
-                <strong
-                  v-if="targetTeamId"
-                  class="target-team-inline"
-                  :style="{ color: getTeam(targetTeamId)?.color }"
-                >
-                  {{ getTeam(targetTeamId)?.name }}
-                </strong>
-                <template v-else>{{ config.copy.submitReviewAnotherTeam }}</template>
-              </dd>
+
+            <div v-if="pageBonus > 0" class="review-breakdown">
+              <h3 class="review-breakdown-title">{{ config.copy.submitReviewPageBonus }}</h3>
+              <ul class="review-breakdown-list">
+                <li>
+                  <span>{{ pageCount }} pages</span>
+                  <span class="review-xp gain">+{{ pageBonus }} XP</span>
+                </li>
+              </ul>
             </div>
-            <div>
-              <dt>{{ config.copy.submitReviewPrompts }}</dt>
-              <dd>{{ selectedPromptIds.length }} selected ({{ estimatedPromptPoints > 0 ? '+' : '' }}{{ estimatedPromptPoints }} XP)</dd>
-            </div>
-            <div v-if="bonusCount">
-              <dt>{{ config.copy.submitReviewBonuses }}</dt>
-              <dd>
-                <template v-if="bonusCompetition">{{ config.globalBonuses[0]?.label }}</template>
-                <template v-if="bonusCompetition && bonusTeamPromptIds.length"> · </template>
-                <template v-if="bonusTeamPromptIds.length">{{ bonusTeamPromptIds.length }} team bonus(es)</template>
-              </dd>
-            </div>
-            <div>
-              <dt>{{ config.copy.submitReviewPageBonus }}</dt>
-              <dd>+{{ pageBonus }} XP</dd>
-            </div>
-          </dl>
+          </div>
+
+          <SubmitXpPreview
+            v-if="submissionType"
+            compact
+            :submission-type="submissionType"
+            :user-team="userTeam"
+            :target-team="targetTeam"
+            :prompt-points="estimatedPromptPoints"
+            :bonus-points="estimatedBonusPoints"
+            :page-bonus="pageBonus"
+          />
         </div>
 
         <button
@@ -567,6 +702,17 @@ function reset() {
           <div class="success-icon" aria-hidden="true">✓</div>
           <h2>{{ config.copy.submitSuccessTitle }}</h2>
           <p>{{ config.copy.submitSuccessBody }}</p>
+
+          <SubmitXpPreview
+            v-if="submissionType"
+            :submission-type="submissionType"
+            :user-team="userTeam"
+            :target-team="targetTeam"
+            :prompt-points="estimatedPromptPoints"
+            :bonus-points="estimatedBonusPoints"
+            :page-bonus="pageBonus"
+          />
+
           <div class="success-actions">
             <button type="button" class="btn btn-primary" @click="reset">{{ config.copy.submitAnother }}</button>
             <button type="button" class="btn btn-secondary" @click="router.push('/profile?tab=books')">
@@ -670,9 +816,9 @@ function reset() {
 
 .step-hint {
   color: var(--realm-text-muted);
-  font-size: 0.9rem;
-  margin-bottom: 1.25rem;
-  line-height: 1.55;
+  font-size: 0.82rem;
+  margin-bottom: 0.85rem;
+  line-height: 1.45;
 }
 
 .step-header-row {
@@ -797,24 +943,10 @@ function reset() {
   line-height: 1.45;
 }
 
-.xp-preview {
-  margin-top: 1.25rem;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius);
-  background: rgba(212, 99, 74, 0.08);
-  border: 1px solid rgba(212, 99, 74, 0.2);
-  color: var(--realm-text-muted);
-  font-size: 0.9rem;
-}
-
-.xp-preview strong {
-  color: var(--realm-accent-glow);
-}
-
 /* Strategy hint */
 .strategy-hint {
-  margin-bottom: 1.25rem;
-  padding: 1rem 1.15rem;
+  margin-bottom: 0.85rem;
+  padding: 0.7rem 0.85rem;
   border-color: color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
   background: linear-gradient(
     135deg,
@@ -824,8 +956,8 @@ function reset() {
 }
 
 .strategy-label {
-  margin: 0 0 0.35rem;
-  font-size: 0.75rem;
+  margin: 0 0 0.25rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -833,9 +965,10 @@ function reset() {
 }
 
 .strategy-reason {
-  margin: 0 0 0.75rem;
-  color: var(--realm-text);
-  line-height: 1.5;
+  margin: 0 0 0.6rem;
+  color: var(--realm-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
 /* Add / sabotage */
@@ -913,7 +1046,7 @@ function reset() {
 
 @media (min-width: 500px) {
   .target-team-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
   }
 }
 
@@ -1088,6 +1221,11 @@ function reset() {
   background: rgba(212, 99, 74, 0.08);
 }
 
+.pick-item.selected.add-pick {
+  border-color: rgba(110, 207, 138, 0.55);
+  background: rgba(110, 207, 138, 0.08);
+}
+
 .pick-item:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -1112,6 +1250,31 @@ function reset() {
 .pick-item.selected .pick-check {
   background: var(--realm-accent);
   border-color: var(--realm-accent);
+}
+
+.pick-item.selected.add-pick .pick-check {
+  background: var(--realm-success);
+  border-color: var(--realm-success);
+}
+
+.xp-pill {
+  flex-shrink: 0;
+  min-width: 2.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--realm-border);
+  background: var(--realm-surface-alt);
+  color: var(--realm-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-family: var(--font-display);
+  text-align: center;
+}
+
+.xp-pill.gain {
+  color: var(--realm-success);
+  border-color: rgba(110, 207, 138, 0.35);
+  background: rgba(110, 207, 138, 0.12);
 }
 
 .pick-content {
@@ -1152,9 +1315,72 @@ function reset() {
 }
 
 /* Review */
+.review-layout {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 768px) {
+  .review-layout {
+    grid-template-columns: 1.2fr 0.8fr;
+    align-items: start;
+  }
+}
+
 .review {
   background: var(--realm-bg);
-  margin-bottom: 1rem;
+}
+
+.review-breakdown {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--realm-border);
+}
+
+.review-breakdown-title {
+  margin: 0 0 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--realm-text-muted);
+}
+
+.review-breakdown-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.review-breakdown-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.88rem;
+  color: var(--realm-text);
+}
+
+.review-xp {
+  flex-shrink: 0;
+  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+}
+
+.review-xp.gain {
+  color: var(--realm-success);
+}
+
+.review-xp.attack {
+  color: var(--realm-accent-glow);
 }
 
 .review-grid {
@@ -1230,8 +1456,13 @@ function reset() {
     max-width: 100%;
   }
 
+  .progress-step:not(.current) .progress-label {
+    display: none;
+  }
+
   .progress-label {
-    font-size: 0.6rem;
+    font-size: 0.72rem;
+    max-width: 4.5rem;
   }
 
   .wizard-nav {

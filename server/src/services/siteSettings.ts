@@ -2,6 +2,7 @@ import { SiteSettings } from '../db/models/SiteSettings.js'
 
 export type SiteSettingsPublic = {
   showTeamRosters: boolean
+  downtimeMode: boolean
 }
 
 export type SiteSettingsAdmin = SiteSettingsPublic & {
@@ -11,10 +12,15 @@ export type SiteSettingsAdmin = SiteSettingsPublic & {
 
 type SiteSettingsCached = SiteSettingsAdmin
 
-let cached: SiteSettingsCached = { showTeamRosters: false, discordWebhookUrl: '', discordRoleId: '' }
+let cached: SiteSettingsCached = {
+  showTeamRosters: false,
+  downtimeMode: false,
+  discordWebhookUrl: '',
+  discordRoleId: '',
+}
 
 export function getSiteSettingsSync(): SiteSettingsPublic {
-  return { showTeamRosters: cached.showTeamRosters }
+  return { showTeamRosters: cached.showTeamRosters, downtimeMode: cached.downtimeMode }
 }
 
 export function getSiteSettingsAdminSync(): SiteSettingsAdmin {
@@ -51,10 +57,16 @@ function isValidDiscordRoleId(roleId: string): boolean {
 export async function refreshSiteSettingsCache(): Promise<SiteSettingsAdmin> {
   let doc = await SiteSettings.findOne()
   if (!doc) {
-    doc = await SiteSettings.create({ showTeamRosters: false, discordWebhookUrl: '', discordRoleId: '' })
+    doc = await SiteSettings.create({
+      showTeamRosters: false,
+      downtimeMode: false,
+      discordWebhookUrl: '',
+      discordRoleId: '',
+    })
   }
   cached = {
     showTeamRosters: doc.showTeamRosters,
+    downtimeMode: doc.downtimeMode ?? false,
     discordWebhookUrl: doc.discordWebhookUrl ?? '',
     discordRoleId: doc.discordRoleId ?? '',
   }
@@ -66,10 +78,18 @@ export async function updateSiteSettings(
 ): Promise<SiteSettingsAdmin> {
   let doc = await SiteSettings.findOne()
   if (!doc) {
-    doc = await SiteSettings.create({ showTeamRosters: false, discordWebhookUrl: '', discordRoleId: '' })
+    doc = await SiteSettings.create({
+      showTeamRosters: false,
+      downtimeMode: false,
+      discordWebhookUrl: '',
+      discordRoleId: '',
+    })
   }
   if (typeof patch.showTeamRosters === 'boolean') {
     doc.showTeamRosters = patch.showTeamRosters
+  }
+  if (typeof patch.downtimeMode === 'boolean') {
+    doc.downtimeMode = patch.downtimeMode
   }
   if (typeof patch.discordWebhookUrl === 'string') {
     const trimmed = patch.discordWebhookUrl.trim()
@@ -88,6 +108,7 @@ export async function updateSiteSettings(
   await doc.save()
   cached = {
     showTeamRosters: doc.showTeamRosters,
+    downtimeMode: doc.downtimeMode ?? false,
     discordWebhookUrl: doc.discordWebhookUrl ?? '',
     discordRoleId: doc.discordRoleId ?? '',
   }
