@@ -382,7 +382,7 @@
 			"Bonus prompts layer on top (team prompts, page count, competition/trials)",
 			"Page-count bonus always goes to your team",
 			"One book = add XP or sabotage — never both",
-			"Standings rank by avg gain + attack per member (400 team XP pool is separate)"
+			"Standings rank by total team XP (each realm starts with 400 team XP)"
 		],
 		"homeSubmitBanner": {
 			"title": "Finished a book?",
@@ -469,6 +469,25 @@
 				{
 					"id": "wielders-cartoon-cover",
 					"label": "The book has a cartoon cover",
+					"points": 10
+				}
+			]
+		},
+		{
+			"id": "explorers",
+			"name": "Explorers",
+			"color": "#278fc9",
+			"accent": "#b8d4ed",
+			"icon": "‡",
+			"bonusPrompts": [
+				{
+					"id": "explorers-more-than-50-chapters",
+					"label": "The book has more then 50 chapters",
+					"points": 20
+				},
+				{
+					"id": "wielders-published-10-years-ago",
+					"label": "The book was published more then 10 years ago",
 					"points": 10
 				}
 			]
@@ -739,7 +758,7 @@
 		"startingTeamXp": 400,
 		"promptsMustBeSameSign": true,
 		"pageBonusAlwaysPositiveToOwnTeam": true,
-		"standingsUseAveragePerMember": true,
+		"standingsUseAveragePerMember": false,
 		"oneAttackTargetPerBook": true
 	},
 	"promptXpTiers": [

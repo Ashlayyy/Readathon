@@ -30,7 +30,7 @@ function standingsDetailLine(team: TeamStanding, index: number, standings: TeamS
 
 function leaderSubtitle(standings: TeamStanding[]): string {
   if (standings.length < 2) {
-    return 'Ranked by avg gain + attack per member (400 team XP starting pool, not counted in avg)'
+    return 'Ranked by total team XP (400 starting pool per realm)'
   }
   const leader = standings[0]!
   const runnerUp = standings[1]!
