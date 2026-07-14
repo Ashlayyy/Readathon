@@ -101,6 +101,7 @@ export type AdminCopyBlock = Record<string, string | Record<string, string>>
 
 export type AdminSiteSettings = {
   showTeamRosters: boolean
+  downtimeMode: boolean
   discordWebhookUrl: string
   discordRoleId: string
 }
@@ -128,7 +129,7 @@ export type RealmathonConfig = {
   howItWorks: { step: number; title: string; body: string }[]
   scoringRules: { maxPromptsPerBook: number }
   faq: { q: string; a: string }[]
-  site?: { showTeamRosters: boolean }
+  site?: { showTeamRosters: boolean; downtimeMode: boolean }
 }
 
 export type TeamStanding = {

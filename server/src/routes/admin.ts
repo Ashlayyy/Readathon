@@ -87,6 +87,7 @@ adminRoutes.get('/settings', (c) => {
 adminRoutes.patch('/settings', async (c) => {
   const body = await c.req.json<{
     showTeamRosters?: boolean
+    downtimeMode?: boolean
     discordWebhookUrl?: string
     discordRoleId?: string
   }>()

@@ -28,6 +28,7 @@ const { user: me } = useAuth()
 const users = ref<AdminUser[]>([])
 const pending = ref(0)
 const showTeamRosters = ref(false)
+const downtimeMode = ref(false)
 const discordWebhookUrl = ref('')
 const discordWebhookDraft = ref('')
 const discordRoleId = ref('')
@@ -68,6 +69,7 @@ const activeTab = ref<'inbox' | 'teams' | 'standings' | 'users' | 'submissions' 
 onMounted(async () => {
   await loadConfig()
   showTeamRosters.value = config.value?.site?.showTeamRosters ?? false
+  downtimeMode.value = config.value?.site?.downtimeMode ?? false
   try {
     await Promise.all([loadAll(), loadAdminSettings()])
   } catch (e) {
@@ -190,6 +192,24 @@ async function saveRosterSetting() {
   } catch (e) {
     showMessage(e instanceof Error ? e.message : msg('rosterSettingFailed'), true)
     showTeamRosters.value = config.value?.site?.showTeamRosters ?? false
+  } finally {
+    loading.value = ''
+  }
+}
+
+async function saveDowntimeSetting() {
+  loading.value = 'downtime-setting'
+  showMessage('')
+  try {
+    await api('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ downtimeMode: downtimeMode.value }),
+    })
+    await loadConfig(true)
+    showMessage(downtimeMode.value ? msg('downtimeOn') : msg('downtimeOff'))
+  } catch (e) {
+    showMessage(e instanceof Error ? e.message : msg('downtimeSettingFailed'), true)
+    downtimeMode.value = config.value?.site?.downtimeMode ?? false
   } finally {
     loading.value = ''
   }
@@ -626,6 +646,20 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
           <li><strong>{{ submissions.length }}</strong> {{ section('teams').statSubmissions }}</li>
           <li><strong>{{ unreadQuestions }}</strong> {{ section('teams').statUnread }}</li>
         </ul>
+      </section>
+
+      <section class="card admin-section">
+        <h2>{{ section('teams').downtimeLabel }}</h2>
+        <p class="section-desc">{{ section('teams').downtimeHint }}</p>
+        <label class="setting-toggle">
+          <input
+            v-model="downtimeMode"
+            type="checkbox"
+            :disabled="loading === 'downtime-setting'"
+            @change="saveDowntimeSetting"
+          />
+          <span>{{ section('teams').downtimeToggle }}</span>
+        </label>
       </section>
 
       <section class="card admin-section">
