@@ -122,13 +122,14 @@ EMAIL_FROM=Readathon <you@yourdomain.com>
 # Optional
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=https://api.your-domain.com/api/auth/google/callback
+GOOGLE_REDIRECT_URI=https://api.your-domain.com/auth/google/callback
 PORT=3001
 ```
 
 ### Frontend production (`frontend/.env.production`)
 
 ```env
+# API subdomain — same value as server API_URL (no trailing slash)
 VITE_API_URL=https://api.your-domain.com
 ```
 
@@ -167,7 +168,7 @@ server {
 }
 ```
 
-**API** — proxy to PM2:
+**API** — proxy to PM2 (nginx adds the internal `/api` prefix; public URLs are `https://api.your-domain.com/auth/...`):
 
 ```nginx
 server {
@@ -175,7 +176,7 @@ server {
     server_name api.your-domain.com;
 
     location / {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:3001/api/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
