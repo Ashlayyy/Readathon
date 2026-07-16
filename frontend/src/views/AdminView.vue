@@ -16,10 +16,12 @@ import {
 import StandingsPanel from '../components/StandingsPanel.vue'
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue'
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue'
+import AdminAddSubmissionModal from '../components/AdminAddSubmissionModal.vue'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 import { useAdminCopy } from '../composables/useAdminCopy'
 import { useAuth } from '../composables/useAuth'
+import { useBodyScrollLock } from '../composables/useBodyScrollLock'
 
 const { config, loadConfig } = useConfig()
 const { t } = useCopy()
@@ -46,25 +48,41 @@ const activeWeeks = ref<PublishedWeek[]>([])
 const standingsHistory = ref<StandingsHistoryEntry[]>([])
 const answerModal = ref<AdminQuestion | null>(null)
 const editSubmission = ref<AdminSubmission | null>(null)
-const editDraft = ref({
-  bookTitle: '',
-  bookAuthor: '',
-  pageCount: 1,
-  format: 'ebook',
-  startedAt: '',
-  finishedAt: '',
-  submissionType: 'add' as 'add' | 'sabotage',
-  targetTeamId: '',
-  promptIds: [] as string[],
-  bonusCompetition: false,
-  bonusTeamPromptIds: [] as string[],
-})
 const modalDraft = ref('')
 const inboxFilter = ref<'unread' | 'read' | 'all'>('unread')
+const submissionSearch = ref('')
+const submissionTypeFilter = ref<'all' | 'add' | 'sabotage'>('all')
+const submissionTeamFilter = ref('')
 const message = ref('')
 const messageIsError = ref(false)
 const loading = ref('')
 const activeTab = ref<'inbox' | 'teams' | 'standings' | 'users' | 'submissions' | 'prompts'>('inbox')
+const addSubmissionOpen = ref(false)
+const navOpen = ref(false)
+
+const anyModalOpen = computed(
+  () => addUserOpen.value || !!answerModal.value || !!editSubmission.value || addSubmissionOpen.value,
+)
+useBodyScrollLock(anyModalOpen)
+
+const filteredSubmissions = computed(() => {
+  const q = submissionSearch.value.trim().toLowerCase()
+  return submissions.value.filter((s) => {
+    if (submissionTypeFilter.value !== 'all' && s.submissionType !== submissionTypeFilter.value) {
+      return false
+    }
+    if (submissionTeamFilter.value && s.userTeamId !== submissionTeamFilter.value) {
+      return false
+    }
+    if (!q) return true
+    return (
+      s.bookTitle.toLowerCase().includes(q) ||
+      s.bookAuthor.toLowerCase().includes(q) ||
+      s.userName.toLowerCase().includes(q) ||
+      s.userEmail.toLowerCase().includes(q)
+    )
+  })
+})
 
 onMounted(async () => {
   await loadConfig()
@@ -90,8 +108,37 @@ async function loadAdminSettings() {
 }
 
 watch(activeTab, (tab) => {
+  navOpen.value = false
   if (tab === 'standings') loadStandings()
 })
+
+const assignedUserCount = computed(() => users.value.filter((u) => u.status === 'assigned').length)
+
+function openAddSubmission() {
+  editSubmission.value = null
+  addSubmissionOpen.value = true
+}
+
+function closeSubmissionModal() {
+  addSubmissionOpen.value = false
+  editSubmission.value = null
+}
+
+async function onSubmissionCreated() {
+  closeSubmissionModal()
+  showMessage(msg('submissionCreated') || 'Submission added for that reader.')
+  await loadAll()
+}
+
+async function onSubmissionUpdated() {
+  closeSubmissionModal()
+  showMessage(msg('submissionUpdated'))
+  await loadAll()
+}
+
+function setTab(tab: typeof activeTab.value) {
+  activeTab.value = tab
+}
 
 const sortedQuestions = computed(() =>
   [...questions.value].sort((a, b) => {
@@ -195,6 +242,18 @@ async function saveRosterSetting() {
   } finally {
     loading.value = ''
   }
+}
+
+async function onDowntimeToggle() {
+  const enabling = downtimeMode.value
+  const ok = confirm(
+    enabling ? confirmMsg('enableDowntime') : confirmMsg('disableDowntime'),
+  )
+  if (!ok) {
+    downtimeMode.value = !enabling
+    return
+  }
+  await saveDowntimeSetting()
 }
 
 async function saveDowntimeSetting() {
@@ -343,49 +402,8 @@ async function submitModalAnswer() {
 }
 
 function openEditSubmission(s: AdminSubmission) {
+  addSubmissionOpen.value = false
   editSubmission.value = s
-  editDraft.value = {
-    bookTitle: s.bookTitle,
-    bookAuthor: s.bookAuthor,
-    pageCount: s.pageCount,
-    format: s.format,
-    startedAt: s.startedAt ?? '',
-    finishedAt: s.finishedAt ?? '',
-    submissionType: s.submissionType,
-    targetTeamId: s.targetTeamId ?? '',
-    promptIds: [...s.promptIds],
-    bonusCompetition: s.bonusCompetition,
-    bonusTeamPromptIds: [...s.bonusTeamPromptIds],
-  }
-}
-
-function closeEditSubmission() {
-  editSubmission.value = null
-}
-
-async function saveEditSubmission() {
-  if (!editSubmission.value) return
-  loading.value = `edit-sub-${editSubmission.value.id}`
-  showMessage('')
-  try {
-    await api(`/admin/submissions/${editSubmission.value.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        ...editDraft.value,
-        targetTeamId:
-          editDraft.value.submissionType === 'sabotage' ? editDraft.value.targetTeamId : undefined,
-        startedAt: editDraft.value.startedAt || null,
-        finishedAt: editDraft.value.finishedAt || null,
-      }),
-    })
-    showMessage(msg('submissionUpdated'))
-    closeEditSubmission()
-    await loadAll()
-  } catch (e) {
-    showMessage(e instanceof Error ? e.message : msg('submissionUpdateFailed'), true)
-  } finally {
-    loading.value = ''
-  }
 }
 
 async function deleteSubmission(id: string, title: string) {
@@ -395,7 +413,7 @@ async function deleteSubmission(id: string, title: string) {
   try {
     await api(`/admin/submissions/${id}`, { method: 'DELETE' })
     showMessage(msg('submissionDeleted'))
-    if (editSubmission.value?.id === id) closeEditSubmission()
+    if (editSubmission.value?.id === id) closeSubmissionModal()
     await loadAll()
   } catch (e) {
     showMessage(e instanceof Error ? e.message : msg('submissionDeleteFailed'), true)
@@ -478,41 +496,63 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
 <template>
   <main v-if="config" class="page admin-page">
-    <header class="admin-header">
-      <div>
+    <header class="admin-topbar">
+      <div class="admin-topbar-text">
         <h1 class="page-title">{{ admin?.title }}</h1>
         <p class="page-lead">{{ admin?.lead }}</p>
       </div>
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm admin-nav-toggle"
+        :aria-expanded="navOpen"
+        aria-controls="admin-sidebar"
+        @click="navOpen = !navOpen"
+      >
+        {{ navOpen ? 'Close menu' : 'Sections' }}
+      </button>
     </header>
 
     <div v-if="message" class="alert" :class="messageIsError ? 'alert-error' : 'alert-success'">{{ message }}</div>
 
-    <nav class="admin-tabs" aria-label="Admin sections">
-      <button
-        type="button"
-        :class="{ active: activeTab === 'inbox' }"
-        @click="activeTab = 'inbox'"
+    <div class="admin-layout">
+      <aside
+        id="admin-sidebar"
+        class="admin-sidebar"
+        :class="{ open: navOpen }"
+        aria-label="Admin sections"
       >
-        {{ section('tabs').inbox }}
-        <span v-if="unreadQuestions > 0" class="tab-badge">{{ unreadQuestions }}</span>
-      </button>
-      <button type="button" :class="{ active: activeTab === 'teams' }" @click="activeTab = 'teams'">
-        {{ section('tabs').teams }}
-      </button>
-      <button type="button" :class="{ active: activeTab === 'standings' }" @click="activeTab = 'standings'">
-        {{ section('tabs').standings }}
-      </button>
-      <button type="button" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">
-        {{ section('tabs').users }}
-      </button>
-      <button type="button" :class="{ active: activeTab === 'submissions' }" @click="activeTab = 'submissions'">
-        {{ section('tabs').submissions }}
-      </button>
-      <button type="button" :class="{ active: activeTab === 'prompts' }" @click="activeTab = 'prompts'">
-        {{ section('tabs').prompts }}
-      </button>
-    </nav>
+        <nav class="admin-side-nav">
+          <button
+            type="button"
+            :class="{ active: activeTab === 'inbox' }"
+            @click="setTab('inbox')"
+          >
+            <span>{{ section('tabs').inbox }}</span>
+            <span v-if="unreadQuestions > 0" class="tab-badge">{{ unreadQuestions }}</span>
+          </button>
+          <button type="button" :class="{ active: activeTab === 'teams' }" @click="setTab('teams')">
+            {{ section('tabs').teams }}
+          </button>
+          <button type="button" :class="{ active: activeTab === 'standings' }" @click="setTab('standings')">
+            {{ section('tabs').standings }}
+          </button>
+          <button type="button" :class="{ active: activeTab === 'users' }" @click="setTab('users')">
+            {{ section('tabs').users }}
+            <span class="nav-meta">{{ assignedUserCount }}/{{ users.length }}</span>
+          </button>
+          <button type="button" :class="{ active: activeTab === 'submissions' }" @click="setTab('submissions')">
+            {{ section('tabs').submissions }}
+            <span class="nav-meta">{{ submissions.length }}</span>
+          </button>
+          <button type="button" :class="{ active: activeTab === 'prompts' }" @click="setTab('prompts')">
+            {{ section('tabs').prompts }}
+          </button>
+        </nav>
+      </aside>
 
+      <div v-if="navOpen" class="admin-nav-backdrop" @click="navOpen = false" />
+
+      <div class="admin-main">
   <!-- Inbox -->
     <section v-show="activeTab === 'inbox'" class="card admin-section">
       <div class="inbox-header">
@@ -592,11 +632,10 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     </section>
 
     <Teleport to="body">
-      <div v-if="answerModal" class="modal-backdrop" @click.self="closeAnswerModal">
+      <div v-if="answerModal" class="modal-backdrop">
         <div class="modal card" role="dialog" aria-labelledby="answer-modal-title">
           <header class="modal-header">
             <h2 id="answer-modal-title">{{ answerModal.answer ? section('inbox').updateAnswer : section('inbox').sendReply }}</h2>
-            <button type="button" class="modal-close" :aria-label="section('inbox').close" @click="closeAnswerModal">×</button>
           </header>
           <div class="modal-body">
             <p class="modal-question">
@@ -656,7 +695,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             v-model="downtimeMode"
             type="checkbox"
             :disabled="loading === 'downtime-setting'"
-            @change="saveDowntimeSetting"
+            @change="onDowntimeToggle"
           />
           <span>{{ section('teams').downtimeToggle }}</span>
         </label>
@@ -912,7 +951,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     </section>
 
     <!-- Add user modal -->
-    <div v-if="addUserOpen" class="modal-backdrop" @click.self="closeAddUser">
+    <div v-if="addUserOpen" class="modal-backdrop">
       <div class="modal card">
         <h2>{{ section('users').addTitle }}</h2>
         <p class="section-desc">{{ section('users').addLead }}</p>
@@ -946,7 +985,37 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
     <!-- Submissions -->
     <section v-show="activeTab === 'submissions'" class="card admin-section">
-      <h2>{{ section('submissions').title }}</h2>
+      <div class="section-header-row">
+        <div>
+          <h2>{{ section('submissions').title }}</h2>
+          <p class="section-desc">{{ section('submissions').addLead }}</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" @click="openAddSubmission">
+          {{ section('submissions').addButton }}
+        </button>
+      </div>
+
+      <div class="submission-filters">
+        <input
+          v-model="submissionSearch"
+          type="search"
+          class="submission-search"
+          :placeholder="section('submissions').searchPlaceholder || 'Search book, reader, email…'"
+          aria-label="Search submissions"
+        />
+        <select v-model="submissionTypeFilter" aria-label="Filter by type">
+          <option value="all">{{ section('submissions').filterAllTypes || 'All types' }}</option>
+          <option value="add">{{ section('submissions').typeAdd }}</option>
+          <option value="sabotage">{{ section('submissions').typeSabotage }}</option>
+        </select>
+        <select v-model="submissionTeamFilter" aria-label="Filter by team">
+          <option value="">{{ section('submissions').filterAllTeams || 'All realms' }}</option>
+          <option v-for="team in config.teams" :key="team.id" :value="team.id">
+            {{ team.icon }} {{ team.name }}
+          </option>
+        </select>
+      </div>
+
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -960,7 +1029,16 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in submissions" :key="s.id">
+            <tr v-if="filteredSubmissions.length === 0">
+              <td colspan="6" class="empty-cell">
+                {{
+                  submissions.length === 0
+                    ? 'No submissions yet.'
+                    : section('submissions').filterEmpty || 'No submissions match your filters.'
+                }}
+              </td>
+            </tr>
+            <tr v-for="s in filteredSubmissions" :key="s.id">
               <td>
                 <strong>{{ s.bookTitle }}</strong>
                 <br />
@@ -995,75 +1073,33 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
           </tbody>
         </table>
       </div>
-      <p class="hint">{{ section('submissions').hint }}</p>
+      <p class="hint">
+        Showing {{ filteredSubmissions.length }} of {{ submissions.length }}.
+        {{ section('submissions').hint }}
+      </p>
     </section>
 
     <AdminPromptsPanel
       v-show="activeTab === 'prompts'"
       @message="(text, isError) => { showMessage(text, isError); loadConfig(true) }"
     />
-
-    <!-- Edit submission modal -->
-    <div v-if="editSubmission" class="modal-backdrop" @click.self="closeEditSubmission">
-      <div class="modal card edit-sub-modal">
-        <h2>{{ section('submissions').editTitle }}</h2>
-        <p class="section-desc">
-          {{ t(section('submissions').editLead, { name: editSubmission.userName }) }}
-        </p>
-        <form class="edit-sub-form" @submit.prevent="saveEditSubmission">
-          <label>
-            {{ section('submissions').titleLabel }}
-            <input v-model="editDraft.bookTitle" type="text" required />
-          </label>
-          <label>
-            {{ section('submissions').authorLabel }}
-            <input v-model="editDraft.bookAuthor" type="text" required />
-          </label>
-          <label>
-            {{ section('submissions').pagesLabel }}
-            <input v-model.number="editDraft.pageCount" type="number" min="1" required />
-          </label>
-          <label>
-            {{ section('submissions').formatLabel }}
-            <select v-model="editDraft.format">
-              <option value="ebook">Ebook</option>
-              <option value="audiobook">Audiobook</option>
-              <option value="physical">Physical</option>
-            </select>
-          </label>
-          <label>
-            {{ section('submissions').typeLabel }}
-            <select v-model="editDraft.submissionType">
-              <option value="add">{{ section('submissions').typeAdd }}</option>
-              <option value="sabotage">{{ section('submissions').typeSabotage }}</option>
-            </select>
-          </label>
-          <label v-if="editDraft.submissionType === 'sabotage'">
-            {{ section('submissions').targetTeamLabel }}
-            <select v-model="editDraft.targetTeamId" required>
-              <option v-for="team in config?.teams" :key="team.id" :value="team.id">
-                {{ team.name }}
-              </option>
-            </select>
-          </label>
-          <label>
-            {{ section('submissions').startedLabel }}
-            <input v-model="editDraft.startedAt" type="date" />
-          </label>
-          <label>
-            {{ section('submissions').finishedLabel }}
-            <input v-model="editDraft.finishedAt" type="date" />
-          </label>
-          <p class="prompt-note">{{ t(section('submissions').promptsUnchanged, { count: editDraft.promptIds.length }) }}</p>
-          <div class="modal-actions">
-            <button type="button" class="btn btn-ghost" @click="closeEditSubmission">{{ section('inbox').cancel }}</button>
-            <button type="submit" class="btn btn-primary" :disabled="loading.startsWith('edit-sub-')">
-              {{ section('submissions').saveChanges }}
-            </button>
-          </div>
-        </form>
       </div>
     </div>
+
+    <AdminAddSubmissionModal
+      v-if="addSubmissionOpen || editSubmission"
+      :users="users"
+      :teams="config.teams"
+      :positive-prompts="config.prompts.positive"
+      :negative-prompts="config.prompts.negative"
+      :max-prompts="config.scoringRules.maxPromptsPerBook ?? 5"
+      :global-bonus-label="config.globalBonuses?.[0]?.label"
+      :editing="editSubmission"
+      @close="closeSubmissionModal"
+      @created="onSubmissionCreated"
+      @updated="onSubmissionUpdated"
+      @error="(m) => showMessage(m, true)"
+    />
   </main>
 </template>
 
@@ -1072,44 +1108,136 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
   margin-bottom: 0;
 }
 
-.admin-header {
-  margin-bottom: 1.5rem;
-}
-
-.admin-tabs {
+.admin-topbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--realm-border);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
 }
 
-.admin-tabs button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.55rem 1rem;
-  border-radius: var(--radius);
+.admin-nav-toggle {
+  display: none;
+  flex-shrink: 0;
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: 13.5rem minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.admin-sidebar {
+  position: sticky;
+  top: 5.5rem;
   border: 1px solid var(--realm-border);
-  background: var(--realm-surface);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--realm-surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  padding: 0.55rem;
+}
+
+.admin-side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.admin-side-nav button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--realm-text-muted);
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 0.88rem;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.admin-tabs button:hover {
+.admin-side-nav button:hover {
   color: var(--realm-text);
-  border-color: rgba(212, 99, 74, 0.4);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.admin-tabs button.active {
-  background: rgba(212, 99, 74, 0.12);
-  border-color: var(--realm-accent);
+.admin-side-nav button.active {
+  background: rgba(212, 99, 74, 0.14);
+  border-color: rgba(212, 99, 74, 0.45);
   color: var(--realm-accent-glow);
+}
+
+.nav-meta {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--realm-text-muted);
+  opacity: 0.85;
+}
+
+.admin-side-nav button.active .nav-meta {
+  color: var(--realm-accent-glow);
+}
+
+.admin-nav-backdrop {
+  display: none;
+}
+
+.admin-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.admin-section {
+  padding: 1.35rem 1.4rem;
+}
+
+.section-header-row,
+.users-header,
+.inbox-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.section-header-row .section-desc,
+.users-header .section-desc {
+  margin-bottom: 0.75rem;
+}
+
+.empty-cell {
+  text-align: center;
+  color: var(--realm-text-muted);
+  padding: 1.5rem !important;
+}
+
+.submission-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(8rem, 0.7fr) minmax(8rem, 0.9fr);
+  gap: 0.65rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.submission-filters input,
+.submission-filters select {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--realm-border);
+  background: var(--realm-bg);
+  color: var(--realm-text);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
 }
 
 .tab-badge {
@@ -1281,21 +1409,14 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 }
 
 .modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 1.5rem;
-  z-index: 1000;
+  overflow: hidden;
 }
 
 .modal {
   width: 100%;
   max-width: 32rem;
   padding: 0;
-  overflow: hidden;
 }
 
 .modal-header {
@@ -1311,26 +1432,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
   color: var(--realm-text);
   font-size: 1.05rem;
   margin: 0;
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--realm-text-muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--radius);
-}
-
-.modal-close:hover {
-  color: var(--realm-text);
 }
 
 .modal-body {
@@ -1471,21 +1572,53 @@ small {
   font-size: 0.78rem;
 }
 
-@media (max-width: 768px) {
-  .admin-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 0.75rem;
-    margin-bottom: 1rem;
-    gap: 0.4rem;
+@media (max-width: 900px) {
+  .admin-nav-toggle {
+    display: inline-flex;
   }
 
-  .admin-tabs button {
-    flex-shrink: 0;
-    padding: 0.6rem 0.85rem;
-    font-size: 0.82rem;
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 320;
+    width: min(17rem, 86vw);
+    border-radius: 0;
+    border: none;
+    border-right: 1px solid var(--realm-border);
+    padding: 1rem 0.65rem;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    background: rgba(12, 10, 18, 0.97);
+  }
+
+  .admin-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .admin-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 310;
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  .admin-side-nav button {
     min-height: 2.75rem;
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-topbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .standings-actions-top {
@@ -1506,8 +1639,14 @@ small {
     min-width: fit-content;
   }
 
+  .section-header-row,
+  .users-header,
   .inbox-header {
     flex-direction: column;
+  }
+
+  .submission-filters {
+    grid-template-columns: 1fr;
   }
 
   .inbox-filters {
@@ -1558,6 +1697,15 @@ small {
     max-height: 90vh;
     overflow-y: auto;
     border-radius: 12px 12px 0 0;
+  }
+
+  .row-actions {
+    flex-direction: column;
+  }
+
+  .row-actions .btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 

@@ -286,10 +286,6 @@ function nextStep() {
     error.value = 'Select a team to attack.'
     return
   }
-  if (step.value === 3 && selectedPromptIds.value.length === 0) {
-    error.value = 'Select at least one prompt.'
-    return
-  }
   step.value++
 }
 

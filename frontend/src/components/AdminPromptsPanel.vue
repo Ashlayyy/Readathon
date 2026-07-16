@@ -4,6 +4,7 @@ import { api, type TeamConfig } from '../lib/api'
 import { useConfig } from '../composables/useConfig'
 import { useAdminCopy } from '../composables/useAdminCopy'
 import { useCopy } from '../composables/useCopy'
+import { useBodyScrollLock } from '../composables/useBodyScrollLock'
 
 export type AdminPrompt = {
   id: string
@@ -38,6 +39,16 @@ const createMode = ref(false)
 const addMenuOpen = ref(false)
 const uploadModalOpen = ref(false)
 const importConfigModal = ref(false)
+
+const anyModalOpen = computed(
+  () =>
+    createMode.value ||
+    !!editModal.value ||
+    addMenuOpen.value ||
+    uploadModalOpen.value ||
+    importConfigModal.value,
+)
+useBodyScrollLock(anyModalOpen)
 const importReplace = ref(false)
 const uploadFile = ref<File | null>(null)
 const uploadPack = ref<unknown>(null)
@@ -456,11 +467,10 @@ async function runImport() {
     </template>
 
     <!-- Create / edit modal -->
-    <div v-if="createMode || editModal" class="modal-backdrop" @click.self="closeModal">
+    <div v-if="createMode || editModal" class="modal-backdrop">
       <div class="modal card prompt-modal">
         <header class="modal-header">
           <h2>{{ createMode ? section('prompts').addTitle : section('prompts').editTitle }}</h2>
-          <button type="button" class="modal-close" aria-label="Close" @click="closeModal">×</button>
         </header>
         <form class="prompt-form modal-body" @submit.prevent="savePrompt">
           <label>
@@ -525,11 +535,10 @@ async function runImport() {
     </div>
 
     <!-- Add menu -->
-    <div v-if="addMenuOpen" class="modal-backdrop" @click.self="closeAddMenu">
+    <div v-if="addMenuOpen" class="modal-backdrop">
       <div class="modal card prompt-modal add-menu-modal">
         <header class="modal-header">
           <h2>{{ section('prompts').addMenuTitle }}</h2>
-          <button type="button" class="modal-close" aria-label="Close" @click="closeAddMenu">×</button>
         </header>
         <div class="modal-body">
           <p class="section-desc">{{ section('prompts').addMenuLead }}</p>
@@ -555,11 +564,10 @@ async function runImport() {
     </div>
 
     <!-- JSON upload modal -->
-    <div v-if="uploadModalOpen" class="modal-backdrop" @click.self="closeUploadModal">
+    <div v-if="uploadModalOpen" class="modal-backdrop">
       <div class="modal card prompt-modal">
         <header class="modal-header">
           <h2>{{ section('prompts').uploadTitle }}</h2>
-          <button type="button" class="modal-close" aria-label="Close" @click="closeUploadModal">×</button>
         </header>
         <div class="modal-body">
           <p class="section-desc">{{ section('prompts').uploadLead }}</p>
@@ -605,11 +613,10 @@ async function runImport() {
     </div>
 
     <!-- Import from realmathon.json -->
-    <div v-if="importConfigModal" class="modal-backdrop" @click.self="importConfigModal = false">
+    <div v-if="importConfigModal" class="modal-backdrop">
       <div class="modal card prompt-modal">
         <header class="modal-header">
           <h2>{{ section('prompts').importTitle }}</h2>
-          <button type="button" class="modal-close" aria-label="Close" @click="importConfigModal = false">×</button>
         </header>
         <div class="modal-body">
           <p class="section-desc">{{ section('prompts').importLead }}</p>
@@ -887,7 +894,8 @@ async function runImport() {
   max-width: 32rem;
   width: 100%;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .modal-header {
@@ -904,28 +912,6 @@ async function runImport() {
   font-family: var(--font-display);
   font-size: 1.05rem;
   color: var(--realm-text);
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--realm-text-muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--radius);
-  flex-shrink: 0;
-}
-
-.modal-close:hover {
-  color: var(--realm-text);
-  background: rgba(255, 255, 255, 0.04);
 }
 
 .modal-body {
@@ -1038,14 +1024,8 @@ async function runImport() {
 }
 
 .modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 400;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.65);
+  overflow: hidden;
 }
 
 .modal-actions {
