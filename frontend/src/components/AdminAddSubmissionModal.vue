@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { api, type AdminUser, type Prompt, type TeamConfig } from '../lib/api'
+import {
+  api,
+  type AdminSubmission,
+  type AdminUser,
+  type Prompt,
+  type TeamConfig,
+} from '../lib/api'
 
 const props = defineProps<{
   users: AdminUser[]
@@ -9,13 +15,18 @@ const props = defineProps<{
   negativePrompts: Prompt[]
   maxPrompts: number
   globalBonusLabel?: string
+  /** When set, modal edits this submission instead of creating. */
+  editing?: AdminSubmission | null
 }>()
 
 const emit = defineEmits<{
   close: []
   created: []
+  updated: []
   error: [message: string]
 }>()
+
+const isEdit = computed(() => !!props.editing)
 
 const assignedUsers = computed(() =>
   props.users
@@ -38,17 +49,32 @@ const bonusCompetition = ref(false)
 const bonusTeamPromptIds = ref<string[]>([])
 const promptSearch = ref('')
 const submitting = ref(false)
+const hydrating = ref(false)
 
-const selectedUser = computed(() => assignedUsers.value.find((u) => u.id === userId.value))
+const selectedUser = computed(() => {
+  if (props.editing) {
+    return (
+      props.users.find((u) => u.displayName === props.editing!.userName && u.email === props.editing!.userEmail) ??
+      props.users.find((u) => u.teamId === props.editing!.userTeamId && u.displayName === props.editing!.userName) ??
+      null
+    )
+  }
+  return assignedUsers.value.find((u) => u.id === userId.value) ?? null
+})
+
+const readerTeamId = computed(() => {
+  if (props.editing?.userTeamId) return props.editing.userTeamId
+  return selectedUser.value?.teamId ?? null
+})
 
 const readerTeam = computed(() => {
-  const teamId = selectedUser.value?.teamId
+  const teamId = readerTeamId.value
   if (!teamId) return null
   return props.teams.find((t) => t.id === teamId) ?? null
 })
 
 const attackableTeams = computed(() =>
-  props.teams.filter((t) => t.id !== selectedUser.value?.teamId),
+  props.teams.filter((t) => t.id !== readerTeamId.value),
 )
 
 const availablePrompts = computed(() =>
@@ -66,18 +92,48 @@ const filteredPrompts = computed(() => {
   )
 })
 
-watch(submissionType, () => {
+function hydrateFromEditing(s: AdminSubmission) {
+  hydrating.value = true
+  bookTitle.value = s.bookTitle
+  bookAuthor.value = s.bookAuthor
+  pageCount.value = s.pageCount
+  format.value = s.format
+  startedAt.value = s.startedAt ?? ''
+  finishedAt.value = s.finishedAt ?? ''
+  submissionType.value = s.submissionType
+  targetTeamId.value = s.targetTeamId ?? ''
+  promptIds.value = [...s.promptIds]
+  bonusCompetition.value = s.bonusCompetition
+  bonusTeamPromptIds.value = [...s.bonusTeamPromptIds]
+  promptSearch.value = ''
+  // next tick-ish: allow watchers to skip clear
+  queueMicrotask(() => {
+    hydrating.value = false
+  })
+}
+
+if (props.editing) {
+  hydrateFromEditing(props.editing)
+}
+
+watch(
+  () => props.editing,
+  (s) => {
+    if (s) hydrateFromEditing(s)
+  },
+)
+
+watch(submissionType, (next, prev) => {
+  if (hydrating.value || next === prev) return
   promptIds.value = []
   promptSearch.value = ''
-  if (submissionType.value === 'add') targetTeamId.value = ''
+  if (next === 'add') targetTeamId.value = ''
 })
 
 watch(userId, () => {
+  if (hydrating.value || isEdit.value) return
   bonusTeamPromptIds.value = []
-  if (
-    submissionType.value === 'sabotage' &&
-    targetTeamId.value === selectedUser.value?.teamId
-  ) {
+  if (submissionType.value === 'sabotage' && targetTeamId.value === selectedUser.value?.teamId) {
     targetTeamId.value = ''
   }
 })
@@ -103,11 +159,23 @@ function toggleTeamBonus(id: string) {
   }
 }
 
-async function submit() {
-  if (!userId.value) {
-    emit('error', 'Select a reader to submit for.')
-    return
+function payload() {
+  return {
+    bookTitle: bookTitle.value,
+    bookAuthor: bookAuthor.value,
+    pageCount: pageCount.value,
+    format: format.value,
+    startedAt: startedAt.value || null,
+    finishedAt: finishedAt.value || null,
+    submissionType: submissionType.value,
+    targetTeamId: submissionType.value === 'sabotage' ? targetTeamId.value : undefined,
+    promptIds: promptIds.value,
+    bonusCompetition: bonusCompetition.value,
+    bonusTeamPromptIds: bonusTeamPromptIds.value,
   }
+}
+
+async function submit() {
   if (submissionType.value === 'sabotage' && !targetTeamId.value) {
     emit('error', 'Select a team to attack.')
     return
@@ -115,27 +183,34 @@ async function submit() {
 
   submitting.value = true
   try {
+    if (props.editing) {
+      await api(`/admin/submissions/${props.editing.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload()),
+      })
+      emit('updated')
+      return
+    }
+
+    if (!userId.value) {
+      emit('error', 'Select a reader to submit for.')
+      return
+    }
+
     await api('/admin/submissions', {
       method: 'POST',
-      body: JSON.stringify({
-        userId: userId.value,
-        bookTitle: bookTitle.value,
-        bookAuthor: bookAuthor.value,
-        pageCount: pageCount.value,
-        format: format.value,
-        startedAt: startedAt.value || null,
-        finishedAt: finishedAt.value || null,
-        submissionType: submissionType.value,
-        targetTeamId:
-          submissionType.value === 'sabotage' ? targetTeamId.value : undefined,
-        promptIds: promptIds.value,
-        bonusCompetition: bonusCompetition.value,
-        bonusTeamPromptIds: bonusTeamPromptIds.value,
-      }),
+      body: JSON.stringify({ userId: userId.value, ...payload() }),
     })
     emit('created')
   } catch (e) {
-    emit('error', e instanceof Error ? e.message : 'Failed to create submission')
+    emit(
+      'error',
+      e instanceof Error
+        ? e.message
+        : isEdit.value
+          ? 'Failed to update submission'
+          : 'Failed to create submission',
+    )
   } finally {
     submitting.value = false
   }
@@ -143,20 +218,24 @@ async function submit() {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="emit('close')">
+  <div class="modal-backdrop">
     <div class="modal card add-sub-modal" role="dialog" aria-modal="true" aria-labelledby="add-sub-title">
       <header class="modal-head">
         <div>
-          <h2 id="add-sub-title">Add submission</h2>
+          <h2 id="add-sub-title">{{ isEdit ? 'Edit submission' : 'Add submission' }}</h2>
           <p class="section-desc">
-            Submit a book as another reader. It will appear under their name and score for their realm.
+            <template v-if="isEdit">
+              Update {{ editing?.userName }}'s book — including prompts and bonuses. Scores recalculate on save.
+            </template>
+            <template v-else>
+              Submit a book as another reader. It will appear under their name and score for their realm.
+            </template>
           </p>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" @click="emit('close')">Close</button>
       </header>
 
       <form class="add-sub-form" @submit.prevent="submit">
-        <label class="field">
+        <label v-if="!isEdit" class="field">
           Reader
           <select v-model="userId" required>
             <option value="" disabled>Select an assigned reader…</option>
@@ -165,6 +244,11 @@ async function submit() {
             </option>
           </select>
         </label>
+
+        <div v-else class="reader-team">
+          Reader: <strong>{{ editing?.userName }}</strong>
+          <span v-if="editing?.userEmail"> · {{ editing.userEmail }}</span>
+        </div>
 
         <div v-if="readerTeam" class="reader-team">
           Realm: <strong :style="{ color: readerTeam.color }">{{ readerTeam.icon }} {{ readerTeam.name }}</strong>
@@ -278,8 +362,13 @@ async function submit() {
 
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" @click="emit('close')">Cancel</button>
-          <button type="submit" class="btn btn-primary" :disabled="submitting || !userId">
-            {{ submitting ? 'Submitting…' : 'Submit for reader' }}
+          <button
+            type="submit"
+            class="btn btn-primary"
+            :disabled="submitting || (!isEdit && !userId)"
+          >
+            <template v-if="submitting">{{ isEdit ? 'Saving…' : 'Submitting…' }}</template>
+            <template v-else>{{ isEdit ? 'Save changes' : 'Submit for reader' }}</template>
           </button>
         </div>
       </form>
@@ -289,22 +378,13 @@ async function submit() {
 
 <style scoped>
 .modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 400;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
   padding: 1rem;
-  overflow-y: auto;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
+  overflow: hidden;
 }
 
 .add-sub-modal {
   width: min(40rem, 100%);
-  margin: 1.5rem auto;
-  max-height: none;
+  margin: 0 auto;
   padding: 1.25rem 1.35rem 1.5rem;
 }
 

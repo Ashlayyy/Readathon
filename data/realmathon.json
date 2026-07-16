@@ -250,6 +250,10 @@
 				"title": "All Submissions",
 				"addButton": "Add for reader",
 				"addLead": "Create a book submission that counts for another assigned reader.",
+				"searchPlaceholder": "Search book, reader, email…",
+				"filterAllTypes": "All types",
+				"filterAllTeams": "All realms",
+				"filterEmpty": "No submissions match your filters.",
 				"colBook": "Book",
 				"colReader": "Reader",
 				"colType": "Type",
@@ -260,7 +264,7 @@
 				"delete": "Delete",
 				"hint": "Manage prompts in the Prompts tab. Event copy still lives in data/realmathon.json.",
 				"editTitle": "Edit submission",
-				"editLead": "{name} — prompts and bonuses are kept; update book details and type.",
+				"editLead": "Update {name}'s book — including prompts and bonuses.",
 				"titleLabel": "Title",
 				"authorLabel": "Author",
 				"pagesLabel": "Pages",
@@ -391,7 +395,9 @@
 				"deleteQuestion": "Remove this message from the inbox?",
 				"deleteSubmission": "Delete submission \"{title}\"? This cannot be undone.",
 				"unpublishWeek": "Unpublish {weekLabel} from the public site?",
-				"deletePrompt": "Delete prompt \"{label}\"? This cannot be undone."
+				"deletePrompt": "Delete prompt \"{label}\"? This cannot be undone.",
+				"enableDowntime": "Turn on downtime mode? Everyone except admins will see the maintenance page.",
+				"disableDowntime": "Turn off downtime mode? The site will be open to everyone again."
 			}
 		},
 		"scoringSummary": [

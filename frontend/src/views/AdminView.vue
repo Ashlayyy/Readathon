@@ -21,6 +21,7 @@ import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 import { useAdminCopy } from '../composables/useAdminCopy'
 import { useAuth } from '../composables/useAuth'
+import { useBodyScrollLock } from '../composables/useBodyScrollLock'
 
 const { config, loadConfig } = useConfig()
 const { t } = useCopy()
@@ -47,27 +48,41 @@ const activeWeeks = ref<PublishedWeek[]>([])
 const standingsHistory = ref<StandingsHistoryEntry[]>([])
 const answerModal = ref<AdminQuestion | null>(null)
 const editSubmission = ref<AdminSubmission | null>(null)
-const editDraft = ref({
-  bookTitle: '',
-  bookAuthor: '',
-  pageCount: 1,
-  format: 'ebook',
-  startedAt: '',
-  finishedAt: '',
-  submissionType: 'add' as 'add' | 'sabotage',
-  targetTeamId: '',
-  promptIds: [] as string[],
-  bonusCompetition: false,
-  bonusTeamPromptIds: [] as string[],
-})
 const modalDraft = ref('')
 const inboxFilter = ref<'unread' | 'read' | 'all'>('unread')
+const submissionSearch = ref('')
+const submissionTypeFilter = ref<'all' | 'add' | 'sabotage'>('all')
+const submissionTeamFilter = ref('')
 const message = ref('')
 const messageIsError = ref(false)
 const loading = ref('')
 const activeTab = ref<'inbox' | 'teams' | 'standings' | 'users' | 'submissions' | 'prompts'>('inbox')
 const addSubmissionOpen = ref(false)
 const navOpen = ref(false)
+
+const anyModalOpen = computed(
+  () => addUserOpen.value || !!answerModal.value || !!editSubmission.value || addSubmissionOpen.value,
+)
+useBodyScrollLock(anyModalOpen)
+
+const filteredSubmissions = computed(() => {
+  const q = submissionSearch.value.trim().toLowerCase()
+  return submissions.value.filter((s) => {
+    if (submissionTypeFilter.value !== 'all' && s.submissionType !== submissionTypeFilter.value) {
+      return false
+    }
+    if (submissionTeamFilter.value && s.userTeamId !== submissionTeamFilter.value) {
+      return false
+    }
+    if (!q) return true
+    return (
+      s.bookTitle.toLowerCase().includes(q) ||
+      s.bookAuthor.toLowerCase().includes(q) ||
+      s.userName.toLowerCase().includes(q) ||
+      s.userEmail.toLowerCase().includes(q)
+    )
+  })
+})
 
 onMounted(async () => {
   await loadConfig()
@@ -100,16 +115,24 @@ watch(activeTab, (tab) => {
 const assignedUserCount = computed(() => users.value.filter((u) => u.status === 'assigned').length)
 
 function openAddSubmission() {
+  editSubmission.value = null
   addSubmissionOpen.value = true
 }
 
-function closeAddSubmission() {
+function closeSubmissionModal() {
   addSubmissionOpen.value = false
+  editSubmission.value = null
 }
 
 async function onSubmissionCreated() {
-  closeAddSubmission()
+  closeSubmissionModal()
   showMessage(msg('submissionCreated') || 'Submission added for that reader.')
+  await loadAll()
+}
+
+async function onSubmissionUpdated() {
+  closeSubmissionModal()
+  showMessage(msg('submissionUpdated'))
   await loadAll()
 }
 
@@ -219,6 +242,18 @@ async function saveRosterSetting() {
   } finally {
     loading.value = ''
   }
+}
+
+async function onDowntimeToggle() {
+  const enabling = downtimeMode.value
+  const ok = confirm(
+    enabling ? confirmMsg('enableDowntime') : confirmMsg('disableDowntime'),
+  )
+  if (!ok) {
+    downtimeMode.value = !enabling
+    return
+  }
+  await saveDowntimeSetting()
 }
 
 async function saveDowntimeSetting() {
@@ -367,49 +402,8 @@ async function submitModalAnswer() {
 }
 
 function openEditSubmission(s: AdminSubmission) {
+  addSubmissionOpen.value = false
   editSubmission.value = s
-  editDraft.value = {
-    bookTitle: s.bookTitle,
-    bookAuthor: s.bookAuthor,
-    pageCount: s.pageCount,
-    format: s.format,
-    startedAt: s.startedAt ?? '',
-    finishedAt: s.finishedAt ?? '',
-    submissionType: s.submissionType,
-    targetTeamId: s.targetTeamId ?? '',
-    promptIds: [...s.promptIds],
-    bonusCompetition: s.bonusCompetition,
-    bonusTeamPromptIds: [...s.bonusTeamPromptIds],
-  }
-}
-
-function closeEditSubmission() {
-  editSubmission.value = null
-}
-
-async function saveEditSubmission() {
-  if (!editSubmission.value) return
-  loading.value = `edit-sub-${editSubmission.value.id}`
-  showMessage('')
-  try {
-    await api(`/admin/submissions/${editSubmission.value.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        ...editDraft.value,
-        targetTeamId:
-          editDraft.value.submissionType === 'sabotage' ? editDraft.value.targetTeamId : undefined,
-        startedAt: editDraft.value.startedAt || null,
-        finishedAt: editDraft.value.finishedAt || null,
-      }),
-    })
-    showMessage(msg('submissionUpdated'))
-    closeEditSubmission()
-    await loadAll()
-  } catch (e) {
-    showMessage(e instanceof Error ? e.message : msg('submissionUpdateFailed'), true)
-  } finally {
-    loading.value = ''
-  }
 }
 
 async function deleteSubmission(id: string, title: string) {
@@ -419,7 +413,7 @@ async function deleteSubmission(id: string, title: string) {
   try {
     await api(`/admin/submissions/${id}`, { method: 'DELETE' })
     showMessage(msg('submissionDeleted'))
-    if (editSubmission.value?.id === id) closeEditSubmission()
+    if (editSubmission.value?.id === id) closeSubmissionModal()
     await loadAll()
   } catch (e) {
     showMessage(e instanceof Error ? e.message : msg('submissionDeleteFailed'), true)
@@ -638,11 +632,10 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     </section>
 
     <Teleport to="body">
-      <div v-if="answerModal" class="modal-backdrop" @click.self="closeAnswerModal">
+      <div v-if="answerModal" class="modal-backdrop">
         <div class="modal card" role="dialog" aria-labelledby="answer-modal-title">
           <header class="modal-header">
             <h2 id="answer-modal-title">{{ answerModal.answer ? section('inbox').updateAnswer : section('inbox').sendReply }}</h2>
-            <button type="button" class="modal-close" :aria-label="section('inbox').close" @click="closeAnswerModal">×</button>
           </header>
           <div class="modal-body">
             <p class="modal-question">
@@ -702,7 +695,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             v-model="downtimeMode"
             type="checkbox"
             :disabled="loading === 'downtime-setting'"
-            @change="saveDowntimeSetting"
+            @change="onDowntimeToggle"
           />
           <span>{{ section('teams').downtimeToggle }}</span>
         </label>
@@ -958,7 +951,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     </section>
 
     <!-- Add user modal -->
-    <div v-if="addUserOpen" class="modal-backdrop" @click.self="closeAddUser">
+    <div v-if="addUserOpen" class="modal-backdrop">
       <div class="modal card">
         <h2>{{ section('users').addTitle }}</h2>
         <p class="section-desc">{{ section('users').addLead }}</p>
@@ -1001,6 +994,28 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
           {{ section('submissions').addButton }}
         </button>
       </div>
+
+      <div class="submission-filters">
+        <input
+          v-model="submissionSearch"
+          type="search"
+          class="submission-search"
+          :placeholder="section('submissions').searchPlaceholder || 'Search book, reader, email…'"
+          aria-label="Search submissions"
+        />
+        <select v-model="submissionTypeFilter" aria-label="Filter by type">
+          <option value="all">{{ section('submissions').filterAllTypes || 'All types' }}</option>
+          <option value="add">{{ section('submissions').typeAdd }}</option>
+          <option value="sabotage">{{ section('submissions').typeSabotage }}</option>
+        </select>
+        <select v-model="submissionTeamFilter" aria-label="Filter by team">
+          <option value="">{{ section('submissions').filterAllTeams || 'All realms' }}</option>
+          <option v-for="team in config.teams" :key="team.id" :value="team.id">
+            {{ team.icon }} {{ team.name }}
+          </option>
+        </select>
+      </div>
+
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -1014,10 +1029,16 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             </tr>
           </thead>
           <tbody>
-            <tr v-if="submissions.length === 0">
-              <td colspan="6" class="empty-cell">No submissions yet.</td>
+            <tr v-if="filteredSubmissions.length === 0">
+              <td colspan="6" class="empty-cell">
+                {{
+                  submissions.length === 0
+                    ? 'No submissions yet.'
+                    : section('submissions').filterEmpty || 'No submissions match your filters.'
+                }}
+              </td>
             </tr>
-            <tr v-for="s in submissions" :key="s.id">
+            <tr v-for="s in filteredSubmissions" :key="s.id">
               <td>
                 <strong>{{ s.bookTitle }}</strong>
                 <br />
@@ -1052,7 +1073,10 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
           </tbody>
         </table>
       </div>
-      <p class="hint">{{ section('submissions').hint }}</p>
+      <p class="hint">
+        Showing {{ filteredSubmissions.length }} of {{ submissions.length }}.
+        {{ section('submissions').hint }}
+      </p>
     </section>
 
     <AdminPromptsPanel
@@ -1063,79 +1087,19 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     </div>
 
     <AdminAddSubmissionModal
-      v-if="addSubmissionOpen"
+      v-if="addSubmissionOpen || editSubmission"
       :users="users"
       :teams="config.teams"
       :positive-prompts="config.prompts.positive"
       :negative-prompts="config.prompts.negative"
       :max-prompts="config.scoringRules.maxPromptsPerBook ?? 5"
       :global-bonus-label="config.globalBonuses?.[0]?.label"
-      @close="closeAddSubmission"
+      :editing="editSubmission"
+      @close="closeSubmissionModal"
       @created="onSubmissionCreated"
+      @updated="onSubmissionUpdated"
       @error="(m) => showMessage(m, true)"
     />
-
-    <!-- Edit submission modal -->
-    <div v-if="editSubmission" class="modal-backdrop" @click.self="closeEditSubmission">
-      <div class="modal card edit-sub-modal">
-        <h2>{{ section('submissions').editTitle }}</h2>
-        <p class="section-desc">
-          {{ t(section('submissions').editLead, { name: editSubmission.userName }) }}
-        </p>
-        <form class="edit-sub-form" @submit.prevent="saveEditSubmission">
-          <label>
-            {{ section('submissions').titleLabel }}
-            <input v-model="editDraft.bookTitle" type="text" required />
-          </label>
-          <label>
-            {{ section('submissions').authorLabel }}
-            <input v-model="editDraft.bookAuthor" type="text" required />
-          </label>
-          <label>
-            {{ section('submissions').pagesLabel }}
-            <input v-model.number="editDraft.pageCount" type="number" min="1" required />
-          </label>
-          <label>
-            {{ section('submissions').formatLabel }}
-            <select v-model="editDraft.format">
-              <option value="ebook">Ebook</option>
-              <option value="audiobook">Audiobook</option>
-              <option value="physical">Physical</option>
-            </select>
-          </label>
-          <label>
-            {{ section('submissions').typeLabel }}
-            <select v-model="editDraft.submissionType">
-              <option value="add">{{ section('submissions').typeAdd }}</option>
-              <option value="sabotage">{{ section('submissions').typeSabotage }}</option>
-            </select>
-          </label>
-          <label v-if="editDraft.submissionType === 'sabotage'">
-            {{ section('submissions').targetTeamLabel }}
-            <select v-model="editDraft.targetTeamId" required>
-              <option v-for="team in config?.teams" :key="team.id" :value="team.id">
-                {{ team.name }}
-              </option>
-            </select>
-          </label>
-          <label>
-            {{ section('submissions').startedLabel }}
-            <input v-model="editDraft.startedAt" type="date" />
-          </label>
-          <label>
-            {{ section('submissions').finishedLabel }}
-            <input v-model="editDraft.finishedAt" type="date" />
-          </label>
-          <p class="prompt-note">{{ t(section('submissions').promptsUnchanged, { count: editDraft.promptIds.length }) }}</p>
-          <div class="modal-actions">
-            <button type="button" class="btn btn-ghost" @click="closeEditSubmission">{{ section('inbox').cancel }}</button>
-            <button type="submit" class="btn btn-primary" :disabled="loading.startsWith('edit-sub-')">
-              {{ section('submissions').saveChanges }}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   </main>
 </template>
 
@@ -1255,6 +1219,25 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
   text-align: center;
   color: var(--realm-text-muted);
   padding: 1.5rem !important;
+}
+
+.submission-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(8rem, 0.7fr) minmax(8rem, 0.9fr);
+  gap: 0.65rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.submission-filters input,
+.submission-filters select {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--realm-border);
+  background: var(--realm-bg);
+  color: var(--realm-text);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
 }
 
 .tab-badge {
@@ -1426,21 +1409,14 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 }
 
 .modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 1.5rem;
-  z-index: 1000;
+  overflow: hidden;
 }
 
 .modal {
   width: 100%;
   max-width: 32rem;
   padding: 0;
-  overflow: hidden;
 }
 
 .modal-header {
@@ -1456,26 +1432,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
   color: var(--realm-text);
   font-size: 1.05rem;
   margin: 0;
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--realm-text-muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  min-width: 2.75rem;
-  min-height: 2.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: var(--radius);
-}
-
-.modal-close:hover {
-  color: var(--realm-text);
 }
 
 .modal-body {
@@ -1687,6 +1643,10 @@ small {
   .users-header,
   .inbox-header {
     flex-direction: column;
+  }
+
+  .submission-filters {
+    grid-template-columns: 1fr;
   }
 
   .inbox-filters {

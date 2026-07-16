@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../composables/useAuth';
 import { useConfig } from '../composables/useConfig';
 import { useCopy } from '../composables/useCopy';
+import { useBodyScrollLock } from '../composables/useBodyScrollLock';
 
 const { config, loadConfig } = useConfig();
 const { user } = useAuth();
@@ -16,6 +17,8 @@ const questionText = ref('');
 const sending = ref(false);
 const sent = ref(false);
 const error = ref('');
+
+useBodyScrollLock(showModal);
 
 onMounted(loadConfig);
 
@@ -96,20 +99,12 @@ async function submitQuestion() {
 	</main>
 
 	<Teleport to="body">
-		<div v-if="showModal" class="modal-backdrop" @click.self="closeModal">
+		<div v-if="showModal" class="modal-backdrop">
 			<div class="modal card" role="dialog" aria-labelledby="ask-title">
 				<header class="modal-header">
 					<h2 id="ask-title">
 						{{ config?.copy.faqModalTitle ?? 'Ask the Admins' }}
 					</h2>
-					<button
-						type="button"
-						class="modal-close"
-						aria-label="Close"
-						@click="closeModal"
-					>
-						×
-					</button>
 				</header>
 
 				<div v-if="sent" class="modal-body">
@@ -264,21 +259,15 @@ async function submitQuestion() {
 }
 
 .modal-backdrop {
-	position: fixed;
-	inset: 0;
-	background: rgba(0, 0, 0, 0.65);
-	display: flex;
-	align-items: center;
-	justify-content: center;
+	/* layout from main.css; keep local padding tweaks only */
 	padding: 1.5rem;
-	z-index: 1000;
+	overflow: hidden;
 }
 
 .modal {
 	width: 100%;
 	max-width: 32rem;
 	padding: 0;
-	overflow: hidden;
 }
 
 .modal-header {
@@ -294,26 +283,6 @@ async function submitQuestion() {
 	color: var(--realm-text);
 	font-size: 1.1rem;
 	margin: 0;
-}
-
-.modal-close {
-	background: none;
-	border: none;
-	color: var(--realm-text-muted);
-	font-size: 1.5rem;
-	line-height: 1;
-	cursor: pointer;
-	min-width: 2.75rem;
-	min-height: 2.75rem;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	padding: 0;
-	border-radius: var(--radius);
-}
-
-.modal-close:hover {
-	color: var(--realm-text);
 }
 
 .modal-body {
