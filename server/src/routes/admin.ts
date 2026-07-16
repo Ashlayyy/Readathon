@@ -174,6 +174,49 @@ function optionalDate(value: string | null | undefined): string | null {
   return trimmed || null
 }
 
+adminRoutes.post('/submissions', async (c) => {
+  const body = await c.req.json<SubmissionInput & { userId?: string }>()
+  const userId = body.userId?.trim()
+  if (!userId) return c.json({ error: 'Select a reader to submit for.' }, 400)
+
+  const owner = await User.findById(userId)
+  if (!owner) return c.json({ error: 'User not found' }, 404)
+
+  const error = await validateSubmission(owner, body)
+  if (error) return c.json({ error }, 400)
+
+  const score = calculateScore(owner, body)
+
+  const submission = await Submission.create({
+    userId: owner._id,
+    bookTitle: body.bookTitle.trim(),
+    bookAuthor: body.bookAuthor.trim(),
+    pageCount: body.pageCount,
+    format: body.format,
+    startedAt: optionalDate(body.startedAt),
+    finishedAt: optionalDate(body.finishedAt),
+    submissionType: body.submissionType,
+    targetTeamId: body.submissionType === 'sabotage' ? (body.targetTeamId ?? null) : null,
+    promptIds: body.promptIds,
+    bonusCompetition: body.bonusCompetition,
+    bonusTeamPromptIds: body.bonusTeamPromptIds,
+    pageBonus: score.pageBonus,
+    promptPoints: score.promptPoints,
+    bonusPoints: score.bonusPoints,
+    totalImpact: score.totalImpact,
+  })
+
+  return c.json({
+    submission: {
+      ...submissionToPublic(submission),
+      userName: owner.displayName,
+      userEmail: owner.email,
+      userTeamId: owner.teamId ?? null,
+    },
+    breakdown: score,
+  })
+})
+
 adminRoutes.patch('/submissions/:id', async (c) => {
   const body = await c.req.json<SubmissionInput>()
   const submission = await Submission.findById(c.req.param('id'))

@@ -91,28 +91,27 @@ export async function validateSubmission(
     return `Maximum ${maxPrompts} prompts per book.`
   }
 
-  if (input.promptIds.length === 0) {
-    return 'Select at least one prompt.'
-  }
+  // Zero prompts is allowed (page / competition / team bonuses can still apply).
+  if (input.promptIds.length > 0) {
+    const prompts = input.promptIds.map((id) => getPromptById(id)).filter(Boolean)
+    if (prompts.length !== input.promptIds.length) {
+      return 'Invalid prompt selection.'
+    }
 
-  const prompts = input.promptIds.map((id) => getPromptById(id)).filter(Boolean)
-  if (prompts.length !== input.promptIds.length) {
-    return 'Invalid prompt selection.'
-  }
+    const allPositive = prompts.every((p) => p!.points > 0)
+    const allNegative = prompts.every((p) => p!.points < 0)
 
-  const allPositive = prompts.every((p) => p!.points > 0)
-  const allNegative = prompts.every((p) => p!.points < 0)
+    if (!allPositive && !allNegative) {
+      return 'All prompts must be either positive or negative — not mixed.'
+    }
 
-  if (!allPositive && !allNegative) {
-    return 'All prompts must be either positive or negative — not mixed.'
-  }
+    if (input.submissionType === 'add' && !allPositive) {
+      return 'Adding XP requires positive prompts only.'
+    }
 
-  if (input.submissionType === 'add' && !allPositive) {
-    return 'Adding XP requires positive prompts only.'
-  }
-
-  if (input.submissionType === 'sabotage' && !allNegative) {
-    return 'Sabotage requires negative prompts only.'
+    if (input.submissionType === 'sabotage' && !allNegative) {
+      return 'Sabotage requires negative prompts only.'
+    }
   }
 
   if (input.submissionType === 'sabotage') {

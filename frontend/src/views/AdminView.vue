@@ -16,6 +16,7 @@ import {
 import StandingsPanel from '../components/StandingsPanel.vue'
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue'
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue'
+import AdminAddSubmissionModal from '../components/AdminAddSubmissionModal.vue'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 import { useAdminCopy } from '../composables/useAdminCopy'
@@ -65,6 +66,8 @@ const message = ref('')
 const messageIsError = ref(false)
 const loading = ref('')
 const activeTab = ref<'inbox' | 'teams' | 'standings' | 'users' | 'submissions' | 'prompts'>('inbox')
+const addSubmissionOpen = ref(false)
+const navOpen = ref(false)
 
 onMounted(async () => {
   await loadConfig()
@@ -90,8 +93,29 @@ async function loadAdminSettings() {
 }
 
 watch(activeTab, (tab) => {
+  navOpen.value = false
   if (tab === 'standings') loadStandings()
 })
+
+const assignedUserCount = computed(() => users.value.filter((u) => u.status === 'assigned').length)
+
+function openAddSubmission() {
+  addSubmissionOpen.value = true
+}
+
+function closeAddSubmission() {
+  addSubmissionOpen.value = false
+}
+
+async function onSubmissionCreated() {
+  closeAddSubmission()
+  showMessage(msg('submissionCreated') || 'Submission added for that reader.')
+  await loadAll()
+}
+
+function setTab(tab: typeof activeTab.value) {
+  activeTab.value = tab
+}
 
 const sortedQuestions = computed(() =>
   [...questions.value].sort((a, b) => {
@@ -478,41 +502,63 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
 <template>
   <main v-if="config" class="page admin-page">
-    <header class="admin-header">
-      <div>
+    <header class="admin-topbar">
+      <div class="admin-topbar-text">
         <h1 class="page-title">{{ admin?.title }}</h1>
         <p class="page-lead">{{ admin?.lead }}</p>
       </div>
+      <button
+        type="button"
+        class="btn btn-secondary btn-sm admin-nav-toggle"
+        :aria-expanded="navOpen"
+        aria-controls="admin-sidebar"
+        @click="navOpen = !navOpen"
+      >
+        {{ navOpen ? 'Close menu' : 'Sections' }}
+      </button>
     </header>
 
     <div v-if="message" class="alert" :class="messageIsError ? 'alert-error' : 'alert-success'">{{ message }}</div>
 
-    <nav class="admin-tabs" aria-label="Admin sections">
-      <button
-        type="button"
-        :class="{ active: activeTab === 'inbox' }"
-        @click="activeTab = 'inbox'"
+    <div class="admin-layout">
+      <aside
+        id="admin-sidebar"
+        class="admin-sidebar"
+        :class="{ open: navOpen }"
+        aria-label="Admin sections"
       >
-        {{ section('tabs').inbox }}
-        <span v-if="unreadQuestions > 0" class="tab-badge">{{ unreadQuestions }}</span>
-      </button>
-      <button type="button" :class="{ active: activeTab === 'teams' }" @click="activeTab = 'teams'">
-        {{ section('tabs').teams }}
-      </button>
-      <button type="button" :class="{ active: activeTab === 'standings' }" @click="activeTab = 'standings'">
-        {{ section('tabs').standings }}
-      </button>
-      <button type="button" :class="{ active: activeTab === 'users' }" @click="activeTab = 'users'">
-        {{ section('tabs').users }}
-      </button>
-      <button type="button" :class="{ active: activeTab === 'submissions' }" @click="activeTab = 'submissions'">
-        {{ section('tabs').submissions }}
-      </button>
-      <button type="button" :class="{ active: activeTab === 'prompts' }" @click="activeTab = 'prompts'">
-        {{ section('tabs').prompts }}
-      </button>
-    </nav>
+        <nav class="admin-side-nav">
+          <button
+            type="button"
+            :class="{ active: activeTab === 'inbox' }"
+            @click="setTab('inbox')"
+          >
+            <span>{{ section('tabs').inbox }}</span>
+            <span v-if="unreadQuestions > 0" class="tab-badge">{{ unreadQuestions }}</span>
+          </button>
+          <button type="button" :class="{ active: activeTab === 'teams' }" @click="setTab('teams')">
+            {{ section('tabs').teams }}
+          </button>
+          <button type="button" :class="{ active: activeTab === 'standings' }" @click="setTab('standings')">
+            {{ section('tabs').standings }}
+          </button>
+          <button type="button" :class="{ active: activeTab === 'users' }" @click="setTab('users')">
+            {{ section('tabs').users }}
+            <span class="nav-meta">{{ assignedUserCount }}/{{ users.length }}</span>
+          </button>
+          <button type="button" :class="{ active: activeTab === 'submissions' }" @click="setTab('submissions')">
+            {{ section('tabs').submissions }}
+            <span class="nav-meta">{{ submissions.length }}</span>
+          </button>
+          <button type="button" :class="{ active: activeTab === 'prompts' }" @click="setTab('prompts')">
+            {{ section('tabs').prompts }}
+          </button>
+        </nav>
+      </aside>
 
+      <div v-if="navOpen" class="admin-nav-backdrop" @click="navOpen = false" />
+
+      <div class="admin-main">
   <!-- Inbox -->
     <section v-show="activeTab === 'inbox'" class="card admin-section">
       <div class="inbox-header">
@@ -946,7 +992,15 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
     <!-- Submissions -->
     <section v-show="activeTab === 'submissions'" class="card admin-section">
-      <h2>{{ section('submissions').title }}</h2>
+      <div class="section-header-row">
+        <div>
+          <h2>{{ section('submissions').title }}</h2>
+          <p class="section-desc">{{ section('submissions').addLead }}</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm" @click="openAddSubmission">
+          {{ section('submissions').addButton }}
+        </button>
+      </div>
       <div class="table-wrap">
         <table class="data-table">
           <thead>
@@ -960,6 +1014,9 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
             </tr>
           </thead>
           <tbody>
+            <tr v-if="submissions.length === 0">
+              <td colspan="6" class="empty-cell">No submissions yet.</td>
+            </tr>
             <tr v-for="s in submissions" :key="s.id">
               <td>
                 <strong>{{ s.bookTitle }}</strong>
@@ -1001,6 +1058,21 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
     <AdminPromptsPanel
       v-show="activeTab === 'prompts'"
       @message="(text, isError) => { showMessage(text, isError); loadConfig(true) }"
+    />
+      </div>
+    </div>
+
+    <AdminAddSubmissionModal
+      v-if="addSubmissionOpen"
+      :users="users"
+      :teams="config.teams"
+      :positive-prompts="config.prompts.positive"
+      :negative-prompts="config.prompts.negative"
+      :max-prompts="config.scoringRules.maxPromptsPerBook ?? 5"
+      :global-bonus-label="config.globalBonuses?.[0]?.label"
+      @close="closeAddSubmission"
+      @created="onSubmissionCreated"
+      @error="(m) => showMessage(m, true)"
     />
 
     <!-- Edit submission modal -->
@@ -1072,44 +1144,117 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
   margin-bottom: 0;
 }
 
-.admin-header {
-  margin-bottom: 1.5rem;
-}
-
-.admin-tabs {
+.admin-topbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--realm-border);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
 }
 
-.admin-tabs button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.55rem 1rem;
-  border-radius: var(--radius);
+.admin-nav-toggle {
+  display: none;
+  flex-shrink: 0;
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: 13.5rem minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.admin-sidebar {
+  position: sticky;
+  top: 5.5rem;
   border: 1px solid var(--realm-border);
-  background: var(--realm-surface);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--realm-surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  padding: 0.55rem;
+}
+
+.admin-side-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.admin-side-nav button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--realm-text-muted);
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 0.88rem;
+  text-align: left;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.admin-tabs button:hover {
+.admin-side-nav button:hover {
   color: var(--realm-text);
-  border-color: rgba(212, 99, 74, 0.4);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.admin-tabs button.active {
-  background: rgba(212, 99, 74, 0.12);
-  border-color: var(--realm-accent);
+.admin-side-nav button.active {
+  background: rgba(212, 99, 74, 0.14);
+  border-color: rgba(212, 99, 74, 0.45);
   color: var(--realm-accent-glow);
+}
+
+.nav-meta {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--realm-text-muted);
+  opacity: 0.85;
+}
+
+.admin-side-nav button.active .nav-meta {
+  color: var(--realm-accent-glow);
+}
+
+.admin-nav-backdrop {
+  display: none;
+}
+
+.admin-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.admin-section {
+  padding: 1.35rem 1.4rem;
+}
+
+.section-header-row,
+.users-header,
+.inbox-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.section-header-row .section-desc,
+.users-header .section-desc {
+  margin-bottom: 0.75rem;
+}
+
+.empty-cell {
+  text-align: center;
+  color: var(--realm-text-muted);
+  padding: 1.5rem !important;
 }
 
 .tab-badge {
@@ -1471,21 +1616,53 @@ small {
   font-size: 0.78rem;
 }
 
-@media (max-width: 768px) {
-  .admin-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 0.75rem;
-    margin-bottom: 1rem;
-    gap: 0.4rem;
+@media (max-width: 900px) {
+  .admin-nav-toggle {
+    display: inline-flex;
   }
 
-  .admin-tabs button {
-    flex-shrink: 0;
-    padding: 0.6rem 0.85rem;
-    font-size: 0.82rem;
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 320;
+    width: min(17rem, 86vw);
+    border-radius: 0;
+    border: none;
+    border-right: 1px solid var(--realm-border);
+    padding: 1rem 0.65rem;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+    background: rgba(12, 10, 18, 0.97);
+  }
+
+  .admin-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .admin-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 310;
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  .admin-side-nav button {
     min-height: 2.75rem;
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-topbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .standings-actions-top {
@@ -1506,6 +1683,8 @@ small {
     min-width: fit-content;
   }
 
+  .section-header-row,
+  .users-header,
   .inbox-header {
     flex-direction: column;
   }
@@ -1558,6 +1737,15 @@ small {
     max-height: 90vh;
     overflow-y: auto;
     border-radius: 12px 12px 0 0;
+  }
+
+  .row-actions {
+    flex-direction: column;
+  }
+
+  .row-actions .btn {
+    width: 100%;
+    justify-content: center;
   }
 }
 
