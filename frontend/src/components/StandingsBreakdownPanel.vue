@@ -4,7 +4,9 @@ import type { StandingsBreakdown, MemberContribution } from '../lib/api';
 
 const props = defineProps<{
 	breakdown: StandingsBreakdown;
+	/** @deprecated Prefer imageUrl */
 	breakdownSvg?: string | null;
+	imageUrl?: string | null;
 	title?: string;
 }>();
 
@@ -32,7 +34,7 @@ const teams = computed(() =>
 
 <template>
 	<section class="breakdown-panel card">
-		<header v-if="!breakdownSvg">
+		<header v-if="!imageUrl && !breakdownSvg">
 			<h2>{{ title ?? 'Score breakdown' }}</h2>
 			<p class="lead">
 				Who gained points and who dealt sabotage damage for each realm. Members are
@@ -40,7 +42,15 @@ const teams = computed(() =>
 			</p>
 		</header>
 
-		<div v-if="breakdownSvg" class="svg-wrap" v-html="breakdownSvg" />
+		<div v-if="imageUrl" class="img-wrap">
+			<img
+				:src="imageUrl"
+				alt="Score breakdown chart"
+				loading="lazy"
+				decoding="async"
+			/>
+		</div>
+		<div v-else-if="breakdownSvg" class="svg-wrap" v-html="breakdownSvg" />
 
 		<div v-else class="team-breakdowns">
 			<article
@@ -115,10 +125,20 @@ header h2 {
 	font-size: 0.9rem;
 }
 
+.img-wrap,
 .svg-wrap {
 	border-radius: 8px;
 	overflow-x: auto;
 	max-width: 100%;
+}
+
+.img-wrap img {
+	width: 100%;
+	height: auto;
+	display: block;
+	border-radius: 8px;
+	image-rendering: auto;
+	-webkit-user-drag: none;
 }
 
 .svg-wrap :deep(svg) {

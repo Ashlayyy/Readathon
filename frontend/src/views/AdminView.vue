@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import {
 	api,
+	apiUrl,
 	downloadFile,
 	type AdminQuestion,
 	type AdminSiteSettings,
@@ -16,6 +17,7 @@ import {
 import StandingsPanel from '../components/StandingsPanel.vue';
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue';
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue';
+import AdminStatsPanel from '../components/AdminStatsPanel.vue';
 import AdminAddSubmissionModal from '../components/AdminAddSubmissionModal.vue';
 import { useConfig } from '../composables/useConfig';
 import { useCopy } from '../composables/useCopy';
@@ -29,6 +31,18 @@ const { admin, section, msg, confirmMsg } = useAdminCopy();
 const { user: me } = useAuth();
 const users = ref<AdminUser[]>([]);
 const pending = ref(0);
+const stats = ref({
+	totalUsers: 0,
+	pending: 0,
+	assigned: 0,
+	submissions: 0,
+	unreadQuestions: 0,
+});
+const usersLoaded = ref(false);
+const submissionsLoaded = ref(false);
+const questionsLoaded = ref(false);
+const standingsLoaded = ref(false);
+const settingsLoaded = ref(false);
 const showTeamRosters = ref(false);
 const downtimeMode = ref(false);
 const discordWebhookUrl = ref('');
@@ -41,9 +55,9 @@ const submissions = ref<AdminSubmission[]>([]);
 const questions = ref<AdminQuestion[]>([]);
 const unreadQuestions = ref(0);
 const standings = ref<TeamStanding[] | null>(null);
-const standingsSvg = ref<string | null>(null);
+const standingsImageUrl = ref<string | null>(null);
 const standingsBreakdown = ref<StandingsBreakdown | null>(null);
-const standingsBreakdownSvg = ref<string | null>(null);
+const standingsBreakdownImageUrl = ref<string | null>(null);
 const activeWeeks = ref<PublishedWeek[]>([]);
 const standingsHistory = ref<StandingsHistoryEntry[]>([]);
 const answerModal = ref<AdminQuestion | null>(null);
@@ -77,7 +91,13 @@ const message = ref('');
 const messageIsError = ref(false);
 const loading = ref('');
 const activeTab = ref<
-	'inbox' | 'teams' | 'standings' | 'users' | 'submissions' | 'prompts'
+	| 'inbox'
+	| 'teams'
+	| 'standings'
+	| 'users'
+	| 'submissions'
+	| 'prompts'
+	| 'stats'
 >('inbox');
 const addSubmissionOpen = ref(false);
 const navOpen = ref(false);
@@ -234,13 +254,61 @@ onMounted(async () => {
 	showTeamRosters.value = config.value?.site?.showTeamRosters ?? false;
 	downtimeMode.value = config.value?.site?.downtimeMode ?? false;
 	try {
-		await Promise.all([loadAll(), loadAdminSettings()]);
+		await loadStats();
+		if (stats.value.unreadQuestions > 0) activeTab.value = 'inbox';
+		await ensureTabData(activeTab.value);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('loadFailed'), true);
 	}
 });
 
-async function loadAdminSettings() {
+async function loadStats() {
+	const data = await api<{
+		totalUsers: number;
+		pending: number;
+		assigned: number;
+		submissions: number;
+		unreadQuestions: number;
+	}>('/admin/stats');
+	stats.value = data;
+	pending.value = data.pending;
+	unreadQuestions.value = data.unreadQuestions;
+}
+
+async function loadUsers(force = false) {
+	if (usersLoaded.value && !force) return;
+	const u = await api<{ users: AdminUser[]; pending: number; assigned: number }>(
+		'/admin/users',
+	);
+	users.value = u.users;
+	pending.value = u.pending;
+	usersLoaded.value = true;
+	stats.value.totalUsers = u.users.length;
+	stats.value.pending = u.pending;
+	stats.value.assigned = u.assigned;
+}
+
+async function loadSubmissions(force = false) {
+	if (submissionsLoaded.value && !force) return;
+	const s = await api<{ submissions: AdminSubmission[] }>('/admin/submissions');
+	submissions.value = s.submissions;
+	submissionsLoaded.value = true;
+	stats.value.submissions = s.submissions.length;
+}
+
+async function loadQuestions(force = false) {
+	if (questionsLoaded.value && !force) return;
+	const q = await api<{ questions: AdminQuestion[]; unread: number }>(
+		'/admin/questions',
+	);
+	questions.value = q.questions;
+	unreadQuestions.value = q.unread;
+	stats.value.unreadQuestions = q.unread;
+	questionsLoaded.value = true;
+}
+
+async function loadAdminSettings(force = false) {
+	if (settingsLoaded.value && !force) return;
 	try {
 		const { settings } = await api<{ settings: AdminSiteSettings }>(
 			'/admin/settings',
@@ -249,6 +317,7 @@ async function loadAdminSettings() {
 		discordWebhookDraft.value = settings.discordWebhookUrl ?? '';
 		discordRoleId.value = settings.discordRoleId ?? '';
 		discordRoleIdDraft.value = settings.discordRoleId ?? '';
+		settingsLoaded.value = true;
 	} catch (e) {
 		showMessage(
 			e instanceof Error ? e.message : msg('settingsLoadFailed'),
@@ -257,19 +326,45 @@ async function loadAdminSettings() {
 	}
 }
 
+async function ensureTabData(tab: typeof activeTab.value) {
+	if (tab === 'inbox') await loadQuestions();
+	else if (tab === 'teams') await Promise.all([loadStats(), loadUsers()]);
+	else if (tab === 'users') await loadUsers();
+	else if (tab === 'submissions')
+		await Promise.all([loadSubmissions(), loadUsers()]);
+	else if (tab === 'standings')
+		await Promise.all([loadStandings(true), loadAdminSettings()]);
+	// prompts: AdminPromptsPanel loads itself when mounted (v-if)
+}
+
 watch(activeTab, (tab) => {
 	navOpen.value = false;
-	if (tab === 'standings') loadStandings();
+	ensureTabData(tab).catch((e) => {
+		showMessage(e instanceof Error ? e.message : msg('loadFailed'), true);
+	});
 });
 
 const assignedUserCount = computed(
-	() => users.value.filter((u) => u.status === 'assigned').length,
+	() =>
+		usersLoaded.value
+			? users.value.filter((u) => u.status === 'assigned').length
+			: stats.value.assigned,
+);
+
+const usersCount = computed(() =>
+	usersLoaded.value ? users.value.length : stats.value.totalUsers,
+);
+
+const submissionsCount = computed(() =>
+	submissionsLoaded.value ? submissions.value.length : stats.value.submissions,
 );
 
 function openAddSubmission() {
 	viewSubmission.value = null;
 	editSubmission.value = null;
-	addSubmissionOpen.value = true;
+	void loadUsers().then(() => {
+		addSubmissionOpen.value = true;
+	});
 }
 
 function closeSubmissionModal() {
@@ -278,16 +373,30 @@ function closeSubmissionModal() {
 	viewSubmission.value = null;
 }
 
-function openViewSubmission(s: AdminSubmission) {
+async function openViewSubmission(s: AdminSubmission) {
 	addSubmissionOpen.value = false;
 	editSubmission.value = null;
-	viewSubmission.value = s;
+	try {
+		const { submission } = await api<{ submission: AdminSubmission }>(
+			`/admin/submissions/${s.id}`,
+		);
+		viewSubmission.value = submission;
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : msg('loadFailed'), true);
+	}
 }
 
-function openEditSubmission(s: AdminSubmission) {
+async function openEditSubmission(s: AdminSubmission) {
 	addSubmissionOpen.value = false;
 	viewSubmission.value = null;
-	editSubmission.value = s;
+	try {
+		const { submission } = await api<{ submission: AdminSubmission }>(
+			`/admin/submissions/${s.id}`,
+		);
+		editSubmission.value = submission;
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : msg('loadFailed'), true);
+	}
 }
 
 function switchViewToEdit() {
@@ -340,13 +449,13 @@ function cancelDeleteSubmission() {
 async function onSubmissionCreated() {
 	closeSubmissionModal();
 	showMessage(msg('submissionCreated') || 'Submission added for that reader.');
-	await loadAll();
+	await Promise.all([loadSubmissions(true), loadStats()]);
 }
 
 async function onSubmissionUpdated() {
 	closeSubmissionModal();
 	showMessage(msg('submissionUpdated'));
-	await loadAll();
+	await loadSubmissions(true);
 }
 
 function setTab(tab: typeof activeTab.value) {
@@ -370,22 +479,6 @@ const filteredQuestions = computed(() => {
 	return sortedQuestions.value;
 });
 
-async function loadAll() {
-	const [u, s, q] = await Promise.all([
-		api<{ users: AdminUser[]; pending: number; assigned: number }>(
-			'/admin/users',
-		),
-		api<{ submissions: AdminSubmission[] }>('/admin/submissions'),
-		api<{ questions: AdminQuestion[]; unread: number }>('/admin/questions'),
-	]);
-	users.value = u.users;
-	pending.value = u.pending;
-	submissions.value = s.submissions;
-	questions.value = q.questions;
-	unreadQuestions.value = q.unread;
-	if (q.unread > 0) activeTab.value = 'inbox';
-}
-
 function showMessage(msg: string, isError = false) {
 	message.value = msg;
 	messageIsError.value = isError && !!msg;
@@ -399,7 +492,7 @@ async function assignTeams() {
 			method: 'POST',
 		});
 		showMessage(msg('assignedTeams', { count: result.assigned }));
-		await loadAll();
+		await Promise.all([loadUsers(true), loadStats()]);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('assignFailed'), true);
 	} finally {
@@ -416,7 +509,7 @@ async function setUserTeam(userId: string, teamId: string) {
 			body: JSON.stringify({ teamId: teamId || null }),
 		});
 		showMessage(msg('teamUpdated'));
-		await loadAll();
+		await Promise.all([loadUsers(true), loadStats()]);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('teamUpdateFailed'), true);
 	} finally {
@@ -433,7 +526,7 @@ async function setUserAdmin(userId: string, isAdmin: boolean) {
 			body: JSON.stringify({ isAdmin }),
 		});
 		showMessage('Admin status updated.');
-		await loadAll();
+		await loadUsers(true);
 	} catch (e) {
 		showMessage(
 			e instanceof Error ? e.message : 'Failed to update admin status',
@@ -563,7 +656,7 @@ async function submitAddUser() {
 		});
 		showMessage(msg('userCreated'));
 		closeAddUser();
-		await loadAll();
+		await Promise.all([loadUsers(true), loadStats()]);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('userCreateFailed'), true);
 	} finally {
@@ -577,7 +670,7 @@ async function markQuestion(id: string, status: 'read' | 'unread') {
 			method: 'PATCH',
 			body: JSON.stringify({ status }),
 		});
-		await loadAll();
+		await Promise.all([loadQuestions(true), loadStats()]);
 	} catch (e) {
 		showMessage(
 			e instanceof Error ? e.message : msg('messageUpdateFailed'),
@@ -592,7 +685,7 @@ async function deleteQuestion(id: string) {
 		await api(`/admin/questions/${id}`, { method: 'DELETE' });
 		showMessage(msg('messageRemoved'));
 		if (answerModal.value?.id === id) closeAnswerModal();
-		await loadAll();
+		await Promise.all([loadQuestions(true), loadStats()]);
 	} catch (e) {
 		showMessage(
 			e instanceof Error ? e.message : msg('messageRemoveFailed'),
@@ -628,7 +721,7 @@ async function submitModalAnswer() {
 		});
 		showMessage(msg('replySent'));
 		closeAnswerModal();
-		await loadAll();
+		await Promise.all([loadQuestions(true), loadStats()]);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('replyFailed'), true);
 	} finally {
@@ -651,7 +744,7 @@ async function confirmDeleteSubmission() {
 			closeSubmissionModal();
 		}
 		deleteTarget.value = null;
-		await loadAll();
+		await Promise.all([loadSubmissions(true), loadStats()]);
 	} catch (e) {
 		showMessage(
 			e instanceof Error ? e.message : msg('submissionDeleteFailed'),
@@ -662,16 +755,23 @@ async function confirmDeleteSubmission() {
 	}
 }
 
-async function loadStandings() {
+async function loadStandings(force = false) {
+	if (standingsLoaded.value && !force) return;
 	loading.value = 'standings';
 	try {
 		const data = await api<AdminStandingsData>('/admin/standings/current');
 		standings.value = data.current.standings;
-		standingsSvg.value = data.current.svg;
 		standingsBreakdown.value = data.current.breakdown;
-		standingsBreakdownSvg.value = data.current.breakdownSvg;
+		const bust = `t=${Date.now()}`;
+		standingsImageUrl.value = apiUrl(
+			`/admin/standings/preview.svg?kind=standings&${bust}`,
+		);
+		standingsBreakdownImageUrl.value = apiUrl(
+			`/admin/standings/preview.svg?kind=breakdown&${bust}`,
+		);
 		activeWeeks.value = data.activeWeeks;
 		standingsHistory.value = data.history;
+		standingsLoaded.value = true;
 	} finally {
 		loading.value = '';
 	}
@@ -693,7 +793,7 @@ async function publishThisWeek() {
 		showMessage(
 			msg('published', { weekLabel: result.weekLabel, emailNote, discordNote }),
 		);
-		await loadStandings();
+		await loadStandings(true);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('publishFailed'), true);
 	} finally {
@@ -711,7 +811,7 @@ async function unpublishWeek(publicationId: string, weekLabel: string) {
 			body: JSON.stringify({ publicationId }),
 		});
 		showMessage(msg('unpublished', { weekLabel }));
-		await loadStandings();
+		await loadStandings(true);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('unpublishFailed'), true);
 	} finally {
@@ -808,7 +908,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					>
 						{{ section('tabs').users }}
 						<span class="nav-meta"
-							>{{ assignedUserCount }}/{{ users.length }}</span
+							>{{ assignedUserCount }}/{{ usersCount }}</span
 						>
 					</button>
 					<button
@@ -817,7 +917,14 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						@click="setTab('submissions')"
 					>
 						{{ section('tabs').submissions }}
-						<span class="nav-meta">{{ submissions.length }}</span>
+						<span class="nav-meta">{{ submissionsCount }}</span>
+					</button>
+					<button
+						type="button"
+						:class="{ active: activeTab === 'stats' }"
+						@click="setTab('stats')"
+					>
+						{{ section('tabs').stats ?? 'Stats' }}
 					</button>
 					<button
 						type="button"
@@ -833,7 +940,12 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
 			<div class="admin-main">
 				<!-- Inbox -->
-				<section v-show="activeTab === 'inbox'" class="card admin-section">
+				<section v-if="activeTab === 'inbox'" class="card admin-section">
+					<div v-if="!questionsLoaded" class="page-state" style="min-height: 12rem">
+						<div class="page-spinner" role="status" aria-label="Loading" />
+						<p>Loading inbox…</p>
+					</div>
+					<template v-else>
 					<div class="inbox-header">
 						<div>
 							<h2>{{ section('inbox').title }}</h2>
@@ -940,6 +1052,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							</div>
 						</li>
 					</ul>
+					</template>
 				</section>
 
 				<Teleport to="body">
@@ -1004,7 +1117,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 				</Teleport>
 
 				<!-- Teams -->
-				<section v-show="activeTab === 'teams'" class="admin-grid">
+				<section v-if="activeTab === 'teams'" class="admin-grid">
 					<section class="card admin-section">
 						<h2>{{ section('teams').assignmentTitle }}</h2>
 						<p class="stat-line">
@@ -1027,17 +1140,15 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						<h2>{{ section('teams').quickStatsTitle }}</h2>
 						<ul class="quick-stats">
 							<li>
-								<strong>{{ users.length }}</strong>
+								<strong>{{ usersCount }}</strong>
 								{{ section('teams').statTotalUsers }}
 							</li>
 							<li>
-								<strong>{{
-									users.filter((u) => u.status === 'assigned').length
-								}}</strong>
+								<strong>{{ assignedUserCount }}</strong>
 								{{ section('teams').statAssigned }}
 							</li>
 							<li>
-								<strong>{{ submissions.length }}</strong>
+								<strong>{{ submissionsCount }}</strong>
 								{{ section('teams').statSubmissions }}
 							</li>
 							<li>
@@ -1077,7 +1188,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 				</section>
 
 				<!-- Standings -->
-				<section v-show="activeTab === 'standings'" class="admin-section">
+				<section v-if="activeTab === 'standings'" class="admin-section">
 					<div class="card standings-actions">
 						<div class="standings-actions-top">
 							<div>
@@ -1100,7 +1211,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								</button>
 								<button
 									class="btn btn-secondary"
-									:disabled="!standingsSvg"
+									:disabled="!standings?.length"
 									@click="downloadCurrentSvg"
 								>
 									{{ section('standings').downloadSvg }}
@@ -1216,14 +1327,14 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					<StandingsPanel
 						v-else-if="standings"
 						:standings="standings ?? []"
-						:svg="standingsSvg"
+						:image-url="standingsImageUrl"
 						:title="section('standings').liveTitle"
 					/>
 
 					<StandingsBreakdownPanel
 						v-if="standingsBreakdown && !loading"
 						:breakdown="standingsBreakdown"
-						:breakdown-svg="standingsBreakdownSvg"
+						:image-url="standingsBreakdownImageUrl"
 						:title="section('standings').breakdownTitle"
 					/>
 
@@ -1288,7 +1399,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 				</section>
 
 				<!-- Users -->
-				<section v-show="activeTab === 'users'" class="card admin-section">
+				<section v-if="activeTab === 'users'" class="card admin-section">
 					<div class="users-header">
 						<div>
 							<h2>{{ section('users').title }}</h2>
@@ -1463,7 +1574,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
 				<!-- Submissions -->
 				<section
-					v-show="activeTab === 'submissions'"
+					v-if="activeTab === 'submissions'"
 					class="card admin-section"
 				>
 					<div class="section-header-row">
@@ -1762,8 +1873,17 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					</p>
 				</section>
 
+				<AdminStatsPanel
+					v-if="activeTab === 'stats'"
+					@message="
+						(text, isError) => {
+							showMessage(text, isError);
+						}
+					"
+				/>
+
 				<AdminPromptsPanel
-					v-show="activeTab === 'prompts'"
+					v-if="activeTab === 'prompts'"
 					@message="
 						(text, isError) => {
 							showMessage(text, isError);

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { api, type StandingsBreakdown, type TeamStanding } from '../lib/api'
+import { api, apiUrl, type StandingsBreakdown, type TeamStanding } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
@@ -12,10 +12,11 @@ const { config, loadConfig } = useConfig()
 const { user, fetchUser } = useAuth()
 const { t } = useCopy()
 const standings = ref<TeamStanding[] | null>(null)
-const standingsSvg = ref<string | null>(null)
+const standingsImageUrl = ref<string | null>(null)
 const breakdown = ref<StandingsBreakdown | null>(null)
-const breakdownSvg = ref<string | null>(null)
+const breakdownImageUrl = ref<string | null>(null)
 const publishedAt = ref<string | null>(null)
+const standingsOpen = ref(false)
 
 const canSubmit = computed(() => user.value?.status === 'assigned')
 
@@ -46,17 +47,19 @@ onMounted(async () => {
     const data = await api<{
       published: boolean
       standings?: TeamStanding[]
-      svg?: string
       breakdown?: StandingsBreakdown | null
-      breakdownSvg?: string | null
+      imageUrl?: string | null
+      breakdownImageUrl?: string | null
       publishedAt?: string
     }>('/standings')
     if (data.published) {
       standings.value = data.standings ?? null
-      standingsSvg.value = data.svg ?? null
       breakdown.value = data.breakdown ?? null
-      breakdownSvg.value = data.breakdownSvg ?? null
       publishedAt.value = data.publishedAt ?? null
+      standingsImageUrl.value = data.imageUrl ? apiUrl(data.imageUrl) : null
+      breakdownImageUrl.value = data.breakdownImageUrl
+        ? apiUrl(data.breakdownImageUrl)
+        : null
     }
   } catch {
     /* no published standings yet */
@@ -70,7 +73,6 @@ onMounted(async () => {
       <p class="eyebrow">{{ config.event.subtitle }}</p>
       <h1>{{ config.event.name }}</h1>
       <p class="tagline">{{ config.event.tagline }}</p>
-      <p class="schedule">{{ config.event.month }}</p>
       <div class="hero-actions">
         <RouterLink v-if="!user" to="/login" class="btn btn-primary">{{ config.copy.enterCta }}</RouterLink>
         <RouterLink v-else-if="canSubmit" to="/submit" class="btn btn-primary">
@@ -83,32 +85,32 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section class="lore card">
+    <section class="lore">
       <h2>{{ config.event.loreTitle }}</h2>
       <p v-for="(para, i) in config.event.lore" :key="i">{{ t(para) }}</p>
       <p class="note">{{ config.event.characterCreationNote }}</p>
     </section>
 
-    <section v-if="standings" class="home-standings card">
-      <details class="collapse">
+    <section v-if="standings" class="home-standings">
+      <details class="collapse" @toggle="standingsOpen = ($event.target as HTMLDetailsElement).open">
         <summary class="collapse-summary">Standings &amp; score breakdown</summary>
-        <div class="collapse-body">
+        <div v-if="standingsOpen" class="collapse-body">
           <StandingsPanel
             :standings="standings"
-            :svg="standingsSvg"
+            :image-url="standingsImageUrl"
             :published-at="publishedAt"
           />
           <StandingsBreakdownPanel
             v-if="breakdown"
             :breakdown="breakdown"
-            :breakdown-svg="breakdownSvg"
+            :image-url="breakdownImageUrl"
             title="Score breakdown"
           />
         </div>
       </details>
     </section>
 
-    <section v-if="canSubmit" class="submit-banner card">
+    <section v-if="canSubmit" class="submit-banner">
       <div>
         <h2>{{ submitBannerTitle }}</h2>
         <p>{{ submitBannerBody }}</p>
@@ -117,19 +119,19 @@ onMounted(async () => {
     </section>
 
     <section class="quick-links" :class="{ 'has-submit': canSubmit }">
-      <RouterLink v-if="canSubmit" to="/submit" class="link-card link-card-featured card">
+      <RouterLink v-if="canSubmit" to="/submit" class="link-card link-card-featured">
         <h3>{{ submitQuickTitle }}</h3>
         <p>{{ submitQuickDescription }}</p>
       </RouterLink>
-      <RouterLink to="/teams" class="link-card card">
+      <RouterLink to="/teams" class="link-card">
         <h3>{{ t(config.copy.homeQuickLinks.teamsTitle) }}</h3>
         <p>{{ config.copy.homeQuickLinks.teamsDescription }}</p>
       </RouterLink>
-      <RouterLink to="/prompts" class="link-card card">
+      <RouterLink to="/prompts" class="link-card">
         <h3>{{ t(config.copy.homeQuickLinks.promptsTitle) }}</h3>
         <p>{{ config.copy.homeQuickLinks.promptsDescription }}</p>
       </RouterLink>
-      <RouterLink to="/faq" class="link-card card">
+      <RouterLink to="/faq" class="link-card">
         <h3>{{ config.copy.homeQuickLinks.faqTitle }}</h3>
         <p>{{ config.copy.homeQuickLinks.faqDescription }}</p>
       </RouterLink>
@@ -142,6 +144,9 @@ onMounted(async () => {
   margin-top: 1.5rem;
   padding: 0;
   overflow: hidden;
+  border: 1px solid var(--realm-border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--realm-surface) 88%, transparent);
 }
 
 .collapse {
@@ -191,7 +196,7 @@ details[open] > .collapse-summary::after {
 
 .hero {
   text-align: center;
-  padding: 2rem 0 3rem;
+  padding: 2.5rem 0 2rem;
 }
 
 .eyebrow {
@@ -205,9 +210,9 @@ details[open] > .collapse-summary::after {
 
 .hero h1 {
   font-family: var(--font-display);
-  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-size: clamp(2.75rem, 7vw, 4.25rem);
   color: var(--realm-text);
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.65rem;
   letter-spacing: 0.06em;
   text-shadow: 0 0 40px rgba(212, 99, 74, 0.25);
 }
@@ -216,13 +221,7 @@ details[open] > .collapse-summary::after {
   font-size: 1.15rem;
   color: var(--realm-text-muted);
   max-width: 32rem;
-  margin: 0 auto 0.5rem;
-}
-
-.schedule {
-  color: var(--realm-accent);
-  font-size: 0.9rem;
-  margin-bottom: 1.5rem;
+  margin: 0 auto 1.5rem;
 }
 
 .hero-actions {
@@ -241,13 +240,9 @@ details[open] > .collapse-summary::after {
   gap: 1rem 1.5rem;
   margin-top: 2rem;
   margin-bottom: 2rem;
-  padding: 1.25rem 1.5rem;
-  border-color: color-mix(in srgb, var(--realm-accent) 40%, var(--realm-border));
-  background: linear-gradient(
-    135deg,
-    var(--realm-surface) 0%,
-    color-mix(in srgb, var(--realm-accent) 8%, var(--realm-surface)) 100%
-  );
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--realm-border);
+  border-bottom: 1px solid var(--realm-border);
 }
 
 .submit-banner h2 {
@@ -266,6 +261,12 @@ details[open] > .collapse-summary::after {
 
 .submit-banner .btn {
   flex-shrink: 0;
+}
+
+.lore {
+  margin-top: 0.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--realm-border) 70%, transparent);
 }
 
 .lore h2 {
@@ -291,13 +292,14 @@ details[open] > .collapse-summary::after {
 
 .quick-links {
   display: grid;
-  gap: 1rem;
+  gap: 0.25rem;
   margin-top: 2rem;
 }
 
 @media (min-width: 768px) {
   .quick-links {
     grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
   }
 
   .quick-links.has-submit {
@@ -312,21 +314,22 @@ details[open] > .collapse-summary::after {
 }
 
 .link-card {
-  transition: border-color 0.2s, transform 0.15s;
+  display: block;
+  padding: 1rem 0.15rem;
+  border-bottom: 1px solid var(--realm-border);
+  transition: color 0.2s, border-color 0.2s;
+  text-decoration: none;
 }
 
-.link-card:hover {
-  border-color: var(--realm-accent);
-  transform: translateY(-2px);
+@media (min-width: 768px) {
+  .link-card {
+    padding: 0.25rem 0;
+    border-bottom: none;
+  }
 }
 
-.link-card-featured {
-  border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
-  background: linear-gradient(
-    135deg,
-    var(--realm-surface) 0%,
-    color-mix(in srgb, var(--realm-accent) 10%, var(--realm-surface)) 100%
-  );
+.link-card:hover h3 {
+  color: var(--realm-accent-glow);
 }
 
 .link-card-featured h3 {
@@ -336,16 +339,18 @@ details[open] > .collapse-summary::after {
 .link-card h3 {
   color: var(--realm-text);
   margin-bottom: 0.35rem;
+  transition: color 0.2s;
 }
 
 .link-card p {
   color: var(--realm-text-muted);
   font-size: 0.9rem;
+  margin: 0;
 }
 
 @media (max-width: 768px) {
   .hero {
-    padding: 1.25rem 0 2rem;
+    padding: 1.25rem 0 1.5rem;
   }
 
   .hero-actions {

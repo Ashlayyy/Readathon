@@ -24,6 +24,7 @@ import { submissionRoutes } from './routes/submissions.js';
 import { APP_VERSION } from './lib/version.js';
 import { getSvgFontStatus } from './lib/svgFonts.js';
 import { getSvgTextPathStatus } from './lib/svgTextPaths.js';
+import { svgToPng } from './services/svgToPng.js';
 
 loadEnv({ path: join(dirname(fileURLToPath(import.meta.url)), '../.env') });
 
@@ -94,19 +95,101 @@ app.get('/api/standings', async (c) => {
 	});
 
 	if (!published) {
-		return c.json({ published: false });
+		return c.json({ published: false, vibes: null });
+	}
+
+	const id = published._id.toString();
+	let vibes = null;
+	if (published.vibesJson) {
+		try {
+			vibes = JSON.parse(published.vibesJson);
+		} catch {
+			vibes = null;
+		}
 	}
 
 	return c.json({
 		published: true,
 		publishedAt: published.createdAt,
+		weekKey: published.weekKey,
+		weekLabel: published.weekLabel,
 		standings: JSON.parse(published.standingsJson),
-		svg: published.svgData,
 		breakdown: published.breakdownJson
 			? JSON.parse(published.breakdownJson)
 			: null,
-		breakdownSvg: published.breakdownSvgData || null,
+		imageUrl: `/standings/image.svg?id=${id}`,
+		breakdownImageUrl: published.breakdownSvgData
+			? `/standings/breakdown.svg?id=${id}`
+			: null,
+		vibesImageUrl: published.vibesSvgData
+			? `/standings/vibes.svg?id=${id}`
+			: null,
+		vibes,
 	});
+});
+
+function svgInline(c: { header: (k: string, v: string) => void; body: (b: string) => Response }, svg: string, cacheSeconds = 300) {
+	c.header('Content-Type', 'image/svg+xml; charset=utf-8');
+	c.header('Content-Disposition', 'inline');
+	c.header('Cache-Control', `public, max-age=${cacheSeconds}`);
+	return c.body(svg);
+}
+
+app.get('/api/standings/image.svg', async (c) => {
+	const published = await PublishedStandings.findOne({ isActive: true }).sort({
+		createdAt: -1,
+	});
+	if (!published?.svgData) return c.json({ error: 'No published standings' }, 404);
+	return svgInline(c, published.svgData);
+});
+
+app.get('/api/standings/breakdown.svg', async (c) => {
+	const published = await PublishedStandings.findOne({ isActive: true }).sort({
+		createdAt: -1,
+	});
+	if (!published?.breakdownSvgData) {
+		return c.json({ error: 'No published breakdown' }, 404);
+	}
+	return svgInline(c, published.breakdownSvgData);
+});
+
+app.get('/api/standings/vibes.svg', async (c) => {
+	const published = await PublishedStandings.findOne({ isActive: true }).sort({
+		createdAt: -1,
+	});
+	if (!published?.vibesSvgData) {
+		return c.json({ error: 'No published vibes' }, 404);
+	}
+	return svgInline(c, published.vibesSvgData);
+});
+
+/** Higher-res PNG for retina embeds / Discord-sized shares (optional). */
+const WEB_PNG_WIDTH = 2400;
+
+app.get('/api/standings/image.png', async (c) => {
+	const published = await PublishedStandings.findOne({ isActive: true }).sort({
+		createdAt: -1,
+	});
+	if (!published?.svgData) return c.json({ error: 'No published standings' }, 404);
+
+	const png = svgToPng(published.svgData, WEB_PNG_WIDTH);
+	c.header('Content-Type', 'image/png');
+	c.header('Cache-Control', 'public, max-age=300');
+	return c.body(new Uint8Array(png));
+});
+
+app.get('/api/standings/breakdown.png', async (c) => {
+	const published = await PublishedStandings.findOne({ isActive: true }).sort({
+		createdAt: -1,
+	});
+	if (!published?.breakdownSvgData) {
+		return c.json({ error: 'No published breakdown' }, 404);
+	}
+
+	const png = svgToPng(published.breakdownSvgData, WEB_PNG_WIDTH);
+	c.header('Content-Type', 'image/png');
+	c.header('Cache-Control', 'public, max-age=300');
+	return c.body(new Uint8Array(png));
 });
 
 app.route('/api/auth', authRoutes);

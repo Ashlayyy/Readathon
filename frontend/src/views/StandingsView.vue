@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { api, type StandingsBreakdown, type TeamStanding } from '../lib/api';
+import { api, apiUrl, type StandingsBreakdown, type TeamStanding } from '../lib/api';
 import { useConfig } from '../composables/useConfig';
 import StandingsPanel from '../components/StandingsPanel.vue';
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue';
+import StandingsVibes, {
+	type StandingsVibes as VibesData,
+} from '../components/StandingsVibes.vue';
 
 const { config, loadConfig } = useConfig();
 const standings = ref<TeamStanding[] | null>(null);
-const svg = ref<string | null>(null);
+const standingsImageUrl = ref<string | null>(null);
 const breakdown = ref<StandingsBreakdown | null>(null);
-const breakdownSvg = ref<string | null>(null);
+const breakdownImageUrl = ref<string | null>(null);
 const publishedAt = ref<string | null>(null);
+const weekLabel = ref<string | null>(null);
 const published = ref(false);
+const vibes = ref<VibesData | null>(null);
 const loading = ref(true);
 const error = ref('');
 
@@ -21,17 +26,24 @@ onMounted(async () => {
 		const data = await api<{
 			published: boolean;
 			standings?: TeamStanding[];
-			svg?: string;
 			breakdown?: StandingsBreakdown | null;
-			breakdownSvg?: string | null;
+			imageUrl?: string | null;
+			breakdownImageUrl?: string | null;
 			publishedAt?: string;
+			weekLabel?: string;
+			vibes?: VibesData | null;
 		}>('/standings');
 		published.value = data.published;
 		standings.value = data.standings ?? null;
-		svg.value = data.svg ?? null;
 		breakdown.value = data.breakdown ?? null;
-		breakdownSvg.value = data.breakdownSvg ?? null;
 		publishedAt.value = data.publishedAt ?? null;
+		weekLabel.value = data.weekLabel ?? null;
+		standingsImageUrl.value = data.imageUrl ? apiUrl(data.imageUrl) : null;
+		breakdownImageUrl.value = data.breakdownImageUrl
+			? apiUrl(data.breakdownImageUrl)
+			: null;
+		// Only show frozen vibes from the published week — never live-updating
+		vibes.value = data.published ? (data.vibes ?? null) : null;
 	} catch {
 		error.value = String(
 			config.value?.copy.standingsLoadError ?? "Couldn't load standings.",
@@ -46,24 +58,45 @@ onMounted(async () => {
 	<main v-if="config" class="page">
 		<h1 class="page-title">{{ config.copy.standingsPageTitle }}</h1>
 
-		<div v-if="loading" class="alert alert-info">Loading…</div>
+		<div v-if="loading" class="page-state">
+			<div class="page-spinner" role="status" aria-label="Loading" />
+			<p>Loading standings…</p>
+		</div>
 		<div v-else-if="error" class="alert alert-error card">
 			<p>{{ error }}</p>
 		</div>
-		<div v-else-if="!published" class="alert alert-info card">
+		<div v-else-if="!published" class="empty-state">
 			<p>{{ config.copy.standingsUnpublished }}</p>
 		</div>
 		<template v-else-if="standings">
 			<StandingsPanel
 				:standings="standings"
-				:svg="svg"
+				:image-url="standingsImageUrl"
 				:published-at="publishedAt"
 			/>
-			<br />
+
+			<StandingsVibes
+				v-if="vibes"
+				:vibes="vibes"
+				:title="String(config.copy.standingsVibesTitle ?? 'Reading vibes')"
+				:lead="
+					String(
+						config.copy.standingsVibesLead ??
+							'This week’s activity, frozen when standings were published.',
+					)
+				"
+			/>
+			<p v-else class="vibes-missing">
+				{{
+					config.copy.standingsVibesMissing ??
+					'Weekly vibes will appear after the next standings publish.'
+				}}
+			</p>
+
 			<StandingsBreakdownPanel
 				v-if="breakdown"
 				:breakdown="breakdown"
-				:breakdown-svg="breakdownSvg"
+				:image-url="breakdownImageUrl"
 				:title="
 					String(config.copy.standingsBreakdownTitle ?? 'Score breakdown')
 				"
@@ -71,3 +104,30 @@ onMounted(async () => {
 		</template>
 	</main>
 </template>
+
+<style scoped>
+.empty-state {
+	padding: 2.5rem 1.25rem;
+	text-align: center;
+	color: var(--realm-text-muted);
+	border: 1px dashed var(--realm-border);
+	border-radius: var(--radius);
+}
+
+.page-state {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 2rem;
+	color: var(--realm-text-muted);
+}
+
+.vibes-missing {
+	margin: 1.5rem 0;
+	padding: 1rem 0;
+	border-top: 1px solid var(--realm-border);
+	color: var(--realm-text-muted);
+	font-size: 0.92rem;
+}
+</style>

@@ -31,8 +31,11 @@
 	--safe-right: env(safe-area-inset-right, 0px);
 	--safe-bottom: env(safe-area-inset-bottom, 0px);
 	--safe-left: env(safe-area-inset-left, 0px);
-	--realm-bg-image: url('/dragons.png');
-	--realm-bg-image-opacity: 0.25;
+	--realm-bg-image: image-set(
+		url('/dragons.webp') type('image/webp'),
+		url('/dragons.png') type('image/png')
+	);
+	--realm-bg-image-opacity: 0.22;
 }
 
 *,
@@ -51,9 +54,15 @@ html::before {
 	position: fixed;
 	inset: 0;
 	background: var(--realm-bg-image) center / cover no-repeat;
-	background-attachment: fixed;
 	opacity: var(--realm-bg-image-opacity);
 	pointer-events: none;
+	z-index: -1;
+}
+
+@media (min-width: 769px) {
+	html::before {
+		background-attachment: fixed;
+	}
 }
 
 body {
@@ -63,18 +72,17 @@ body {
 	background-image:
 		radial-gradient(
 			ellipse 80% 50% at 50% -10%,
-			var(--realm-body-glow-accent, rgba(212, 99, 74, 0.12)),
+			var(--realm-body-glow-accent, rgba(212, 99, 74, 0.1)),
 			transparent
 		),
 		radial-gradient(
-			ellipse 60% 40% at 100% 100%,
-			rgba(155, 126, 217, 0.06),
+			ellipse 50% 35% at 100% 100%,
+			rgba(155, 126, 217, 0.03),
 			transparent
 		);
 	background-size: cover, cover;
 	background-position: center, center;
 	background-repeat: no-repeat;
-	background-attachment: fixed;
 	min-height: 100vh;
 	min-height: 100dvh;
 	color: var(--realm-text-muted);
@@ -171,6 +179,43 @@ a:hover {
 	to {
 		opacity: 1;
 		transform: translateY(0);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.page {
+		animation: none;
+	}
+
+	html::before {
+		background-attachment: scroll !important;
+	}
+}
+
+.skeleton {
+	background: linear-gradient(
+		90deg,
+		var(--realm-surface) 0%,
+		var(--realm-surface-alt) 50%,
+		var(--realm-surface) 100%
+	);
+	background-size: 200% 100%;
+	animation: skeleton-shine 1.2s ease-in-out infinite;
+	border-radius: 6px;
+}
+
+@keyframes skeleton-shine {
+	0% {
+		background-position: 100% 0;
+	}
+	100% {
+		background-position: -100% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton {
+		animation: none;
 	}
 }
 

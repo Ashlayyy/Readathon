@@ -60,6 +60,35 @@ adminRoutes.use('*', async (c, next) => {
   }
 })
 
+adminRoutes.get('/stats', async (c) => {
+  const [totalUsers, pending, assigned, submissions, unreadQuestions] = await Promise.all([
+    User.countDocuments(),
+    User.countDocuments({ status: 'pending' }),
+    User.countDocuments({ status: 'assigned' }),
+    Submission.countDocuments(),
+    Question.countDocuments({ status: 'unread' }),
+  ])
+  return c.json({ totalUsers, pending, assigned, submissions, unreadQuestions })
+})
+
+adminRoutes.get('/analytics', async (c) => {
+  const { buildAdminAnalytics } = await import('../services/adminAnalytics.js')
+  try {
+    const analytics = await buildAdminAnalytics({
+      from: c.req.query('from'),
+      to: c.req.query('to'),
+      preset: c.req.query('preset'),
+      teamId: c.req.query('teamId'),
+    })
+    return c.json({ analytics })
+  } catch (e) {
+    return c.json(
+      { error: e instanceof Error ? e.message : 'Failed to build analytics' },
+      400,
+    )
+  }
+})
+
 adminRoutes.get('/users', async (c) => {
   const users = await User.find().sort({ createdAt: -1 })
   return c.json({
@@ -153,19 +182,50 @@ adminRoutes.patch('/users/:id/admin', async (c) => {
 adminRoutes.get('/submissions', async (c) => {
   const rows = await Submission.find().sort({ createdAt: -1 })
   const userIds = [...new Set(rows.map((sub) => sub.userId.toString()))]
-  const users = await User.find({ _id: { $in: userIds } })
+  const users = await User.find({ _id: { $in: userIds } }).select('displayName teamId')
   const userById = new Map(users.map((u) => [u._id.toString(), u]))
   return c.json({
     submissions: rows.map((sub) => {
       const user = userById.get(sub.userId.toString())
-
+      const pub = submissionToPublic(sub)
       return {
-        ...submissionToPublic(sub),
+        id: pub.id,
+        bookTitle: pub.bookTitle,
+        bookAuthor: pub.bookAuthor,
+        pageCount: pub.pageCount,
+        format: pub.format,
+        submissionType: pub.submissionType,
+        targetTeamId: pub.targetTeamId,
+        pageBonus: pub.pageBonus,
+        promptPoints: pub.promptPoints,
+        bonusPoints: pub.bonusPoints,
+        totalImpact: pub.totalImpact,
+        createdAt: pub.createdAt,
         userName: user?.displayName ?? 'Unknown reader',
-        userEmail: user?.email ?? '',
+        userEmail: '',
         userTeamId: user?.teamId ?? null,
+        // Full prompt/date fields loaded via GET /submissions/:id when editing
+        startedAt: null,
+        finishedAt: null,
+        promptIds: [] as string[],
+        bonusCompetition: false,
+        bonusTeamPromptIds: [] as string[],
       }
     }),
+  })
+})
+
+adminRoutes.get('/submissions/:id', async (c) => {
+  const submission = await Submission.findById(c.req.param('id'))
+  if (!submission) return c.json({ error: 'Submission not found' }, 404)
+  const owner = await User.findById(submission.userId)
+  return c.json({
+    submission: {
+      ...submissionToPublic(submission),
+      userName: owner?.displayName ?? 'Unknown reader',
+      userEmail: owner?.email ?? '',
+      userTeamId: owner?.teamId ?? null,
+    },
   })
 })
 
@@ -269,23 +329,33 @@ adminRoutes.delete('/submissions/:id', async (c) => {
 })
 
 function svgAttachment(c: Context, filename: string, svg: string) {
-  c.header('Content-Type', 'image/svg+xml')
+  c.header('Content-Type', 'image/svg+xml; charset=utf-8')
   c.header('Content-Disposition', `attachment; filename="${filename}"`)
+  return c.body(svg)
+}
+
+function svgInline(c: Context, svg: string) {
+  c.header('Content-Type', 'image/svg+xml; charset=utf-8')
+  c.header('Content-Disposition', 'inline')
+  c.header('Cache-Control', 'no-store')
   return c.body(svg)
 }
 
 adminRoutes.get('/standings/current', async (c) => {
   const standings = await calculateStandings()
   const breakdown = await calculateStandingsBreakdown()
-  const { weekLabel } = getWeekInfo()
-  const svg = generateStandingsSvg(standings, weekLabel)
-  const breakdownSvg = generateBreakdownSvg(breakdown, weekLabel)
   const active = await PublishedStandings.findOne({ isActive: true }).sort({ createdAt: -1 })
   const activeWeeks = await PublishedStandings.find({ isActive: true }).sort({ createdAt: -1 })
   const history = await StandingsEvent.find().sort({ createdAt: -1 }).limit(100)
 
   return c.json({
-    current: { standings, svg, breakdown, breakdownSvg },
+    current: {
+      standings,
+      breakdown,
+      // Vector for crisp admin preview (PNG stayed for Discord only)
+      imageUrl: '/admin/standings/preview.svg?kind=standings',
+      breakdownImageUrl: '/admin/standings/preview.svg?kind=breakdown',
+    },
     activePublication: active
       ? {
           id: active._id.toString(),
@@ -317,6 +387,22 @@ adminRoutes.get('/standings/current.svg', async (c) => {
   const { weekKey, weekLabel } = getWeekInfo()
   const svg = generateStandingsSvg(standings, weekLabel)
   return svgAttachment(c, `standings-${weekKey}.svg`, svg)
+})
+
+adminRoutes.get('/standings/preview.svg', async (c) => {
+  const kind = c.req.query('kind') ?? 'standings'
+  const { weekLabel } = getWeekInfo()
+
+  let svg: string
+  if (kind === 'breakdown') {
+    const breakdown = await calculateStandingsBreakdown()
+    svg = generateBreakdownSvg(breakdown, weekLabel)
+  } else {
+    const standings = await calculateStandings()
+    svg = generateStandingsSvg(standings, weekLabel)
+  }
+
+  return svgInline(c, svg)
 })
 
 adminRoutes.get('/standings/discord-preview.png', async (c) => {
@@ -359,6 +445,16 @@ adminRoutes.post('/standings/publish', async (c) => {
   const breakdownSvg = generateBreakdownSvg(breakdown, weekLabel)
   const breakdownJson = JSON.stringify(breakdown)
 
+  const { buildPublicStandingsVibes } = await import('../services/adminAnalytics.js')
+  const { generateVibesSvg } = await import('../services/vibes-image.js')
+  const vibes = await buildPublicStandingsVibes({
+    weekKey,
+    weekLabel,
+    to: new Date(),
+  })
+  const vibesSvg = generateVibesSvg(vibes)
+  const vibesJson = JSON.stringify(vibes)
+
   await PublishedStandings.updateMany({ isActive: true }, { isActive: false, unpublishedAt: new Date() })
 
   const doc = await PublishedStandings.create({
@@ -368,6 +464,8 @@ adminRoutes.post('/standings/publish', async (c) => {
     svgData: svg,
     breakdownJson,
     breakdownSvgData: breakdownSvg,
+    vibesJson,
+    vibesSvgData: vibesSvg,
     isActive: true,
   })
 
@@ -389,7 +487,12 @@ adminRoutes.post('/standings/publish', async (c) => {
     return { sent: 0, skipped: 0 }
   })
 
-  const discordResult = await notifyDiscordStandingsPublished(weekKey, svg, breakdownSvg).catch((e) => {
+  const discordResult = await notifyDiscordStandingsPublished(
+    weekKey,
+    svg,
+    breakdownSvg,
+    vibesSvg,
+  ).catch((e) => {
     console.error('[discord] Standings webhook failed:', e)
     return { sent: false }
   })

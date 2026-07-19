@@ -255,9 +255,13 @@ export type SubmitStrategy = {
 export type AdminStandingsData = {
   current: {
     standings: TeamStanding[]
-    svg: string
     breakdown: StandingsBreakdown
-    breakdownSvg: string
+    imageUrl?: string
+    breakdownImageUrl?: string
+    /** @deprecated Prefer imageUrl */
+    svg?: string
+    /** @deprecated Prefer breakdownImageUrl */
+    breakdownSvg?: string
   }
   activePublication: PublishedWeek | null
   activeWeeks: PublishedWeek[]

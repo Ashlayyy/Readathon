@@ -130,6 +130,7 @@ export async function notifyDiscordStandingsPublished(
   weekKey: string,
   standingsSvg: string,
   breakdownSvg?: string,
+  vibesSvg?: string,
 ): Promise<{ sent: boolean }> {
   const webhookUrl = getDiscordWebhookUrl()
   if (!webhookUrl) {
@@ -142,14 +143,18 @@ export async function notifyDiscordStandingsPublished(
   const mention = roleId ? `<@&${roleId}> ` : ''
   const standingsFilename = `standings-${weekKey.toLowerCase()}.png`
   const breakdownFilename = `standings-breakdown-${weekKey.toLowerCase()}.png`
+  const vibesFilename = `standings-vibes-${weekKey.toLowerCase()}.png`
   const hasBreakdown = Boolean(breakdownSvg?.trim())
+  const hasVibes = Boolean(vibesSvg?.trim())
 
   console.log('[discord] publish started', {
     weekKey,
     weekLabel,
     hasBreakdown,
+    hasVibes,
     standingsSvgChars: standingsSvg.length,
     breakdownSvgChars: breakdownSvg?.length ?? 0,
+    vibesSvgChars: vibesSvg?.length ?? 0,
     roleConfigured: Boolean(roleId),
   })
 
@@ -183,6 +188,25 @@ export async function notifyDiscordStandingsPublished(
       }
     } else {
       console.log('[discord] breakdown: skipped (no breakdown SVG)')
+    }
+
+    if (hasVibes && vibesSvg) {
+      console.log('[discord] vibes: rasterizing SVG to PNG…')
+      const vibesPng = svgToPng(vibesSvg)
+      const vibesContent = `**${weekLabel} reading vibes** (this week only — frozen at publish)`
+      const vibesSent = await postWebhookImage(
+        'vibes',
+        webhookUrl,
+        vibesPng,
+        vibesFilename,
+        vibesContent,
+      )
+      if (!vibesSent) {
+        console.error('[discord] vibes failed after earlier posts succeeded')
+        return { sent: false }
+      }
+    } else {
+      console.log('[discord] vibes: skipped (no vibes SVG)')
     }
 
     console.log('[discord] publish finished successfully')

@@ -7,6 +7,7 @@ let fetchPromise: Promise<PublicUser | null> | null = null
 
 export function useAuth() {
   async function fetchUser(force = false): Promise<PublicUser | null> {
+    if (!force && loaded.value && !fetchPromise) return user.value
     if (!force && fetchPromise) return fetchPromise
 
     fetchPromise = (async () => {
@@ -46,6 +47,7 @@ export function useAuth() {
     await api('/auth/logout', { method: 'POST' })
     user.value = null
     loaded.value = true
+    fetchPromise = null
   }
 
   return { user, loaded, fetchUser, register, login, logout, googleLoginUrl }

@@ -3,7 +3,9 @@ import type { TeamStanding } from '../lib/api'
 
 defineProps<{
   standings: TeamStanding[]
+  /** @deprecated Prefer imageUrl — inline SVG bloats DOM/payload */
   svg?: string | null
+  imageUrl?: string | null
   publishedAt?: string | null
   title?: string
 }>()
@@ -32,7 +34,7 @@ function standingsDetailLine(team: TeamStanding, index: number, standings: TeamS
 
 <template>
   <section class="standings-panel card">
-    <header v-if="!svg">
+    <header v-if="!imageUrl && !svg">
       <h2>{{ title ?? 'Realm Standings' }}</h2>
       <p v-if="publishedAt" class="published-at">
         Published {{ new Date(publishedAt).toLocaleString() }}
@@ -42,7 +44,10 @@ function standingsDetailLine(team: TeamStanding, index: number, standings: TeamS
       Published {{ new Date(publishedAt).toLocaleString() }}
     </p>
 
-    <div v-if="svg" class="svg-wrap" v-html="svg" />
+    <div v-if="imageUrl" class="img-wrap">
+      <img :src="imageUrl" alt="Realm standings chart" loading="lazy" decoding="async" />
+    </div>
+    <div v-else-if="svg" class="svg-wrap" v-html="svg" />
 
     <ol v-else class="standings-list">
       <li
@@ -88,11 +93,22 @@ h2 {
   margin: 0 0 1rem;
 }
 
+.img-wrap,
 .svg-wrap {
   border-radius: 8px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   max-width: 100%;
+}
+
+.img-wrap img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  /* Avoid browser “helpfully” smoothing vector/bitmaps when scaled */
+  image-rendering: auto;
+  -webkit-user-drag: none;
 }
 
 .svg-wrap :deep(svg) {
@@ -119,23 +135,23 @@ h2 {
 }
 
 .standing-row.leader {
-  border-left-width: 4px;
-  background: color-mix(in srgb, var(--team-color) 6%, var(--realm-bg));
+  background: color-mix(in srgb, var(--team-color) 12%, var(--realm-bg));
 }
 
 .rank {
-  color: var(--realm-text-muted);
+  font-family: var(--font-display);
   font-weight: 700;
+  color: var(--realm-text-muted);
   min-width: 2rem;
 }
 
 .icon {
-  font-size: 1.25rem;
-  color: var(--team-color);
+  font-size: 1.4rem;
 }
 
 .info {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
@@ -145,69 +161,29 @@ h2 {
   color: var(--realm-text);
 }
 
-.leader-mark {
-  color: var(--realm-accent-glow);
-}
-
 .info span {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--realm-text-muted);
-  word-break: break-word;
-  line-height: 1.4;
 }
 
-.avg-line {
-  font-size: 0.75rem !important;
+.leader-mark {
+  color: var(--realm-accent);
 }
 
 .score {
   text-align: right;
+  flex-shrink: 0;
 }
 
 .score strong {
   display: block;
-  color: var(--team-color);
   font-size: 1.25rem;
+  color: var(--realm-text);
+  font-family: var(--font-display);
 }
 
 .score small {
   color: var(--realm-text-muted);
-  font-size: 0.7rem;
-}
-
-@media (max-width: 600px) {
-  .standing-row {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.75rem;
-  }
-
-  .info {
-    flex: 1 1 calc(100% - 4rem);
-    min-width: 0;
-  }
-
-  .info span {
-    font-size: 0.75rem;
-  }
-
-  .score {
-    width: 100%;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    padding-top: 0.35rem;
-    border-top: 1px solid var(--realm-border);
-  }
-
-  .score strong {
-    display: inline;
-    font-size: 1.1rem;
-  }
-
-  .score small {
-    display: inline;
-    margin-left: 0.35rem;
-  }
+  font-size: 0.75rem;
 }
 </style>

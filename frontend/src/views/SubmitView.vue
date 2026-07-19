@@ -17,13 +17,20 @@ const router = useRouter()
 const steps = computed(() => {
   const c = config.value?.copy
   if (!c) return []
-  return [
+  const all = [
     { n: 1, label: String(c.submitStepBook) },
     { n: 2, label: String(c.submitStepType) },
     { n: 3, label: String(c.submitStepPrompts) },
     { n: 4, label: String(c.submitStepBonuses) },
     { n: 5, label: String(c.submitStepReview) },
   ]
+  return hasBonusOptions.value ? all : all.filter((s) => s.n !== 4)
+})
+
+const hasBonusOptions = computed(() => {
+  const globals = config.value?.globalBonuses?.length ?? 0
+  const teamBonuses = userTeam.value?.bonusPrompts?.length ?? 0
+  return globals > 0 || teamBonuses > 0
 })
 
 const step = ref(1)
@@ -287,7 +294,20 @@ function nextStep() {
     error.value = 'Select a team to attack.'
     return
   }
+  if (step.value === 3 && !hasBonusOptions.value) {
+    step.value = 5
+    return
+  }
   step.value++
+}
+
+function prevStep() {
+  error.value = ''
+  if (step.value === 5 && !hasBonusOptions.value) {
+    step.value = 3
+    return
+  }
+  step.value--
 }
 
 function reset() {
@@ -726,7 +746,7 @@ function reset() {
       </section>
 
       <div v-if="step < 6" class="wizard-nav">
-        <button v-if="step > 1" type="button" class="btn btn-ghost" @click="step--">{{ config.copy.submitBack }}</button>
+        <button v-if="step > 1" type="button" class="btn btn-ghost" @click="prevStep">{{ config.copy.submitBack }}</button>
         <button v-if="step < 5" type="button" class="btn btn-primary" @click="nextStep">{{ config.copy.submitContinue }}</button>
         <button
           v-if="step === 5"
@@ -1463,6 +1483,13 @@ function reset() {
 @media (max-width: 768px) {
   .wizard {
     max-width: 100%;
+  }
+
+  .wizard :deep(.xp-preview-panel) {
+    position: sticky;
+    bottom: 0.75rem;
+    z-index: 5;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
   }
 
   .progress-step:not(.current) .progress-label {
