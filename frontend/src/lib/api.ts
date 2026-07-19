@@ -183,6 +183,7 @@ export type Submission = {
   bookAuthor: string
   pageCount: number
   format: string
+  coverUrl?: string | null
   startedAt: string | null
   finishedAt: string | null
   submissionType: 'add' | 'sabotage'

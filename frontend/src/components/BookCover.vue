@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { apiUrl } from '../lib/apiBase'
 
 const props = defineProps<{
 	title: string
@@ -8,13 +9,22 @@ const props = defineProps<{
 	size?: 'sm' | 'md' | 'lg'
 }>()
 
-const src = ref<string | null>(props.coverUrl ?? null)
+function resolveCoverSrc(url: string | null | undefined): string | null {
+	if (!url?.trim()) return null
+	const trimmed = url.trim()
+	if (/^https?:\/\//i.test(trimmed)) return trimmed
+	// Stored as /covers/files/... or legacy /api/covers/files/...
+	const path = trimmed.replace(/^\/api(?=\/)/, '')
+	return apiUrl(path.startsWith('/') ? path : `/${path}`)
+}
+
+const src = ref<string | null>(resolveCoverSrc(props.coverUrl))
 const failed = ref(false)
 
 watch(
 	() => [props.coverUrl, props.title, props.author] as const,
 	([url]) => {
-		src.value = url ?? null
+		src.value = resolveCoverSrc(url)
 		failed.value = false
 	},
 )

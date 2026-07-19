@@ -5,7 +5,7 @@ import { withActive } from '../db/activeSubmission.js'
 import { getTeamById } from '../services/prompts.js'
 import { computeAchievements } from '../services/achievements.js'
 import { buildPaceSeries, paceSparklinePath } from '../services/pace.js'
-import { lookupBookCover } from '../services/covers.js'
+import { lookupBookCover, lookupBookCoverCandidates } from '../services/covers.js'
 import { getSessionUser } from '../services/auth.js'
 
 export type PublicReaderBook = {
@@ -31,8 +31,12 @@ readerRoutes.get('/lookup-cover', async (c) => {
 	if (title.length < 2) {
 		return c.json({ error: 'Title is required' }, 400)
 	}
-	const result = await lookupBookCover(title, author || undefined)
-	return c.json({ cover: result })
+	const { best, candidates } = await lookupBookCoverCandidates(
+		title,
+		author || undefined,
+		5,
+	)
+	return c.json({ cover: best, candidates })
 })
 
 readerRoutes.get('/:id', async (c) => {
@@ -64,7 +68,7 @@ readerRoutes.get('/:id', async (c) => {
 			startedAt: sub.startedAt ?? null,
 			finishedAt: sub.finishedAt ?? null,
 			createdAt: sub.createdAt?.toISOString?.() ?? String(sub.createdAt),
-			coverUrl: null,
+			coverUrl: (sub as { coverUrl?: string | null }).coverUrl?.trim() || null,
 			status: inProgress ? 'in_progress' : 'finished',
 		}
 	})
@@ -88,7 +92,9 @@ readerRoutes.get('/:id', async (c) => {
 		if (cover?.coverUrl) currentlyReading.coverUrl = cover.coverUrl
 	}
 
-	const toEnrich = books.filter((b) => b.status === 'finished').slice(0, 6)
+	const toEnrich = books
+		.filter((b) => b.status === 'finished' && !b.coverUrl)
+		.slice(0, 6)
 	await Promise.all(
 		toEnrich.map(async (book) => {
 			const cover = await lookupBookCover(book.bookTitle, book.bookAuthor)

@@ -39,6 +39,7 @@ import { profileRoutes } from './routes/profile.js';
 import { questionRoutes } from './routes/questions.js';
 import { submissionRoutes } from './routes/submissions.js';
 import { readerRoutes } from './routes/readers.js';
+import { coverRoutes } from './routes/covers.js';
 import { APP_VERSION } from './lib/version.js';
 import { getSvgFontStatus } from './lib/svgFonts.js';
 import { getSvgTextPathStatus } from './lib/svgTextPaths.js';
@@ -280,6 +281,8 @@ app.use('/api/questions/*', writeLimiter);
 app.route('/api/questions', questionRoutes);
 app.route('/api/profile', profileRoutes);
 app.route('/api/readers', readerRoutes);
+app.use('/api/covers/upload', writeLimiter);
+app.route('/api/covers', coverRoutes);
 app.use('/api/admin/*', adminLimiter);
 app.route('/api/admin', adminRoutes);
 

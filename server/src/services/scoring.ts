@@ -4,12 +4,14 @@ import { type HydratedDocument } from 'mongoose';
 import { type IUser, User } from '../db/models/User.js';
 import { Submission, type ISubmission } from '../db/models/Submission.js';
 import { withActive } from '../db/activeSubmission.js';
+import { isAllowedCoverUrl } from './covers.js';
 
 export type SubmissionInput = {
 	bookTitle: string;
 	bookAuthor: string;
 	pageCount: number;
 	format: string;
+	coverUrl?: string | null;
 	startedAt?: string | null;
 	finishedAt?: string | null;
 	submissionType: 'add' | 'sabotage';
@@ -101,6 +103,10 @@ export async function validateSubmission(
 
 	if (input.pageCount < 1) {
 		return 'Page count must be at least 1.';
+	}
+
+	if (input.coverUrl != null && input.coverUrl !== '' && !isAllowedCoverUrl(input.coverUrl)) {
+		return 'Invalid cover URL.';
 	}
 
 	const maxPrompts =
@@ -304,6 +310,7 @@ export function submissionToPublic(sub: ISubmission & { createdAt?: Date }) {
 		bookAuthor: sub.bookAuthor,
 		pageCount: sub.pageCount,
 		format: sub.format,
+		coverUrl: (sub as { coverUrl?: string | null }).coverUrl ?? null,
 		startedAt: sub.startedAt,
 		finishedAt: sub.finishedAt,
 		submissionType: sub.submissionType,

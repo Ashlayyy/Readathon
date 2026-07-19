@@ -78,6 +78,7 @@ submissionRoutes.post('/', async (c) => {
 		bookAuthor: body.bookAuthor.trim(),
 		pageCount: body.pageCount,
 		format: body.format,
+		coverUrl: body.coverUrl?.trim() || null,
 		startedAt: optionalDate(body.startedAt),
 		finishedAt: optionalDate(body.finishedAt),
 		submissionType: body.submissionType,

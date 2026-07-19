@@ -326,7 +326,7 @@ function closeMenu() {
 
 .site-header {
 	border-bottom: 1px solid var(--realm-border);
-	background: rgba(8, 7, 11, 0.92);
+	background: var(--realm-header-bg, color-mix(in srgb, var(--realm-bg) 92%, transparent));
 	backdrop-filter: blur(8px);
 	position: sticky;
 	top: 0;
@@ -881,7 +881,7 @@ function closeMenu() {
 		margin: 0;
 		border: none;
 		border-left: 1px solid var(--realm-border);
-		background: rgba(12, 10, 18, 0.98);
+		background: var(--realm-panel-bg, color-mix(in srgb, var(--realm-bg) 96%, transparent));
 		backdrop-filter: blur(12px);
 		z-index: 190;
 		overflow-y: auto;
@@ -905,7 +905,7 @@ function closeMenu() {
 		gap: 0.65rem;
 		padding: 1rem 1.25rem calc(1.25rem + var(--safe-bottom));
 		border-left: 1px solid var(--realm-border);
-		background: rgba(12, 10, 18, 0.98);
+		background: var(--realm-panel-bg, color-mix(in srgb, var(--realm-bg) 96%, transparent));
 		z-index: 191;
 	}
 

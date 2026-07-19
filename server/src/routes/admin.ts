@@ -368,6 +368,7 @@ adminRoutes.post('/submissions', async (c) => {
     bookAuthor: body.bookAuthor.trim(),
     pageCount: body.pageCount,
     format: body.format,
+    coverUrl: body.coverUrl?.trim() || null,
     startedAt: optionalDate(body.startedAt),
     finishedAt: optionalDate(body.finishedAt),
     submissionType: body.submissionType,
@@ -415,6 +416,7 @@ adminRoutes.patch('/submissions/:id', async (c) => {
   submission.bookAuthor = body.bookAuthor.trim()
   submission.pageCount = body.pageCount
   submission.format = body.format
+  submission.coverUrl = body.coverUrl?.trim() || null
   submission.startedAt = optionalDate(body.startedAt)
   submission.finishedAt = optionalDate(body.finishedAt)
   submission.submissionType = body.submissionType

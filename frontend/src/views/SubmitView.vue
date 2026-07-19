@@ -49,12 +49,19 @@ const startedAt = ref('')
 const finishedAt = ref('')
 const coverUrl = ref<string | null>(null)
 const coverLooking = ref(false)
-const coverMessage = ref('')
+const coverUploading = ref(false)
+/** When false, idle typing does not trigger Open Library lookup. */
+const autoLookupCover = ref(true)
+const coverLocked = ref(false) // true after manual upload/pick — don't overwrite on auto
+const coverCandidates = ref<{ coverUrl: string | null; title?: string; author?: string }[]>([])
+const coverFileInput = ref<HTMLInputElement | null>(null)
+let duplicateCheckTimer: ReturnType<typeof setTimeout> | null = null
+let coverLookupTimer: ReturnType<typeof setTimeout> | null = null
+let coverLookupSeq = 0
 
 const audiobookHours = ref<number | null>(null)
 const audiobookMinutes = ref<number | null>(null)
 const duplicateWarning = ref(false)
-let duplicateCheckTimer: ReturnType<typeof setTimeout> | null = null
 
 const submissionType = ref<'add' | 'sabotage' | null>(null)
 const targetTeamId = ref('')
@@ -283,39 +290,120 @@ async function checkDuplicate(title: string, author: string) {
 
 async function lookupCover() {
   const title = bookTitle.value.trim()
+  const author = bookAuthor.value.trim()
   if (title.length < 2) {
-    coverMessage.value = 'Enter a title first.'
+    coverCandidates.value = []
+    if (!coverLocked.value) coverUrl.value = null
+    coverLooking.value = false
     return
   }
+
+  const seq = ++coverLookupSeq
   coverLooking.value = true
-  coverMessage.value = ''
+
   try {
     const params = new URLSearchParams({ title })
-    const author = bookAuthor.value.trim()
     if (author) params.set('author', author)
-    const data = await api<{ cover: { coverUrl: string | null } | null }>(
-      `/readers/lookup-cover?${params}`,
-    )
-    coverUrl.value = data.cover?.coverUrl ?? null
-    coverMessage.value = coverUrl.value
-      ? 'Cover found via Open Library.'
-      : 'No cover found — you can still submit.'
-  } catch (e) {
-    coverMessage.value = e instanceof Error ? e.message : 'Cover lookup failed'
-    coverUrl.value = null
+    const data = await api<{
+      cover: { coverUrl: string | null; title?: string } | null
+      candidates?: { coverUrl: string | null; title?: string; author?: string }[]
+    }>(`/covers/lookup?${params}`)
+    if (seq !== coverLookupSeq) return
+
+    coverCandidates.value = (data.candidates ?? []).filter((c) => c.coverUrl)
+    if (!coverLocked.value) {
+      coverUrl.value = data.cover?.coverUrl ?? coverCandidates.value[0]?.coverUrl ?? null
+    }
+  } catch {
+    if (seq !== coverLookupSeq) return
+    if (!coverLocked.value) coverUrl.value = null
+    coverCandidates.value = []
   } finally {
-    coverLooking.value = false
+    if (seq === coverLookupSeq) coverLooking.value = false
   }
+}
+
+function clearCover() {
+  coverUrl.value = null
+  coverCandidates.value = []
+  coverLocked.value = false
+  ++coverLookupSeq
+  coverLooking.value = false
+}
+
+function pickCandidate(url: string | null) {
+  if (!url) return
+  coverUrl.value = url
+  coverLocked.value = true
+}
+
+function openCoverPicker() {
+  coverFileInput.value?.click()
+}
+
+async function onCoverFileChange(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  if (!/^image\/(jpeg|jpg|png|webp)$/i.test(file.type)) {
+    error.value = 'Cover must be a JPEG, PNG, or WebP image.'
+    return
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    error.value = 'Cover must be 2 MB or smaller.'
+    return
+  }
+
+  coverUploading.value = true
+  error.value = ''
+  try {
+    const dataUrl = await readFileAsDataUrl(file)
+    const data = await api<{ coverUrl: string }>('/covers/upload', {
+      method: 'POST',
+      body: JSON.stringify({ dataUrl }),
+    })
+    coverUrl.value = data.coverUrl
+    coverLocked.value = true
+    coverCandidates.value = []
+    autoLookupCover.value = false
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Cover upload failed'
+  } finally {
+    coverUploading.value = false
+  }
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('Could not read image'))
+    reader.readAsDataURL(file)
+  })
 }
 
 watch([bookTitle, bookAuthor], () => {
   duplicateWarning.value = false
-  coverUrl.value = null
-  coverMessage.value = ''
   if (duplicateCheckTimer) clearTimeout(duplicateCheckTimer)
+  if (coverLookupTimer) clearTimeout(coverLookupTimer)
 
   const title = bookTitle.value.trim()
   const author = bookAuthor.value.trim()
+
+  if (title.length < 2) {
+    if (!coverLocked.value) {
+      coverUrl.value = null
+      coverCandidates.value = []
+    }
+    coverLooking.value = false
+  } else if (autoLookupCover.value && !coverLocked.value) {
+    coverLookupTimer = setTimeout(() => {
+      void lookupCover()
+    }, 5000)
+  }
+
   if (title.length < 2 || author.length < 2) return
 
   duplicateCheckTimer = setTimeout(() => {
@@ -323,8 +411,18 @@ watch([bookTitle, bookAuthor], () => {
   }, 500)
 })
 
+watch(autoLookupCover, (on) => {
+  if (coverLookupTimer) clearTimeout(coverLookupTimer)
+  if (on && !coverLocked.value && bookTitle.value.trim().length >= 2) {
+    coverLookupTimer = setTimeout(() => {
+      void lookupCover()
+    }, 800)
+  }
+})
+
 onBeforeUnmount(() => {
   if (duplicateCheckTimer) clearTimeout(duplicateCheckTimer)
+  if (coverLookupTimer) clearTimeout(coverLookupTimer)
 })
 
 async function submit() {
@@ -338,6 +436,7 @@ async function submit() {
         bookAuthor: bookAuthor.value,
         pageCount: pageCount.value,
         format: format.value,
+        coverUrl: coverUrl.value || null,
         startedAt: startedAt.value || null,
         finishedAt: finishedAt.value || null,
         submissionType: submissionType.value,
@@ -426,6 +525,13 @@ function reset() {
   format.value = 'physical'
   startedAt.value = ''
   finishedAt.value = ''
+  coverUrl.value = null
+  coverLooking.value = false
+  coverUploading.value = false
+  coverLocked.value = false
+  coverCandidates.value = []
+  autoLookupCover.value = true
+  if (coverLookupTimer) clearTimeout(coverLookupTimer)
   audiobookHours.value = null
   audiobookMinutes.value = null
   duplicateWarning.value = false
@@ -447,6 +553,7 @@ function reset() {
       </strong>
     </p>
 
+    <div class="submit-layout" :class="{ 'with-cover-rail': step === 1 }">
     <div class="wizard card">
       <div class="progress" aria-label="Submission progress">
         <div
@@ -476,25 +583,6 @@ function reset() {
             {{ config.copy.submitAuthorLabel }}
             <input v-model="bookAuthor" required :placeholder="String(config.copy.submitAuthorPlaceholder)" />
           </label>
-          <div class="cover-lookup-row">
-            <BookCover
-              :title="bookTitle || 'Book'"
-              :author="bookAuthor"
-              :cover-url="coverUrl"
-              size="md"
-            />
-            <div>
-              <button
-                type="button"
-                class="btn btn-secondary btn-sm"
-                :disabled="coverLooking || bookTitle.trim().length < 2"
-                @click="lookupCover"
-              >
-                {{ coverLooking ? 'Looking up…' : (config.copy.submitFindCover ?? 'Find cover') }}
-              </button>
-              <p v-if="coverMessage" class="field-hint">{{ coverMessage }}</p>
-            </div>
-          </div>
           <label class="field">
             {{ config.copy.submitPageCountLabel }}
             <input v-model.number="pageCount" type="number" min="1" />
@@ -937,12 +1025,221 @@ function reset() {
         </button>
       </div>
     </div>
+
+    <aside v-show="step === 1" class="cover-rail" aria-live="polite" :aria-busy="coverLooking || coverUploading">
+      <div class="cover-rail-frame" :class="{ loading: (coverLooking || coverUploading) && !coverUrl }">
+        <BookCover
+          :title="bookTitle || 'Book'"
+          :author="bookAuthor"
+          :cover-url="coverUrl"
+          size="lg"
+        />
+      </div>
+
+      <div v-if="coverCandidates.length > 1" class="cover-candidates" role="list">
+        <button
+          v-for="(c, i) in coverCandidates"
+          :key="`${c.coverUrl}-${i}`"
+          type="button"
+          class="cover-candidate"
+          :class="{ selected: c.coverUrl === coverUrl }"
+          role="listitem"
+          :title="c.title || 'Cover option'"
+          @click="pickCandidate(c.coverUrl)"
+        >
+          <img v-if="c.coverUrl" :src="c.coverUrl" alt="" />
+        </button>
+      </div>
+
+      <label class="cover-auto">
+        <input v-model="autoLookupCover" type="checkbox" />
+        Look up cover online
+      </label>
+
+      <div class="cover-actions">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          :disabled="coverLooking || bookTitle.trim().length < 2"
+          @click="lookupCover()"
+        >
+          {{ coverLooking ? 'Searching…' : 'Find cover' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          :disabled="coverUploading"
+          @click="openCoverPicker"
+        >
+          {{ coverUploading ? 'Uploading…' : 'Upload' }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          :disabled="!coverUrl"
+          @click="clearCover"
+        >
+          Remove
+        </button>
+      </div>
+      <input
+        ref="coverFileInput"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        class="sr-only"
+        @change="onCoverFileChange"
+      />
+    </aside>
+    </div>
   </main>
 </template>
 
 <style scoped>
+.submit-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: stretch;
+}
+
 .wizard {
   max-width: 52rem;
+  width: 100%;
+}
+
+.cover-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.65rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: center;
+}
+
+.cover-rail-frame {
+  position: relative;
+  border-radius: 6px;
+}
+
+.cover-rail-frame.loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--realm-surface) 55%, transparent);
+  animation: cover-pulse 1s ease-in-out infinite;
+}
+
+@keyframes cover-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.cover-auto {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--realm-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.cover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.cover-candidates {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  max-width: 10rem;
+}
+
+.cover-candidate {
+  width: 2.25rem;
+  height: 3.35rem;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--realm-surface);
+  cursor: pointer;
+}
+
+.cover-candidate.selected {
+  border-color: var(--realm-accent);
+}
+
+.cover-candidate img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Mobile: cover sits above the form card */
+@media (max-width: 899px) {
+  .submit-layout.with-cover-rail {
+    flex-direction: column;
+  }
+
+  .cover-rail {
+    order: -1;
+    align-items: flex-start;
+  }
+
+  .cover-candidates {
+    max-width: none;
+  }
+}
+
+/* Desktop: cover floats outside the card on the right */
+@media (min-width: 900px) {
+  .submit-layout.with-cover-rail {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 1.5rem;
+    max-width: calc(52rem + 10rem + 1.5rem);
+  }
+
+  .wizard {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cover-rail {
+    position: sticky;
+    top: calc(5rem + var(--safe-top));
+    width: 10rem;
+    flex-shrink: 0;
+    order: 2;
+    padding-top: 3.25rem;
+  }
 }
 
 /* Progress */
@@ -1048,13 +1345,6 @@ function reset() {
 .form-grid {
   display: grid;
   gap: 1rem;
-}
-
-.cover-lookup-row {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  grid-column: 1 / -1;
 }
 
 @media (min-width: 600px) {

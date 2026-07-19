@@ -34,6 +34,9 @@ out/
 .env.local
 .env.*.local
 
+# Uploaded book covers
+server/data/uploads/
+
 # npm cache directory
 .npm
 *.tgz

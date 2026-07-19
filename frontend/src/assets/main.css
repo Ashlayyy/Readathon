@@ -26,6 +26,8 @@
 	--radius: 10px;
 	--shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 	--realm-overlay: rgba(0, 0, 0, 0.65);
+	--realm-header-bg: color-mix(in srgb, var(--realm-bg) 92%, transparent);
+	--realm-panel-bg: color-mix(in srgb, var(--realm-bg) 96%, transparent);
 	--page-max: 1440px;
 	--page-gutter: clamp(1.25rem, 4vw, 2.5rem);
 	--safe-top: env(safe-area-inset-top, 0px);

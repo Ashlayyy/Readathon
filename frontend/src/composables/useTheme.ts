@@ -159,6 +159,18 @@ function applyColors(colors: ThemeColors, forMode: ThemeMode) {
     '--realm-overlay',
     isLight ? 'rgba(43, 38, 32, 0.35)' : 'rgba(0, 0, 0, 0.65)',
   )
+  root.style.setProperty(
+    '--realm-header-bg',
+    isLight
+      ? 'color-mix(in srgb, var(--realm-surface) 92%, transparent)'
+      : 'color-mix(in srgb, var(--realm-bg) 92%, transparent)',
+  )
+  root.style.setProperty(
+    '--realm-panel-bg',
+    isLight
+      ? 'color-mix(in srgb, var(--realm-surface) 96%, transparent)'
+      : 'color-mix(in srgb, var(--realm-bg) 96%, transparent)',
+  )
 
   root.style.colorScheme = isLight ? 'light' : 'dark'
   root.dataset.theme = forMode === 'custom' ? (isLight ? 'light' : 'dark') : forMode
