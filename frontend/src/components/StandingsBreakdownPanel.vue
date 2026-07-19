@@ -35,7 +35,7 @@ const teams = computed(() =>
 		<header v-if="!breakdownSvg">
 			<h2>{{ title ?? 'Score breakdown' }}</h2>
 			<p class="lead">
-				Who gained XP and who dealt sabotage damage for each realm. Members are
+				Who gained points and who dealt sabotage damage for each realm. Members are
 				ranked by total activity (gained + dealt).
 			</p>
 		</header>
@@ -89,7 +89,7 @@ const teams = computed(() =>
 							{{ atk.displayName }} ({{ atk.attackerTeamName }}) → −{{
 								atk.damage
 							}}
-							XP
+							points
 						</li>
 					</ul>
 				</div>

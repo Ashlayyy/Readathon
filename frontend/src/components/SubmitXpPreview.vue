@@ -76,7 +76,7 @@ function formatSigned(value: number): string {
 		:class="{ compact }"
 	>
 		<header class="xp-preview-header">
-			<span class="xp-preview-kicker">XP preview</span>
+			<span class="xp-preview-kicker">Points preview</span>
 			<h3 class="xp-preview-title">
 				<template v-if="!submissionType">Page bonus only</template>
 				<template v-else-if="submissionType === 'add'"
@@ -90,29 +90,29 @@ function formatSigned(value: number): string {
 			<li v-for="(line, i) in lines" :key="i" class="xp-line">
 				<span class="xp-line-label">{{ line.label }}</span>
 				<span class="xp-line-value" :class="line.tone"
-					>{{ formatSigned(line.value) }} XP</span
-				>
+					>{{ formatSigned(line.value) }} points</span
+					>
 			</li>
 		</ul>
 
 		<div v-if="submissionType" class="xp-totals">
 			<div v-if="submissionType === 'add'" class="xp-total-card gain">
 				<span class="xp-total-label">{{ userTeam?.name ?? 'Your realm' }}</span>
-				<strong class="xp-total-value">+{{ yourTeamGain }} XP</strong>
+				<strong class="xp-total-value">+{{ yourTeamGain }} points</strong>
 				<span class="xp-total-sub">Total gain for your team</span>
 			</div>
 
 			<template v-else>
 				<div v-if="targetTeam" class="xp-total-card attack">
 					<span class="xp-total-label">{{ targetTeam.name }}</span>
-					<strong class="xp-total-value">−{{ targetDamage }} XP</strong>
+					<strong class="xp-total-value">−{{ targetDamage }} points</strong>
 					<span class="xp-total-sub">Damage dealt to rival</span>
 				</div>
 				<div v-if="pageBonus > 0" class="xp-total-card gain secondary">
 					<span class="xp-total-label">{{
 						userTeam?.name ?? 'Your realm'
 					}}</span>
-					<strong class="xp-total-value">+{{ pageBonus }} XP</strong>
+					<strong class="xp-total-value">+{{ pageBonus }} points</strong>
 					<span class="xp-total-sub">Page bonus still goes to you</span>
 				</div>
 			</template>
@@ -121,7 +121,7 @@ function formatSigned(value: number): string {
 		<div v-else-if="pageBonus > 0" class="xp-totals">
 			<div class="xp-total-card gain">
 				<span class="xp-total-label">{{ userTeam?.name ?? 'Your realm' }}</span>
-				<strong class="xp-total-value">+{{ pageBonus }} XP</strong>
+				<strong class="xp-total-value">+{{ pageBonus }} points</strong>
 				<span class="xp-total-sub"
 					>From page count - stacks with prompts later</span
 				>

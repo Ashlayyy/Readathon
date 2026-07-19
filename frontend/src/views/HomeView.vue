@@ -28,7 +28,7 @@ const submitBannerTitle = computed(
 const submitBannerBody = computed(
   () =>
     (config.value?.copy.homeSubmitBanner as { body?: string } | undefined)?.body ??
-    'Log it here to add XP for your realm or sabotage a rival.',
+    'Log it here to add points for your realm or sabotage a rival.',
 )
 
 const submitQuickTitle = computed(

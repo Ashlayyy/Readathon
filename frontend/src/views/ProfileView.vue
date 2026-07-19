@@ -152,7 +152,7 @@ async function saveSettings() {
         </div>
         <div class="stat-card card">
           <span class="stat-value">{{ totalImpact > 0 ? '+' : '' }}{{ totalImpact }}</span>
-          <span class="stat-label">Total XP impact</span>
+          <span class="stat-label">Total points impact</span>
         </div>
       </div>
 
@@ -171,7 +171,7 @@ async function saveSettings() {
               <p class="author">by {{ sub.bookAuthor }} · {{ sub.pageCount }} pages · {{ sub.format }}</p>
             </div>
             <span class="badge" :class="sub.submissionType === 'add' ? 'badge-positive' : 'badge-negative'">
-              {{ sub.submissionType === 'add' ? 'Add XP' : 'Sabotage' }}
+              {{ sub.submissionType === 'add' ? 'Add points' : 'Sabotage' }}
             </span>
           </div>
           <div class="scores">

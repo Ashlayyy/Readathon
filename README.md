@@ -1,6 +1,6 @@
 # Readathon 2026 - The Crucible
 
-A team-based reading competition for the Book Baddies community. Readers join realms, submit finished books, stack prompts and bonuses for XP, sabotage rival teams, and climb weekly standings.
+A team-based reading competition for the Book Baddies community. Readers join realms, submit finished books, stack prompts and bonuses for points, sabotage rival teams, and climb weekly standings.
 
 Built with **Vue 3 + Vite** (frontend), **Hono + MongoDB** (API), and a single config file that drives almost all site copy, teams, prompts, FAQ, branding, and admin UI text.
 
@@ -10,7 +10,7 @@ Built with **Vue 3 + Vite** (frontend), **Hono + MongoDB** (API), and a single c
 
 - **Sign up & magic-link login** (email via Resend, optional Google OAuth)
 - **Team assignment** - admins sort readers into realms (Sun & Moon)
-- **Book submission wizard** - prompts, bonuses, add XP or sabotage
+- **Book submission wizard** - prompts, bonuses, add points or sabotage
 - **Standings** - weekly publish with SVG leaderboard, optional Discord webhook
 - **FAQ inbox** - readers ask questions; admins reply by email
 - **Admin panel** - users, teams, submissions, prompts, standings, rosters
@@ -83,8 +83,8 @@ This file is the **single source of truth** for static event content. The server
 | `branding.theme`   | CSS theme colors applied at runtime                                    |
 | `teams`            | Realm definitions, colors, bonus prompts                               |
 | `prompts`          | Global positive/negative prompts (fallback if DB empty)                |
-| `globalBonuses`    | Competition/trials bonus (+10 XP)                                      |
-| `pageCountBonuses` | Page-count XP tiers                                                    |
+| `globalBonuses`    | Competition/trials bonus (+10 points)                                  |
+| `pageCountBonuses` | Page-count point tiers                                                 |
 | `howItWorks`       | Step-by-step guide                                                     |
 | `faq`              | Questions and answers                                                  |
 | `scoringRules`     | Game rules (max prompts, averaging, etc.)                              |

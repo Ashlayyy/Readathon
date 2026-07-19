@@ -25,11 +25,11 @@ function standingsDetailLine(
 	const leader = standings[0]!;
 	if (index === 0) {
 		const gap = leader.totalTeamXp - standings[1]!.totalTeamXp;
-		return `${members} · ${gap} XP ahead · ${activity}`;
+		return `${members} · ${gap} points ahead · ${activity}`;
 	}
 
 	const gap = leader.totalTeamXp - team.totalTeamXp;
-	return `${members} · ${gap} XP behind leader · ${activity}`;
+	return `${members} · ${gap} points behind leader · ${activity}`;
 }
 
 function leaderSubtitle(standings: TeamStanding[]): string {
@@ -37,12 +37,12 @@ function leaderSubtitle(standings: TeamStanding[]): string {
 		(getStaticConfig().scoringRules as { startingTeamXp?: number })
 			.startingTeamXp ?? 100;
 	if (standings.length < 2) {
-		return `Ranked by total team XP (${starting} starting pool per realm)`;
+		return `Ranked by total team points (${starting} starting pool per realm)`;
 	}
 	const leader = standings[0]!;
 	const runnerUp = standings[1]!;
 	const xpGap = leader.totalTeamXp - runnerUp.totalTeamXp;
-	return `${escapeXml(leader.teamName)} leads by ${xpGap} team XP (+${leader.xpGained} gain, +${leader.xpDealt} attack)`;
+	return `${escapeXml(leader.teamName)} leads by ${xpGap} team points (+${leader.xpGained} gain, +${leader.xpDealt} attack)`;
 }
 
 export function generateStandingsSvg(
@@ -74,7 +74,7 @@ export function generateStandingsSvg(
       <text x="110" y="${y + 28}" fill="#f0ebe3" font-size="18" font-weight="bold" font-family="${SVG_FONT_SANS}">${rankLabel}</text>
       <text x="110" y="${y + 48}" fill="#a89f94" font-size="13" font-family="${SVG_FONT_SANS}">${detailLine}</text>
       <text x="680" y="${y + 38}" fill="${team.color}" font-size="22" font-weight="bold" text-anchor="end" font-family="${SVG_FONT_SANS}">${team.totalTeamXp}</text>
-      <text x="680" y="${y + 52}" fill="#a89f94" font-size="11" text-anchor="end" font-family="${SVG_FONT_SANS}">team XP</text>
+      <text x="680" y="${y + 52}" fill="#a89f94" font-size="11" text-anchor="end" font-family="${SVG_FONT_SANS}">team points</text>
     </g>`;
 		})
 		.join('');

@@ -22,11 +22,11 @@ function standingsDetailLine(team: TeamStanding, index: number, standings: TeamS
   const leader = standings[0]!
   if (index === 0) {
     const gap = leader.totalTeamXp - standings[1]!.totalTeamXp
-    return `${members} · ${gap} XP ahead · ${activity}`
+    return `${members} · ${gap} points ahead · ${activity}`
   }
 
   const gap = leader.totalTeamXp - team.totalTeamXp
-  return `${members} · ${gap} XP behind leader · ${activity}`
+  return `${members} · ${gap} points behind leader · ${activity}`
 }
 </script>
 
@@ -61,7 +61,7 @@ function standingsDetailLine(team: TeamStanding, index: number, standings: TeamS
         </div>
         <div class="score">
           <strong>{{ team.totalTeamXp ?? 100 }}</strong>
-          <small>team XP</small>
+          <small>team points</small>
         </div>
       </li>
     </ol>

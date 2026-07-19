@@ -478,7 +478,7 @@ function reset() {
           <span class="counter-pill">
             {{ selectedPromptIds.length }} / {{ maxPrompts }}
             <template v-if="estimatedPromptPoints !== 0">
-              · {{ formatSignedXp(estimatedPromptPoints) }} XP
+              · {{ formatSignedXp(estimatedPromptPoints) }} points
             </template>
           </span>
         </div>
@@ -557,7 +557,10 @@ function reset() {
             <span class="pick-check" aria-hidden="true">{{ isGlobalBonusSelected(gb.id) ? '✓' : '' }}</span>
             <span class="pick-content">
               <span class="pick-top">
-                <span class="xp-pill gain">{{ globalBonusLabel(gb) }} XP</span>
+                <span
+                  class="xp-pill"
+                  :class="submissionSign < 0 ? 'attack' : 'gain'"
+                >{{ globalBonusLabel(gb) }} points</span>
                 <strong>{{ gb.label }}</strong>
               </span>
               <span class="pick-sub">{{ gb.description }}</span>
@@ -578,7 +581,10 @@ function reset() {
               <span class="pick-check" aria-hidden="true">{{ isTeamBonusSelected(tp.id) ? '✓' : '' }}</span>
               <span class="pick-content">
                 <span class="pick-top">
-                  <span class="xp-pill gain">{{ bonusPointsLabel(tp.points) }} XP</span>
+                  <span
+                    class="xp-pill"
+                    :class="submissionSign < 0 ? 'attack' : 'gain'"
+                  >{{ bonusPointsLabel(tp.points) }} points</span>
                   <strong>{{ tp.label }}</strong>
                 </span>
                 <span class="pick-sub">{{ config.copy.submitTeamBonusSub }}</span>
@@ -637,7 +643,7 @@ function reset() {
                 <li v-for="p in selectedPromptDetails" :key="p.id">
                   <span>{{ p.label }}</span>
                   <span class="review-xp" :class="p.points > 0 ? 'gain' : 'attack'">
-                    {{ formatSignedXp(p.points) }} XP
+                    {{ formatSignedXp(p.points) }} points
                   </span>
                 </li>
               </ul>
@@ -649,7 +655,7 @@ function reset() {
                 <li v-for="(b, i) in selectedBonusDetails" :key="i">
                   <span>{{ b.label }}</span>
                   <span class="review-xp" :class="b.points > 0 ? 'gain' : 'attack'">
-                    {{ formatSignedXp(b.points) }} XP
+                    {{ formatSignedXp(b.points) }} points
                   </span>
                 </li>
               </ul>
@@ -660,7 +666,7 @@ function reset() {
               <ul class="review-breakdown-list">
                 <li>
                   <span>{{ pageCount }} pages</span>
-                  <span class="review-xp gain">+{{ pageBonus }} XP</span>
+                  <span class="review-xp gain">+{{ pageBonus }} points</span>
                 </li>
               </ul>
             </div>
@@ -1272,6 +1278,12 @@ function reset() {
   color: var(--realm-success);
   border-color: rgba(110, 207, 138, 0.35);
   background: rgba(110, 207, 138, 0.12);
+}
+
+.xp-pill.attack {
+  color: var(--realm-accent-glow);
+  border-color: rgba(212, 99, 74, 0.4);
+  background: rgba(212, 99, 74, 0.12);
 }
 
 .pick-content {

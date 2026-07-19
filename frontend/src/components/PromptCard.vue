@@ -30,7 +30,7 @@ const cardStyle = computed(() => {
   }
 })
 
-const pointLabel = computed(() => xpTier.value?.label ?? 'XP')
+const pointLabel = computed(() => xpTier.value?.label ?? 'points')
 </script>
 
 <template>
@@ -42,7 +42,7 @@ const pointLabel = computed(() => xpTier.value?.label ?? 'XP')
     <div class="prompt-accent" aria-hidden="true" />
 
     <div class="prompt-top">
-      <div class="point-badge" :title="`${isPositive ? '+' : ''}${prompt.points} XP`">
+      <div class="point-badge" :title="`${isPositive ? '+' : ''}${prompt.points} points`">
         <span class="point-label">{{ pointLabel }}</span>
         <span class="point-value">{{ isPositive ? '+' : '' }}{{ prompt.points }}</span>
       </div>

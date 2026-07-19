@@ -8,7 +8,7 @@
 		"characterCreationNote": "Ready? Sign up and wait for your realm assignment.",
 		"lore": [
 			"Welcome to the Readathon 2026. All the realms have been destroyed - you are being forced into The Crucible, a deadly competition where it's your character class against every other character class.",
-			"The strongest will put their books (and lives) on the line to gain XP, leveling themselves and their team up while sabotaging the XP of other teams."
+			"The strongest will put their books (and lives) on the line to gain points, leveling themselves and their team up while sabotaging the points of other teams."
 		]
 	},
 	"copy": {
@@ -46,10 +46,10 @@
 		},
 		"faqLoginToAsk": "Log in to ask",
 		"teamsPageTitle": "The Realms",
-		"teamsPageLead": "Once accepted, you'll be randomly sorted into one of {teamCount} realms. Each has optional bonus prompts worth ±10 XP.",
+		"teamsPageLead": "Once accepted, you'll be randomly sorted into one of {teamCount} realms. Each has optional bonus prompts worth ±10 points.",
 		"howItWorksLead": "A team-based reading competition across {teamCount} realms. Here's how to survive it.",
-		"promptsLead": "{positiveCount} ways to add XP. {negativeCount} ways to sabotage. Pick up to {maxPrompts} per book.",
-		"promptsAddTab": "Add XP (+)",
+		"promptsLead": "{positiveCount} ways to add points. {negativeCount} ways to sabotage. Pick up to {maxPrompts} per book.",
+		"promptsAddTab": "Add points (+)",
 		"promptsSabotageTab": "Sabotage (-)",
 		"promptsSearchPlaceholder": "Search prompts…",
 		"faqPageLead": "Common questions about the readathon.",
@@ -90,12 +90,12 @@
 		"submitFinishedLabel": "Finished",
 		"submitOptional": "(optional)",
 		"submitPageBonusPreview": "Page bonus for your team:",
-		"submitTypeTitle": "Add XP or sabotage?",
+		"submitTypeTitle": "Add points or sabotage?",
 		"submitTypeHint": "Positive prompts help your team. Negative prompts attack another realm.",
 		"submitStrategyLabel": "Strategy tip",
-		"submitStrategyUseAdd": "Use Add XP",
+		"submitStrategyUseAdd": "Use Add points",
 		"submitStrategyUseAttack": "Attack {team}",
-		"submitAddXp": "Add XP",
+		"submitAddXp": "Add points",
 		"submitAddXpHint": "Help your team",
 		"submitSabotage": "Sabotage",
 		"submitSabotageHint": "Attack another realm",
@@ -113,7 +113,7 @@
 		"submitReviewBook": "Book",
 		"submitReviewDetails": "Details",
 		"submitReviewType": "Type",
-		"submitReviewAdding": "Adding XP to your team",
+		"submitReviewAdding": "Adding points to your team",
 		"submitReviewSabotaging": "Sabotaging",
 		"submitReviewAnotherTeam": "another team",
 		"submitReviewPrompts": "Prompts",
@@ -207,7 +207,7 @@
 				"unpublish": "Unpublish",
 				"liveTitle": "Live Standings",
 				"breakdownTitle": "Score breakdown",
-				"breakdownLead": "Who gained XP and who dealt sabotage for each realm.",
+				"breakdownLead": "Who gained points and who dealt sabotage for each realm.",
 				"loading": "Loading standings…",
 				"discordTitle": "Discord notifications",
 				"discordLead": "When standings are published, PNGs of the leaderboard and score breakdown are posted to this webhook with the week number. Leave blank to disable. Create a webhook in your Discord channel settings.",
@@ -271,7 +271,7 @@
 				"pagesLabel": "Pages",
 				"formatLabel": "Format",
 				"typeLabel": "Type",
-				"typeAdd": "Add XP",
+				"typeAdd": "Add points",
 				"typeSabotage": "Sabotage",
 				"targetTeamLabel": "Target team",
 				"startedLabel": "Started (optional)",
@@ -309,7 +309,7 @@
 				"filterScheduled": "Scheduled",
 				"filterDraft": "Draft",
 				"loading": "Loading prompts…",
-				"groupPositive": "Add XP (+)",
+				"groupPositive": "Add points (+)",
 				"groupNegative": "Sabotage (-)",
 				"groupTeamBonus": "Team bonuses",
 				"emptyFilter": "None in this filter.",
@@ -323,7 +323,7 @@
 				"editTitle": "Edit prompt",
 				"idLabel": "ID (slug)",
 				"kindLabel": "Kind",
-				"kindPositive": "Add XP (+)",
+				"kindPositive": "Add points (+)",
 				"kindNegative": "Sabotage (-)",
 				"kindTeamBonus": "Team bonus",
 				"teamLabel": "Team",
@@ -405,12 +405,12 @@
 			"Up to {maxPrompts} prompts per book - all positive OR all negative",
 			"Bonus prompts layer on top (team prompts, page count, competition/trials)",
 			"Page-count bonus always goes to your team",
-			"One book = add XP or sabotage - never both",
-			"Standings rank by total team XP (each realm starts with 100 team XP)"
+			"One book = add points or sabotage - never both",
+			"Standings rank by total team points (each realm starts with 100 team points)"
 		],
 		"homeSubmitBanner": {
 			"title": "Finished a book?",
-			"body": "Log it here to add XP for your realm or sabotage a rival."
+			"body": "Log it here to add points for your realm or sabotage a rival."
 		},
 		"homeQuickLinks": {
 			"submitTitle": "Submit a book",
@@ -418,7 +418,7 @@
 			"teamsTitle": "{teamsLabel}",
 			"teamsDescription": "Meet the realms and their bonus prompts.",
 			"promptsTitle": "{promptsLabel}",
-			"promptsDescription": "Add XP or sabotage rival teams.",
+			"promptsDescription": "Add points or sabotage rival teams.",
 			"faqTitle": "FAQ",
 			"faqDescription": "Everything you need to know."
 		},
@@ -585,7 +585,7 @@
 			},
 			{
 				"id": "farm-xp",
-				"gameName": "Farm XP",
+				"gameName": "Farm Points",
 				"label": "Randomize your TBR with a die",
 				"description": "Randomize which book you pick - titles to numbers, shelves to numbers, etc.",
 				"points": 3,
@@ -764,7 +764,7 @@
 		{
 			"step": 3,
 			"title": "Add or sabotage",
-			"body": "Help your team's XP or attack another realm. One book can only do one, not both."
+			"body": "Help your team's points or attack another realm. One book can only do one, not both."
 		},
 		{
 			"step": 4,

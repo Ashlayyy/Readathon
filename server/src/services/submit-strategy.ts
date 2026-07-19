@@ -50,7 +50,8 @@ export function buildSubmitStrategy(
 			suggestion: null,
 			targetTeamId: null,
 			targetTeamName: null,
-			reason: 'Pick add XP to help your realm, or sabotage to slow a rival.',
+			reason:
+				'Pick add points to help your realm, or sabotage to slow a rival.',
 		};
 	}
 
@@ -71,7 +72,7 @@ export function buildSubmitStrategy(
 					suggestion: 'sabotage',
 					targetTeamId: closestRival.teamId,
 					targetTeamName: closestRival.teamName,
-					reason: `${closestRival.teamName} is only ${xpGap} team XP behind. Sabotage protects your lead.`,
+					reason: `${closestRival.teamName} is only ${xpGap} team points behind. Sabotage protects your lead.`,
 				};
 			}
 			return {
@@ -82,7 +83,7 @@ export function buildSubmitStrategy(
 				suggestion: 'add',
 				targetTeamId: null,
 				targetTeamName: null,
-				reason: `You're in the lead by ${xpGap} team XP over ${closestRival.teamName}. Adding XP widens the gap.`,
+				reason: `You're in the lead by ${xpGap} team points over ${closestRival.teamName}. Adding points widens the gap.`,
 			};
 		}
 
@@ -94,7 +95,7 @@ export function buildSubmitStrategy(
 			suggestion: 'add',
 			targetTeamId: null,
 			targetTeamName: null,
-			reason: "You're in the lead - keep adding XP to stay ahead.",
+			reason: "You're in the lead - keep adding points to stay ahead.",
 		};
 	}
 
@@ -111,7 +112,7 @@ export function buildSubmitStrategy(
 			suggestion: 'add',
 			targetTeamId: null,
 			targetTeamName: null,
-			reason: `You're #${rank}, only ${gapToLeader} team XP behind ${leader.teamName}. Adding XP is the fastest way to catch up.`,
+			reason: `You're #${rank}, only ${gapToLeader} team points behind ${leader.teamName}. Adding points is the fastest way to catch up.`,
 		};
 	}
 
@@ -129,7 +130,7 @@ export function buildSubmitStrategy(
 			suggestion: 'add',
 			targetTeamId: null,
 			targetTeamName: null,
-			reason: `You're #${rank} - ${gapToTeamAbove} team XP behind ${teamAbove.teamName} and ${gapToLeader} behind ${leader.teamName}. Adding XP helps you climb.`,
+			reason: `You're #${rank} - ${gapToTeamAbove} team points behind ${teamAbove.teamName} and ${gapToLeader} behind ${leader.teamName}. Adding points helps you climb.`,
 		};
 	}
 
@@ -142,7 +143,7 @@ export function buildSubmitStrategy(
 			suggestion: 'add',
 			targetTeamId: null,
 			targetTeamName: null,
-			reason: `You're #2, ${gapToLeader} team XP behind ${leader.teamName}. Adding XP helps ${my.teamName} take the lead.`,
+			reason: `You're #2, ${gapToLeader} team points behind ${leader.teamName}. Adding points helps ${my.teamName} take the lead.`,
 		};
 	}
 
@@ -154,6 +155,6 @@ export function buildSubmitStrategy(
 		suggestion: 'add',
 		targetTeamId: null,
 		targetTeamName: null,
-		reason: `You're #${rank}, ${gapToLeader} team XP behind ${leader.teamName}. Adding XP helps ${my.teamName} climb - sabotage slows a specific rival.`,
+		reason: `You're #${rank}, ${gapToLeader} team points behind ${leader.teamName}. Adding points helps ${my.teamName} climb - sabotage slows a specific rival.`,
 	};
 }

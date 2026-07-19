@@ -25,7 +25,7 @@ function team(
 }
 
 describe('buildSubmitStrategy', () => {
-  it('suggests sabotage when leading but closest rival is close in team XP', () => {
+  it('suggests sabotage when leading but closest rival is close in team points', () => {
     const standings = [team('sun', 'Sun', 810), team('moon', 'Moon', 780), team('star', 'Star', 650)]
     const result = buildSubmitStrategy(standings, 'sun')
     assert.equal(result.suggestion, 'sabotage')
@@ -37,10 +37,10 @@ describe('buildSubmitStrategy', () => {
     const result = buildSubmitStrategy(standings, 'moon')
     assert.equal(result.suggestion, 'add')
     assert.equal(result.yourRank, 2)
-    assert.match(result.reason, /60 team XP/)
+    assert.match(result.reason, /60 team points/)
   })
 
-  it('targets the highest team XP rival when leading among three teams', () => {
+  it('targets the highest team points rival when leading among three teams', () => {
     const standings = [team('sun', 'Sun', 900), team('moon', 'Moon', 850), team('star', 'Star', 820)]
     const result = buildSubmitStrategy(standings, 'sun')
     assert.equal(result.suggestion, 'add')

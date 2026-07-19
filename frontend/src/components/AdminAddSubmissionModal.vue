@@ -465,7 +465,7 @@ async function submit() {
 						}}</strong>
 					</template>
 					<template v-else>
-						XP goes to
+						Points go to
 						<strong
 							:style="readerTeam ? { color: readerTeam.color } : undefined"
 						>
@@ -542,7 +542,7 @@ async function submit() {
 								value="add"
 								:disabled="isView"
 							/>
-							Add XP
+							Add points
 						</label>
 						<label
 							class="type-option"

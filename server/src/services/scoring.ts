@@ -116,7 +116,7 @@ export async function validateSubmission(
 		}
 
 		if (input.submissionType === 'add' && !allPositive) {
-			return 'Adding XP requires positive prompts only.';
+			return 'Adding points requires positive prompts only.';
 		}
 
 		if (input.submissionType === 'sabotage' && !allNegative) {

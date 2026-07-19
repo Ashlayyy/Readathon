@@ -1,7 +1,7 @@
 {
 	"campaign": "attack",
 	"kind": "negative",
-	"description": "Scheduled sabotage prompts for the Attack campaign. Each set of 5 unlocks exactly 2 weeks (14 days) after the previous set. Points are stored negative for the sabotage flow; absolute value is the XP dealt to the target realm.",
+	"description": "Scheduled sabotage prompts for the Attack campaign. Each set of 5 unlocks exactly 2 weeks (14 days) after the previous set. Points are stored negative for the sabotage flow; absolute value is the points dealt to the target realm.",
 	"schedule": {
 		"weeksBetweenSets": 2,
 		"daysBetweenSets": 14,
