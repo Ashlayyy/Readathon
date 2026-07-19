@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { api, googleLoginUrl, type PublicUser } from '../lib/api'
+import { captureEvent, identifyUser } from '../lib/posthog'
 
 const user = ref<PublicUser | null>(null)
 const loaded = ref(false)
@@ -14,9 +15,11 @@ export function useAuth() {
       try {
         const data = await api<{ user: PublicUser | null }>('/auth/me')
         user.value = data.user
+        identifyUser(data.user)
         return data.user
       } catch {
         user.value = null
+        identifyUser(null)
         return null
       } finally {
         loaded.value = true
@@ -32,6 +35,7 @@ export function useAuth() {
       method: 'POST',
       body: JSON.stringify({ displayName, email }),
     })
+    captureEvent('auth_register_requested')
     return data
   }
 
@@ -40,6 +44,7 @@ export function useAuth() {
       method: 'POST',
       body: JSON.stringify({ email }),
     })
+    captureEvent('auth_login_requested')
     return data
   }
 
@@ -48,6 +53,8 @@ export function useAuth() {
     user.value = null
     loaded.value = true
     fetchPromise = null
+    identifyUser(null)
+    captureEvent('auth_logout')
   }
 
   return { user, loaded, fetchUser, register, login, logout, googleLoginUrl }

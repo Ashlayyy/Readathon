@@ -1,13 +1,19 @@
 import { Hono } from 'hono';
 import { Submission } from '../db/models/Submission.js';
+import { withActive } from '../db/activeSubmission.js';
 import { getSessionUser, requireAuth } from '../services/auth.js';
 import {
 	calculateScore,
+	findDuplicateSubmission,
 	submissionToPublic,
 	validateSubmission,
 	type SubmissionInput,
 } from '../services/scoring.js';
 import { getSubmitStrategy } from '../services/submit-strategy.js';
+import { getTeamById } from '../services/prompts.js';
+import { captureServerEvent } from '../services/posthog.js';
+import { notifyTeamChatSubmission } from '../services/discord.js';
+import { submissionsCreatedTotal } from '../services/metrics.js';
 
 function optionalDate(value: string | null | undefined): string | null {
 	const trimmed = value?.trim();
@@ -18,7 +24,7 @@ export const submissionRoutes = new Hono();
 
 submissionRoutes.get('/mine', async (c) => {
 	const user = requireAuth(await getSessionUser(c));
-	const rows = await Submission.find({ userId: user._id }).sort({
+	const rows = await Submission.find(withActive({ userId: user._id })).sort({
 		createdAt: -1,
 	});
 	return c.json({ submissions: rows.map(submissionToPublic) });
@@ -29,18 +35,32 @@ submissionRoutes.get('/strategy', async (c) => {
 	if (user.status !== 'assigned' || !user.teamId) {
 		return c.json({
 			standingsAvailable: false,
-			yourRank: null,
 			yourTeamId: user.teamId,
 			yourTeamName: null,
+			yourTeamXp: null,
 			suggestion: null,
 			targetTeamId: null,
 			targetTeamName: null,
+			gapToClose: null,
+			estimatedCloseBy: null,
 			reason:
 				'Get assigned to a realm first - then we can suggest gain vs attack.',
+			rivals: [],
 		});
 	}
 	const strategy = await getSubmitStrategy(user.teamId);
 	return c.json(strategy);
+});
+
+submissionRoutes.get('/check-duplicate', async (c) => {
+	const user = requireAuth(await getSessionUser(c));
+	const title = c.req.query('title')?.trim() ?? '';
+	const author = c.req.query('author')?.trim() ?? '';
+
+	if (!title || !author) return c.json({ duplicate: false });
+
+	const duplicate = await findDuplicateSubmission(user._id, title, author);
+	return c.json({ duplicate });
 });
 
 submissionRoutes.post('/', async (c) => {
@@ -70,6 +90,27 @@ submissionRoutes.post('/', async (c) => {
 		bonusPoints: score.bonusPoints,
 		totalImpact: score.totalImpact,
 	});
+
+	submissionsCreatedTotal
+		.labels(body.submissionType, body.format || 'unknown')
+		.inc();
+
+	captureServerEvent(user._id.toString(), 'submission_created', {
+		submission_type: body.submissionType,
+		format: body.format,
+		page_count: body.pageCount,
+		team_id: user.teamId,
+		target_team_id: body.targetTeamId ?? null,
+	});
+
+	// Fire-and-forget, optional realm chat webhook - never blocks or fails the submission.
+	const teamName = user.teamId ? getTeamById(user.teamId)?.name : null;
+	if (teamName) {
+		notifyTeamChatSubmission(
+			user.teamId,
+			`📖 **${user.displayName}** logged "${submission.bookTitle}" for **${teamName}**!`,
+		);
+	}
 
 	return c.json({
 		submission: submissionToPublic(submission),

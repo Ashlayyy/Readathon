@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { api, type RosterTeam } from '../lib/api'
+import ReaderLink from './ReaderLink.vue'
 
 const teams = ref<RosterTeam[]>([])
 const loading = ref(true)
@@ -40,7 +41,9 @@ onMounted(async () => {
         </div>
       </header>
       <ul v-if="team.members.length" class="member-list">
-        <li v-for="member in team.members" :key="member.id">{{ member.displayName }}</li>
+        <li v-for="member in team.members" :key="member.id">
+          <ReaderLink :id="member.id" :name="member.displayName" />
+        </li>
       </ul>
       <p v-else class="empty-team">No members assigned yet.</p>
     </section>

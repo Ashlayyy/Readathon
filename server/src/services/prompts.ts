@@ -9,7 +9,7 @@ import {
 	type Team,
 } from '../config.js';
 import { Prompt, type IPrompt } from '../db/models/Prompt.js';
-import { getSiteSettingsSync } from './siteSettings.js';
+import { getConfigOverridesSync, getSiteSettingsSync } from './siteSettings.js';
 
 const configPath = join(
 	dirname(fileURLToPath(import.meta.url)),
@@ -104,10 +104,24 @@ export function getConfigWithPrompts(publicOnly = true): RealmathonConfig {
 	};
 }
 
+/** Merges the admin-staged live overlay (configOverrides.copy) over static copy, when present. */
+function mergeConfigOverrides(config: RealmathonConfig): RealmathonConfig {
+	const overrides = getConfigOverridesSync();
+	if (!overrides || typeof overrides !== 'object') return config;
+
+	const overrideCopy = (overrides as { copy?: unknown }).copy;
+	if (!overrideCopy || typeof overrideCopy !== 'object') return config;
+
+	return {
+		...config,
+		copy: { ...config.copy, ...(overrideCopy as Record<string, unknown>) },
+	};
+}
+
 /** Public site config - prompts from DB when populated, else JSON fallback. */
 export function getConfig(): RealmathonConfig {
 	return {
-		...getConfigWithPrompts(true),
+		...mergeConfigOverrides(getConfigWithPrompts(true)),
 		site: getSiteSettingsSync(),
 	};
 }

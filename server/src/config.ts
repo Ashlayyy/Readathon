@@ -44,7 +44,18 @@ export type RealmathonConfig = {
   howItWorks: { step: number; title: string; body: string }[]
   scoringRules: Record<string, unknown>
   faq: { q: string; a: string }[]
-  site?: { showTeamRosters: boolean; downtimeMode: boolean }
+  site?: {
+    showTeamRosters: boolean
+    downtimeMode: boolean
+    seasonArchive?: {
+      slug: string
+      title: string
+      from: string
+      to: string
+      message: string
+      publishedStandingsIds: string[]
+    } | null
+  }
 }
 
 let cached: RealmathonConfig | null = null

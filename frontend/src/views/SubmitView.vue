@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, type PromptXpTier, type SubmitStrategy } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
@@ -7,6 +7,7 @@ import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 import SubmitXpPreview from '../components/SubmitXpPreview.vue'
 import OptionalDatePicker from '../components/OptionalDatePicker.vue'
+import BookCover from '../components/BookCover.vue'
 import type { Prompt } from '../lib/api'
 
 const { user } = useAuth()
@@ -46,6 +47,14 @@ const pageCount = ref(300)
 const format = ref('physical')
 const startedAt = ref('')
 const finishedAt = ref('')
+const coverUrl = ref<string | null>(null)
+const coverLooking = ref(false)
+const coverMessage = ref('')
+
+const audiobookHours = ref<number | null>(null)
+const audiobookMinutes = ref<number | null>(null)
+const duplicateWarning = ref(false)
+let duplicateCheckTimer: ReturnType<typeof setTimeout> | null = null
 
 const submissionType = ref<'add' | 'sabotage' | null>(null)
 const targetTeamId = ref('')
@@ -74,6 +83,11 @@ function applyStrategySuggestion() {
   if (strategy.value.suggestion === 'sabotage' && strategy.value.targetTeamId) {
     targetTeamId.value = strategy.value.targetTeamId
   }
+}
+
+function applyRivalSabotage(rivalTeamId: string) {
+  submissionType.value = 'sabotage'
+  targetTeamId.value = rivalTeamId
 }
 
 const maxPrompts = computed(() => config.value?.scoringRules.maxPromptsPerBook ?? 5)
@@ -111,6 +125,20 @@ const pageBonus = computed(() => {
   }
   return 0
 })
+
+// ~150 wpm listening speed / ~280 words per page ≈ 32 estimated pages per hour listened.
+const AUDIOBOOK_WORDS_PER_MINUTE = 150
+const AUDIOBOOK_WORDS_PER_PAGE = 280
+
+const audiobookEstimatedPages = computed(() => {
+  const totalMinutes = (audiobookHours.value ?? 0) * 60 + (audiobookMinutes.value ?? 0)
+  if (totalMinutes <= 0) return 0
+  return Math.round((totalMinutes * AUDIOBOOK_WORDS_PER_MINUTE) / AUDIOBOOK_WORDS_PER_PAGE)
+})
+
+function useAudiobookEstimate() {
+  if (audiobookEstimatedPages.value > 0) pageCount.value = audiobookEstimatedPages.value
+}
 
 const estimatedPromptPoints = computed(() => {
   if (!config.value) return 0
@@ -241,6 +269,64 @@ watch(step, (s) => {
   if (s === 2) void loadStrategy()
 })
 
+async function checkDuplicate(title: string, author: string) {
+  try {
+    const params = new URLSearchParams({ title, author })
+    const data = await api<{ duplicate: boolean }>(
+      `/submissions/check-duplicate?${params.toString()}`,
+    )
+    duplicateWarning.value = data.duplicate
+  } catch {
+    duplicateWarning.value = false
+  }
+}
+
+async function lookupCover() {
+  const title = bookTitle.value.trim()
+  if (title.length < 2) {
+    coverMessage.value = 'Enter a title first.'
+    return
+  }
+  coverLooking.value = true
+  coverMessage.value = ''
+  try {
+    const params = new URLSearchParams({ title })
+    const author = bookAuthor.value.trim()
+    if (author) params.set('author', author)
+    const data = await api<{ cover: { coverUrl: string | null } | null }>(
+      `/readers/lookup-cover?${params}`,
+    )
+    coverUrl.value = data.cover?.coverUrl ?? null
+    coverMessage.value = coverUrl.value
+      ? 'Cover found via Open Library.'
+      : 'No cover found — you can still submit.'
+  } catch (e) {
+    coverMessage.value = e instanceof Error ? e.message : 'Cover lookup failed'
+    coverUrl.value = null
+  } finally {
+    coverLooking.value = false
+  }
+}
+
+watch([bookTitle, bookAuthor], () => {
+  duplicateWarning.value = false
+  coverUrl.value = null
+  coverMessage.value = ''
+  if (duplicateCheckTimer) clearTimeout(duplicateCheckTimer)
+
+  const title = bookTitle.value.trim()
+  const author = bookAuthor.value.trim()
+  if (title.length < 2 || author.length < 2) return
+
+  duplicateCheckTimer = setTimeout(() => {
+    void checkDuplicate(title, author)
+  }, 500)
+})
+
+onBeforeUnmount(() => {
+  if (duplicateCheckTimer) clearTimeout(duplicateCheckTimer)
+})
+
 async function submit() {
   error.value = ''
   submitting.value = true
@@ -263,6 +349,13 @@ async function submit() {
     })
     success.value = true
     step.value = 6
+    void import('../lib/posthog').then(({ captureEvent }) => {
+      captureEvent('submission_created', {
+        submission_type: submissionType.value,
+        format: format.value,
+        page_count: pageCount.value,
+      })
+    })
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Submission failed'
   } finally {
@@ -283,6 +376,18 @@ function nextStep() {
     }
     if (!pageCount.value || pageCount.value < 1) {
       error.value = 'Page count must be at least 1.'
+      return
+    }
+    if (!startedAt.value) {
+      error.value = 'Start date is required.'
+      return
+    }
+    if (!finishedAt.value) {
+      error.value = 'Finish date is required.'
+      return
+    }
+    if (finishedAt.value < startedAt.value) {
+      error.value = 'Finish date cannot be before the start date.'
       return
     }
   }
@@ -321,6 +426,9 @@ function reset() {
   format.value = 'physical'
   startedAt.value = ''
   finishedAt.value = ''
+  audiobookHours.value = null
+  audiobookMinutes.value = null
+  duplicateWarning.value = false
   selectedPromptIds.value = []
   bonusCompetition.value = false
   bonusTeamPromptIds.value = []
@@ -368,6 +476,25 @@ function reset() {
             {{ config.copy.submitAuthorLabel }}
             <input v-model="bookAuthor" required :placeholder="String(config.copy.submitAuthorPlaceholder)" />
           </label>
+          <div class="cover-lookup-row">
+            <BookCover
+              :title="bookTitle || 'Book'"
+              :author="bookAuthor"
+              :cover-url="coverUrl"
+              size="md"
+            />
+            <div>
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="coverLooking || bookTitle.trim().length < 2"
+                @click="lookupCover"
+              >
+                {{ coverLooking ? 'Looking up…' : (config.copy.submitFindCover ?? 'Find cover') }}
+              </button>
+              <p v-if="coverMessage" class="field-hint">{{ coverMessage }}</p>
+            </div>
+          </div>
           <label class="field">
             {{ config.copy.submitPageCountLabel }}
             <input v-model.number="pageCount" type="number" min="1" />
@@ -385,12 +512,38 @@ function reset() {
           </label>
           <OptionalDatePicker
             v-model="startedAt"
+            required
             :label="String(config.copy.submitStartedLabel)"
           />
           <OptionalDatePicker
             v-model="finishedAt"
+            required
             :label="String(config.copy.submitFinishedLabel)"
           />
+        </div>
+
+        <div v-if="format === 'audiobook'" class="audiobook-estimator card">
+          <p class="audiobook-estimator-label">{{ config.copy.submitAudiobookEstimatorLabel }}</p>
+          <div class="audiobook-estimator-row">
+            <label class="field audiobook-field">
+              {{ config.copy.submitAudiobookHoursLabel }}
+              <input v-model.number="audiobookHours" type="number" min="0" placeholder="0" />
+            </label>
+            <label class="field audiobook-field">
+              {{ config.copy.submitAudiobookMinutesLabel }}
+              <input v-model.number="audiobookMinutes" type="number" min="0" max="59" placeholder="0" />
+            </label>
+          </div>
+          <p v-if="audiobookEstimatedPages > 0" class="audiobook-estimate-result">
+            <span>{{ t(String(config.copy.submitAudiobookEstimateResult), { pages: audiobookEstimatedPages }) }}</span>
+            <button type="button" class="btn btn-secondary btn-sm" @click="useAudiobookEstimate">
+              {{ config.copy.submitAudiobookUseEstimate }}
+            </button>
+          </p>
+        </div>
+
+        <div v-if="duplicateWarning" class="alert alert-warning duplicate-warning">
+          {{ config.copy.submitDuplicateWarning }}
         </div>
 
         <SubmitXpPreview
@@ -419,6 +572,31 @@ function reset() {
                   })
             }}
           </button>
+
+          <div v-if="strategy.rivals?.length" class="strategy-rivals">
+            <p class="strategy-rivals-label">{{ config.copy.submitStrategyRivalsLabel }}</p>
+            <div class="strategy-rival-chips">
+              <button
+                v-for="r in strategy.rivals"
+                :key="r.teamId"
+                type="button"
+                class="strategy-rival-chip"
+                :style="{ '--team-color': getTeam(r.teamId)?.color ?? '#888' }"
+                :class="{ selected: submissionType === 'sabotage' && targetTeamId === r.teamId }"
+                @click="applyRivalSabotage(r.teamId)"
+              >
+                <span class="strategy-rival-icon" aria-hidden="true">{{ getTeam(r.teamId)?.icon }}</span>
+                <span class="strategy-rival-name">{{ r.teamName }}</span>
+                <span class="strategy-rival-gap" :class="{ trailing: r.xpGap <= 0 }">
+                  {{
+                    r.xpGap > 0
+                      ? t(String(config.copy.submitStrategyCloseGapBy), { points: r.ifSabotageCloseBy })
+                      : t(String(config.copy.submitStrategyAheadBy), { points: Math.abs(r.xpGap) })
+                  }}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="choice-row">
@@ -872,6 +1050,13 @@ function reset() {
   gap: 1rem;
 }
 
+.cover-lookup-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  grid-column: 1 / -1;
+}
+
 @media (min-width: 600px) {
   .form-grid {
     grid-template-columns: 1fr 1fr;
@@ -889,6 +1074,47 @@ function reset() {
   font-weight: 400;
   color: var(--realm-text-muted);
   font-size: 0.8rem;
+}
+
+.audiobook-estimator {
+  margin-top: 1rem;
+  padding: 1rem 1.15rem;
+  background: var(--realm-bg);
+}
+
+.audiobook-estimator-label {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--realm-text);
+}
+
+.audiobook-estimator-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(6rem, 10rem));
+  gap: 0.85rem;
+}
+
+.audiobook-field input {
+  text-align: center;
+}
+
+.audiobook-estimate-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.85rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--realm-border);
+  color: var(--realm-accent-glow);
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.duplicate-warning {
+  margin-top: 1rem;
+  margin-bottom: 0;
 }
 
 /* Toggle cards (replaces broken checkboxes) */
@@ -992,6 +1218,70 @@ function reset() {
   color: var(--realm-text-muted);
   font-size: 0.84rem;
   line-height: 1.45;
+}
+
+.strategy-rivals {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--realm-border);
+}
+
+.strategy-rivals-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--realm-text-muted);
+}
+
+.strategy-rival-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.strategy-rival-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--team-color) 40%, var(--realm-border));
+  background: color-mix(in srgb, var(--team-color) 8%, var(--realm-bg));
+  color: var(--realm-text);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+
+.strategy-rival-chip:hover {
+  border-color: var(--team-color);
+  transform: translateY(-1px);
+}
+
+.strategy-rival-chip.selected {
+  border-color: var(--team-color);
+  background: color-mix(in srgb, var(--team-color) 18%, var(--realm-bg));
+}
+
+.strategy-rival-icon {
+  color: var(--team-color);
+  line-height: 1;
+}
+
+.strategy-rival-name {
+  font-weight: 600;
+}
+
+.strategy-rival-gap {
+  font-weight: 700;
+  color: var(--realm-accent-glow);
+}
+
+.strategy-rival-gap.trailing {
+  color: var(--realm-success);
 }
 
 /* Add / sabotage */

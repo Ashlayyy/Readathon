@@ -1,22 +1,39 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { api, type Submission, type UserQuestion } from '../lib/api'
+import { api, type Achievement, type ProfileDashboard, type Submission, type UserQuestion } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
+import { useCopy } from '../composables/useCopy'
+import ThemeSwitcher from '../components/ThemeSwitcher.vue'
+import PaceSparkline from '../components/PaceSparkline.vue'
+import BookCover from '../components/BookCover.vue'
 
 type Tab = 'books' | 'questions' | 'settings'
+type CurrentlyReading = {
+  title: string
+  author: string
+  coverUrl: string | null
+  updatedAt: string | null
+}
 
 const route = useRoute()
 const router = useRouter()
 const { user, fetchUser } = useAuth()
 const { config, loadConfig, getTeam } = useConfig()
+const { t } = useCopy()
 
 const activeTab = ref<Tab>('books')
 const submissions = ref<Submission[]>([])
 const questions = ref<UserQuestion[]>([])
+const dashboard = ref<ProfileDashboard | null>(null)
+const achievements = ref<Achievement[]>([])
 const notifyStandings = ref(false)
 const notifyAnswers = ref(false)
+const currentlyReading = ref<CurrentlyReading | null>(null)
+const crTitle = ref('')
+const crAuthor = ref('')
+const pacePath = ref<string | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const message = ref('')
@@ -59,15 +76,25 @@ async function loadProfile() {
       user: {
         notifyStandings: boolean
         notifyAnswers: boolean
+        currentlyReading: CurrentlyReading | null
       }
       submissions: Submission[]
       questions: UserQuestion[]
+      dashboard: ProfileDashboard
+      achievements: Achievement[]
+      pace: { sparklinePath: string | null }
     }>('/profile')
 
     submissions.value = data.submissions
     questions.value = data.questions
+    dashboard.value = data.dashboard
+    achievements.value = data.achievements
     notifyStandings.value = data.user.notifyStandings
     notifyAnswers.value = data.user.notifyAnswers
+    currentlyReading.value = data.user.currentlyReading
+    crTitle.value = data.user.currentlyReading?.title ?? ''
+    crAuthor.value = data.user.currentlyReading?.author ?? ''
+    pacePath.value = data.pace?.sparklinePath ?? null
   } catch (e) {
     message.value = e instanceof Error ? e.message : 'Failed to load profile'
     messageIsError.value = true
@@ -85,21 +112,60 @@ async function markUnseenAnswersRead() {
   await fetchUser(true)
 }
 
+function signed(n: number): string {
+  return n > 0 ? `+${n}` : `${n}`
+}
+
 async function saveSettings() {
   saving.value = true
   message.value = ''
   messageIsError.value = false
   try {
-    await api('/profile/settings', {
+    const { settings } = await api<{
+      settings: {
+        notifyStandings: boolean
+        notifyAnswers: boolean
+        currentlyReading: CurrentlyReading | null
+      }
+    }>('/profile/settings', {
       method: 'PATCH',
       body: JSON.stringify({
         notifyStandings: notifyStandings.value,
         notifyAnswers: notifyAnswers.value,
+        currentlyReading: {
+          title: crTitle.value,
+          author: crAuthor.value,
+          lookupCover: true,
+        },
       }),
     })
+    currentlyReading.value = settings.currentlyReading
     message.value = 'Settings saved.'
   } catch (e) {
     message.value = e instanceof Error ? e.message : 'Failed to save'
+    messageIsError.value = true
+  } finally {
+    saving.value = false
+  }
+}
+
+async function clearCurrentlyReading() {
+  saving.value = true
+  message.value = ''
+  messageIsError.value = false
+  try {
+    const { settings } = await api<{
+      settings: { currentlyReading: CurrentlyReading | null }
+    }>('/profile/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentlyReading: { clear: true } }),
+    })
+    currentlyReading.value = settings.currentlyReading
+    crTitle.value = ''
+    crAuthor.value = ''
+    message.value = 'Currently reading cleared.'
+  } catch (e) {
+    message.value = e instanceof Error ? e.message : 'Failed to clear'
     messageIsError.value = true
   } finally {
     saving.value = false
@@ -121,7 +187,55 @@ async function saveSettings() {
           <p v-else-if="user?.status === 'pending'" class="status-note">Awaiting team assignment</p>
         </div>
       </div>
+
+      <div v-if="achievements.length" class="achievements-row">
+        <span class="achievements-label">{{ config.copy.profileAchievementsTitle }}</span>
+        <div class="badge-list">
+          <span
+            v-for="a in achievements"
+            :key="a.id"
+            class="achievement-badge"
+            :class="{ earned: a.earned }"
+            :title="a.earned ? `${a.label} - ${a.description}` : `Locked - ${a.description}`"
+          >
+            {{ a.label }}
+          </span>
+        </div>
+      </div>
     </header>
+
+    <div v-if="dashboard" class="dashboard-row">
+      <div class="dashboard-card card">
+        <span class="dashboard-value">{{ dashboard.booksLogged }}</span>
+        <span class="dashboard-label">{{ config.copy.profileStatBooks }}</span>
+      </div>
+      <div class="dashboard-card card">
+        <span class="dashboard-value">{{ signed(dashboard.pointsContributed) }}</span>
+        <span class="dashboard-label">{{ config.copy.profileStatPoints }}</span>
+      </div>
+      <div class="dashboard-card card">
+        <span class="dashboard-value">{{ dashboard.sabotageDealt }}</span>
+        <span class="dashboard-label">{{ config.copy.profileStatSabotageDealt }}</span>
+      </div>
+      <div class="dashboard-card card">
+        <span class="dashboard-value">{{ dashboard.sabotageTaken }}</span>
+        <span class="dashboard-label">{{ config.copy.profileStatSabotageTaken }}</span>
+      </div>
+      <div class="dashboard-card card">
+        <span class="dashboard-value">{{ dashboard.streakWeeks }}</span>
+        <span class="dashboard-label">{{ config.copy.profileStatStreak }}</span>
+      </div>
+    </div>
+
+    <div v-if="dashboard?.vsTeam" class="vs-team-row">
+      <span :class="dashboard.vsTeam.booksDelta >= 0 ? 'positive' : 'negative'">
+        {{ t(config.copy.profileVsRealmBooks, { delta: signed(dashboard.vsTeam.booksDelta) }) }}
+      </span>
+      <span :class="dashboard.vsTeam.pointsDelta >= 0 ? 'positive' : 'negative'">
+        {{ t(config.copy.profileVsRealmPoints, { delta: signed(dashboard.vsTeam.pointsDelta) }) }}
+      </span>
+    </div>
+    <p v-else-if="dashboard" class="no-team-stats">{{ config.copy.profileNoTeamStats }}</p>
 
     <nav class="profile-tabs" aria-label="Profile sections">
       <button type="button" :class="{ active: activeTab === 'books' }" @click="setTab('books')">
@@ -145,6 +259,30 @@ async function saveSettings() {
 
     <!-- Books -->
     <section v-else-if="activeTab === 'books'">
+      <div v-if="currentlyReading" class="currently-reading card">
+        <h2>{{ config.copy.readerCurrentlyReadingTitle ?? 'Currently reading' }}</h2>
+        <div class="cr-row">
+          <BookCover
+            :title="currentlyReading.title"
+            :author="currentlyReading.author"
+            :cover-url="currentlyReading.coverUrl"
+          />
+          <div>
+            <h3>{{ currentlyReading.title }}</h3>
+            <p v-if="currentlyReading.author" class="author">by {{ currentlyReading.author }}</p>
+            <p class="cr-hint">{{ config.copy.readerCurrentlyReadingHint ?? 'Not scored — just vibes.' }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="pace-card card">
+        <h2>{{ config.copy.readerPaceTitle ?? 'Reading pace' }}</h2>
+        <PaceSparkline
+          :path="pacePath"
+          :label="String(config.copy.readerPaceHint ?? 'Pages per day across finished books')"
+        />
+      </div>
+
       <div v-if="submissions.length" class="stats-row">
         <div class="stat-card card">
           <span class="stat-value">{{ submissions.length }}</span>
@@ -234,38 +372,124 @@ async function saveSettings() {
     </section>
 
     <!-- Settings -->
-    <section v-else class="card settings-card">
-      <h2>{{ config.copy.profileSettingsTitle }}</h2>
-      <p class="section-desc">{{ config.copy.profileSettingsLead }}</p>
+    <section v-else class="settings-tab">
+      <div class="card settings-card">
+        <h2>{{ config.copy.profileSettingsTitle }}</h2>
+        <p class="section-desc">{{ config.copy.profileSettingsLead }}</p>
 
-      <div v-if="message" class="alert" :class="messageIsError ? 'alert-error' : 'alert-success'">
-        {{ message }}
+        <div v-if="message" class="alert" :class="messageIsError ? 'alert-error' : 'alert-success'">
+          {{ message }}
+        </div>
+
+        <label class="setting-row">
+          <input v-model="notifyStandings" type="checkbox" />
+          <div>
+            <strong>{{ config.copy.profileNotifyStandings }}</strong>
+            <span>{{ config.copy.profileNotifyStandingsHint }}</span>
+          </div>
+        </label>
+
+        <label class="setting-row">
+          <input v-model="notifyAnswers" type="checkbox" />
+          <div>
+            <strong>{{ config.copy.profileNotifyAnswers }}</strong>
+            <span>{{ config.copy.profileNotifyAnswersHint }}</span>
+          </div>
+        </label>
+
+        <fieldset class="currently-reading-fields">
+          <legend>{{ config.copy.readerCurrentlyReadingTitle ?? 'Currently reading' }}</legend>
+          <p class="section-desc">
+            {{ config.copy.profileCurrentlyReadingLead ?? 'Optional — shows on your public reader page. Not scored.' }}
+          </p>
+          <label>
+            Title
+            <input v-model="crTitle" type="text" maxlength="200" autocomplete="off" />
+          </label>
+          <label>
+            Author
+            <input v-model="crAuthor" type="text" maxlength="200" autocomplete="off" />
+          </label>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            :disabled="saving || (!crTitle && !currentlyReading)"
+            @click="clearCurrentlyReading"
+          >
+            Clear
+          </button>
+        </fieldset>
+
+        <button type="button" class="btn btn-primary" :disabled="saving" @click="saveSettings">
+          {{ saving ? config.copy.profileSaving : config.copy.profileSaveSettings }}
+        </button>
       </div>
 
-      <label class="setting-row">
-        <input v-model="notifyStandings" type="checkbox" />
-        <div>
-          <strong>{{ config.copy.profileNotifyStandings }}</strong>
-          <span>{{ config.copy.profileNotifyStandingsHint }}</span>
-        </div>
-      </label>
-
-      <label class="setting-row">
-        <input v-model="notifyAnswers" type="checkbox" />
-        <div>
-          <strong>{{ config.copy.profileNotifyAnswers }}</strong>
-          <span>{{ config.copy.profileNotifyAnswersHint }}</span>
-        </div>
-      </label>
-
-      <button type="button" class="btn btn-primary" :disabled="saving" @click="saveSettings">
-        {{ saving ? config.copy.profileSaving : config.copy.profileSaveSettings }}
-      </button>
+      <div class="card settings-card">
+        <h2>{{ config.copy.profileThemeTitle }}</h2>
+        <p class="section-desc">{{ config.copy.profileThemeLead }}</p>
+        <ThemeSwitcher />
+      </div>
     </section>
   </main>
 </template>
 
 <style scoped>
+.currently-reading,
+.pace-card {
+  margin-bottom: 1.25rem;
+}
+
+.currently-reading h2,
+.pace-card h2 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.cr-row {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+}
+
+.cr-row h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+  color: var(--realm-text);
+}
+
+.cr-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--realm-text-muted);
+}
+
+.currently-reading-fields {
+  border: 1px solid var(--realm-border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  margin: 1rem 0;
+}
+
+.currently-reading-fields legend {
+  padding: 0 0.35rem;
+  font-weight: 600;
+}
+
+.currently-reading-fields label {
+  display: block;
+  margin-bottom: 0.65rem;
+  font-size: 0.85rem;
+  color: var(--realm-text-muted);
+}
+
+.currently-reading-fields input {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
 .profile-header {
   margin-bottom: 1.5rem;
 }
@@ -316,6 +540,96 @@ async function saveSettings() {
 .status-note {
   color: var(--realm-text-muted);
   font-size: 0.9rem;
+}
+
+.achievements-row {
+  margin-top: 1.1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--realm-border);
+}
+
+.achievements-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--realm-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.achievement-badge {
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid var(--realm-border);
+  background: var(--realm-bg);
+  color: var(--realm-text-muted);
+  opacity: 0.55;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.achievement-badge.earned {
+  border-color: var(--realm-accent);
+  background: rgba(212, 99, 74, 0.14);
+  color: var(--realm-accent-glow);
+  opacity: 1;
+}
+
+.dashboard-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.dashboard-card {
+  text-align: center;
+  padding: 0.9rem 0.75rem;
+}
+
+.dashboard-value {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  color: var(--realm-accent-glow);
+  font-weight: 700;
+}
+
+.dashboard-label {
+  font-size: 0.75rem;
+  color: var(--realm-text-muted);
+}
+
+.vs-team-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.vs-team-row .positive {
+  color: var(--realm-success);
+}
+
+.vs-team-row .negative {
+  color: var(--realm-accent);
+}
+
+.no-team-stats {
+  color: var(--realm-text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-bottom: 1.5rem;
 }
 
 .profile-tabs {
@@ -518,6 +832,12 @@ time {
   font-size: 0.88rem;
   color: var(--realm-text-muted);
   font-style: italic;
+}
+
+.settings-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .settings-card h2 {

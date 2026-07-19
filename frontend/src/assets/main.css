@@ -17,7 +17,7 @@
 	--color-border: var(--realm-border);
 	--color-heading: var(--realm-text);
 	--color-text: var(--realm-text-muted);
-	--color-text-muted: #7a7268;
+	--color-text-muted: var(--realm-text-muted);
 	--color-accent: var(--realm-accent);
 	--color-accent-hover: var(--realm-accent-glow);
 
@@ -25,6 +25,7 @@
 	--font-body: 'Source Sans 3', system-ui, sans-serif;
 	--radius: 10px;
 	--shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+	--realm-overlay: rgba(0, 0, 0, 0.65);
 	--page-max: 1440px;
 	--page-gutter: clamp(1.25rem, 4vw, 2.5rem);
 	--safe-top: env(safe-area-inset-top, 0px);
@@ -36,6 +37,7 @@
 		url('/dragons.png') type('image/png')
 	);
 	--realm-bg-image-opacity: 0.22;
+	color-scheme: dark;
 }
 
 *,
@@ -45,7 +47,7 @@
 }
 
 html {
-	background-color: #000;
+	background-color: var(--realm-bg);
 	min-height: 100%;
 }
 
@@ -90,8 +92,40 @@ body {
 	overflow-x: hidden;
 }
 
+/* Light theme: quieter art + softer purple wash so cream surfaces stay readable */
+html[data-theme='light'] {
+	color-scheme: light;
+}
+
+html[data-theme='light'] body {
+	background-image:
+		radial-gradient(
+			ellipse 80% 50% at 50% -10%,
+			var(--realm-body-glow-accent, rgba(200, 86, 61, 0.12)),
+			transparent
+		),
+		radial-gradient(ellipse 50% 35% at 100% 100%, rgba(120, 100, 70, 0.06), transparent);
+}
+
 body.modal-open {
 	overflow: hidden;
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	border: 0;
+	white-space: nowrap;
+}
+
+:focus-visible {
+	outline: 2px solid var(--realm-accent-glow);
+	outline-offset: 2px;
 }
 
 /* Shared modal shell: page stays fixed; content scrolls inside the dialog */
@@ -104,7 +138,7 @@ body.modal-open {
 	justify-content: center;
 	padding: 1rem;
 	overflow: hidden;
-	background: rgba(0, 0, 0, 0.65);
+	background: var(--realm-overlay, rgba(0, 0, 0, 0.65));
 	backdrop-filter: blur(4px);
 }
 
@@ -132,7 +166,7 @@ a {
 }
 
 a:hover {
-	color: #ffc4ad;
+	color: var(--realm-accent);
 }
 
 .page {

@@ -1,6 +1,7 @@
 import { getConfigWithPrompts } from './prompts.js'
 import { User } from '../db/models/User.js'
 import { Submission } from '../db/models/Submission.js'
+import { withActive } from '../db/activeSubmission.js'
 
 export type MemberContribution = {
   userId: string
@@ -12,6 +13,7 @@ export type MemberContribution = {
 }
 
 export type IncomingAttack = {
+  userId: string
   displayName: string
   attackerTeamId: string
   attackerTeamName: string
@@ -59,7 +61,7 @@ export async function calculateStandingsBreakdown(): Promise<StandingsBreakdown>
 
   const attacksOnTeam = new Map<string, Map<string, IncomingAttack>>()
 
-  const allSubs = await Submission.find()
+  const allSubs = await Submission.find(withActive())
   for (const sub of allSubs) {
     const userId = sub.userId.toString()
     const teamId = userTeamMap.get(userId)
@@ -87,6 +89,7 @@ export async function calculateStandingsBreakdown(): Promise<StandingsBreakdown>
       } else {
         const attackerTeam = config.teams.find((t) => t.id === teamId)
         targetAttacks.set(key, {
+          userId,
           displayName: userNameMap.get(userId) ?? 'Unknown',
           attackerTeamId: teamId,
           attackerTeamName: attackerTeam?.name ?? teamId,

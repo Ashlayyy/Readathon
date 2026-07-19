@@ -7,6 +7,7 @@ import { useConfig } from './composables/useConfig';
 import { useAdminCopy } from './composables/useAdminCopy';
 import { closeAllNavDropdowns } from './composables/useNavDropdown';
 import SiteNavDropdown from './components/SiteNavDropdown.vue';
+import ThemeSwitcher from './components/ThemeSwitcher.vue';
 import { APP_VERSION } from './lib/version';
 
 const { user, logout } = useAuth();
@@ -38,6 +39,7 @@ const playNavItems = computed(() => [
 const aboutNavItems = computed(() => [
 	{ to: '/how-it-works', label: nav.value.howItWorks ?? 'Rules' },
 	{ to: '/teams', label: nav.value.teams ?? 'Teams' },
+	{ to: '/shelf', label: nav.value.shelf ?? 'Shelf' },
 	{ to: '/faq', label: nav.value.faq ?? 'FAQ' },
 ]);
 
@@ -102,6 +104,8 @@ function closeMenu() {
 
 <template>
 	<div class="app-shell">
+		<a href="#main-content" class="skip-link">Skip to content</a>
+
 		<header v-if="!isMaintenancePage" class="site-header">
 			<div class="header-inner">
 				<div class="header-top">
@@ -171,6 +175,8 @@ function closeMenu() {
 				</nav>
 
 				<div class="header-actions" :class="{ open: menuOpen }">
+					<ThemeSwitcher compact class="nav-theme-switcher" />
+
 					<div v-if="user?.isAdmin" class="action-buttons">
 						<RouterLink
 							to="/admin"
@@ -229,7 +235,7 @@ function closeMenu() {
 
 		<div v-if="menuOpen" class="menu-backdrop" @click="closeMenu" />
 
-		<div class="app-content">
+		<div id="main-content" class="app-content" tabindex="-1">
 			<div
 				v-if="downtimeActive && user?.isAdmin && !isMaintenancePage"
 				class="alert alert-warning status-banner"
@@ -293,6 +299,29 @@ function closeMenu() {
 	min-height: 100vh;
 	display: flex;
 	flex-direction: column;
+}
+
+.skip-link {
+	position: absolute;
+	top: -3rem;
+	left: 1rem;
+	z-index: 500;
+	padding: 0.65rem 1.1rem;
+	border-radius: var(--radius);
+	background: var(--realm-accent);
+	color: white;
+	font-weight: 600;
+	font-size: 0.9rem;
+	text-decoration: none;
+	transition: top 0.15s ease;
+}
+
+.skip-link:focus-visible {
+	top: 1rem;
+}
+
+.app-content:focus-visible {
+	outline: none;
 }
 
 .site-header {
@@ -499,6 +528,10 @@ function closeMenu() {
 	min-width: 0;
 	position: relative;
 	z-index: 0;
+}
+
+.nav-theme-switcher {
+	flex-shrink: 0;
 }
 
 .action-buttons {
@@ -831,7 +864,7 @@ function closeMenu() {
 		display: block;
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.55);
+		background: var(--realm-overlay, rgba(0, 0, 0, 0.55));
 		z-index: 180;
 	}
 

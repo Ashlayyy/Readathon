@@ -5,13 +5,15 @@ const props = defineProps<{
 	modelValue: string;
 	label: string;
 	disabled?: boolean;
+	/** When true, the date must be set — no on/off toggle. */
+	required?: boolean;
 }>();
 
 const emit = defineEmits<{
 	'update:modelValue': [value: string];
 }>();
 
-const enabled = ref(!!props.modelValue);
+const enabled = ref(props.required ? true : !!props.modelValue);
 const open = ref(false);
 const rootRef = ref<HTMLElement | null>(null);
 const popoverRef = ref<HTMLElement | null>(null);
@@ -26,13 +28,20 @@ watch(
 	() => props.modelValue,
 	(v) => {
 		if (searchIgnore.value) return;
-		enabled.value = !!v;
+		if (!props.required) enabled.value = !!v;
 		if (v) cursor.value = startOfMonth(parseIso(v));
 	},
 );
 
+watch(
+	() => props.required,
+	(req) => {
+		if (req) enabled.value = true;
+	},
+);
+
 watch(enabled, (on, wasOn) => {
-	if (props.disabled) return;
+	if (props.disabled || props.required) return;
 	if (!on) {
 		open.value = false;
 		if (props.modelValue) emit('update:modelValue', '');
@@ -160,7 +169,7 @@ function closePicker() {
 }
 
 function toggleEnabled() {
-	if (props.disabled) return;
+	if (props.disabled || props.required) return;
 	enabled.value = !enabled.value;
 }
 
@@ -189,8 +198,12 @@ onBeforeUnmount(() => {
 		:class="{ disabled, enabled, open }"
 	>
 		<div class="date-head">
-			<span class="date-label">{{ label }}</span>
+			<span class="date-label">
+				{{ label }}
+				<span v-if="required" class="date-required" aria-hidden="true">*</span>
+			</span>
 			<button
+				v-if="!required"
 				type="button"
 				class="date-toggle"
 				role="switch"
@@ -204,13 +217,14 @@ onBeforeUnmount(() => {
 		</div>
 
 		<button
-			v-if="enabled"
+			v-if="enabled || required"
 			type="button"
 			class="date-trigger"
-			:class="{ placeholder: !modelValue }"
+			:class="{ placeholder: !modelValue, invalid: required && !modelValue }"
 			:disabled="disabled"
 			:aria-expanded="open"
 			aria-haspopup="dialog"
+			:aria-required="required || undefined"
 			@click="open ? closePicker() : openPicker()"
 		>
 			<span class="date-trigger-text">{{ displayLabel }}</span>
@@ -328,6 +342,11 @@ onBeforeUnmount(() => {
 	min-width: 0;
 }
 
+.date-required {
+	color: var(--realm-accent);
+	margin-left: 0.15rem;
+}
+
 .date-toggle {
 	position: relative;
 	width: 2.6rem;
@@ -395,6 +414,10 @@ onBeforeUnmount(() => {
 
 .date-trigger.placeholder {
 	color: var(--realm-text-muted);
+}
+
+.date-trigger.invalid {
+	border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
 }
 
 .date-trigger:disabled {

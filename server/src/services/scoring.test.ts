@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { getConfig } from './prompts.js'
-import { calculateScore, type SubmissionInput } from './scoring.js'
+import { calculateScore, validateSubmission, type SubmissionInput } from './scoring.js'
 import type { HydratedDocument } from 'mongoose'
 import type { IUser } from '../db/models/User.js'
 
@@ -13,6 +13,22 @@ function mockUser(teamId: string): HydratedDocument<IUser> {
     displayName: 'Test',
     email: 'test@example.com',
   } as HydratedDocument<IUser>
+}
+
+function baseInput(extra: Partial<SubmissionInput> = {}): SubmissionInput {
+  return {
+    bookTitle: 'Test Book',
+    bookAuthor: 'Author',
+    pageCount: 250,
+    format: 'ebook',
+    submissionType: 'add',
+    promptIds: [],
+    bonusCompetition: false,
+    bonusTeamPromptIds: [],
+    startedAt: '2026-07-01',
+    finishedAt: '2026-07-10',
+    ...extra,
+  }
 }
 
 describe('calculateScore', () => {
@@ -52,5 +68,35 @@ describe('calculateScore', () => {
     }
     const score = calculateScore(user, input)
     assert.ok(score.promptPoints < 0)
+  })
+})
+
+describe('validateSubmission dates', () => {
+  it('requires start and finish dates', async () => {
+    const user = mockUser('clerics')
+    assert.equal(
+      await validateSubmission(user, baseInput({ startedAt: '', finishedAt: '2026-07-10' })),
+      'Start date is required.',
+    )
+    assert.equal(
+      await validateSubmission(user, baseInput({ startedAt: '2026-07-01', finishedAt: '' })),
+      'Finish date is required.',
+    )
+  })
+
+  it('rejects finish before start', async () => {
+    const user = mockUser('clerics')
+    assert.equal(
+      await validateSubmission(
+        user,
+        baseInput({ startedAt: '2026-07-10', finishedAt: '2026-07-01' }),
+      ),
+      'Finish date cannot be before the start date.',
+    )
+  })
+
+  it('accepts valid start/finish range', async () => {
+    const user = mockUser('clerics')
+    assert.equal(await validateSubmission(user, baseInput()), null)
   })
 })

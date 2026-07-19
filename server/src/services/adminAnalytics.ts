@@ -1,5 +1,6 @@
 import { Question } from '../db/models/Question.js'
 import { Submission } from '../db/models/Submission.js'
+import { withActive } from '../db/activeSubmission.js'
 import { User } from '../db/models/User.js'
 import { getConfig } from './prompts.js'
 import {
@@ -63,6 +64,7 @@ export type AnalyticsBookRow = {
 	pageCount: number
 	format: string
 	submissionType: string
+	userId: string
 	userName: string
 	teamName: string
 	createdAt: string
@@ -281,7 +283,7 @@ export async function buildAdminAnalytics(
 
 	const [users, submissions, questionGroups] = await Promise.all([
 		User.find().select('displayName teamId status').lean(),
-		Submission.find(subFilter).sort({ createdAt: -1 }).lean(),
+		Submission.find(withActive(subFilter)).sort({ createdAt: -1 }).lean(),
 		Question.aggregate<{ _id: string; count: number }>([
 			{ $group: { _id: '$status', count: { $sum: 1 } } },
 		]),
@@ -472,6 +474,7 @@ export async function buildAdminAnalytics(
 			pageCount: sub.pageCount,
 			format: sub.format,
 			submissionType: sub.submissionType,
+			userId: sub.userId.toString(),
 			userName: user?.displayName ?? 'Unknown reader',
 			teamName: teamName(userTeamId),
 			createdAt: created.toISOString(),

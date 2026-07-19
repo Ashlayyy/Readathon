@@ -8,6 +8,7 @@ import {
 	type Prompt,
 	type TeamConfig,
 } from '../lib/api';
+import { useFocusTrap } from '../composables/useFocusTrap';
 
 const props = defineProps<{
 	users: AdminUser[];
@@ -33,6 +34,10 @@ const emit = defineEmits<{
 const isEdit = computed(() => !!props.editing && !props.readonly);
 const isView = computed(() => !!props.editing && !!props.readonly);
 const isCreate = computed(() => !props.editing);
+
+const modalRef = ref<HTMLElement | null>(null);
+const modalActive = ref(true);
+useFocusTrap(modalActive, modalRef);
 
 const assignedUsers = computed(() =>
 	props.users
@@ -317,12 +322,14 @@ async function submit() {
 </script>
 
 <template>
-	<div class="modal-backdrop">
+	<div class="modal-backdrop" @keydown.esc="$emit('close')">
 		<div
+			ref="modalRef"
 			class="modal card add-sub-modal"
 			role="dialog"
 			aria-modal="true"
 			aria-labelledby="add-sub-title"
+			tabindex="-1"
 		>
 			<header class="modal-head">
 				<div>
@@ -519,11 +526,13 @@ async function submit() {
 					</label>
 					<OptionalDatePicker
 						v-model="startedAt"
+						required
 						label="Started"
 						:disabled="isView"
 					/>
 					<OptionalDatePicker
 						v-model="finishedAt"
+						required
 						label="Finished"
 						:disabled="isView"
 					/>

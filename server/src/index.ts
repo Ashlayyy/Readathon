@@ -8,19 +8,37 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { downtimeGuard } from './middleware/downtime.js';
 import { rateLimit } from './middleware/rateLimit.js';
+import { metricsMiddleware } from './middleware/metrics.js';
 import { connectDb } from './db/connect.js';
 import { User } from './db/models/User.js';
+import { Submission } from './db/models/Submission.js';
+import { withActive } from './db/activeSubmission.js';
 import { refreshPromptsCache, getConfig } from './services/prompts.js';
 import {
 	refreshSiteSettingsCache,
 	getSiteSettingsSync,
 } from './services/siteSettings.js';
 import { PublishedStandings } from './db/models/PublishedStandings.js';
+import { startScheduledPublishChecker } from './services/scheduledPublish.js';
+import {
+	metricsContentType,
+	renderMetrics,
+	setAppVersion,
+	startMetricsGaugeRefresh,
+} from './services/metrics.js';
+import {
+	betterStackStatus,
+	flushBetterStackLogs,
+	log,
+	startBetterStackHeartbeat,
+} from './services/betterstack.js';
+import { isPostHogEnabled, shutdownPostHog } from './services/posthog.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { profileRoutes } from './routes/profile.js';
 import { questionRoutes } from './routes/questions.js';
 import { submissionRoutes } from './routes/submissions.js';
+import { readerRoutes } from './routes/readers.js';
 import { APP_VERSION } from './lib/version.js';
 import { getSvgFontStatus } from './lib/svgFonts.js';
 import { getSvgTextPathStatus } from './lib/svgTextPaths.js';
@@ -38,6 +56,23 @@ app.use(
 		credentials: true,
 	}),
 );
+
+app.use('*', metricsMiddleware);
+
+/** Prometheus scrape target. Optional bearer: METRICS_TOKEN */
+app.get('/metrics', async (c) => {
+	const token = process.env.METRICS_TOKEN?.trim();
+	if (token) {
+		const auth = c.req.header('authorization') ?? '';
+		if (auth !== `Bearer ${token}`) {
+			return c.text('Unauthorized', 401);
+		}
+	}
+	const body = await renderMetrics();
+	return c.body(body, 200, { 'Content-Type': metricsContentType() });
+});
+
+setAppVersion(APP_VERSION);
 
 const writeLimiter = rateLimit({
 	windowMs: 60 * 1000,
@@ -58,6 +93,10 @@ app.get('/api/health', (c) =>
 		version: APP_VERSION,
 		pngFonts: getSvgFontStatus(),
 		pngText: getSvgTextPathStatus(),
+		integrations: {
+			posthog: isPostHogEnabled(),
+			betterstack: betterStackStatus(),
+		},
 	}),
 );
 
@@ -87,6 +126,48 @@ app.get('/api/roster', async (c) => {
 				.map((u) => ({ id: u._id.toString(), displayName: u.displayName })),
 		})),
 	});
+});
+
+const SHELF_SIZE = 20;
+
+/**
+ * Public book club shelf - last N finished books, title + author + realm only.
+ * No private notes, no reader names, so it's safe to show unauthenticated.
+ */
+app.get('/api/shelf', async (c) => {
+	const config = getConfig();
+	const subs = await Submission.find(withActive());
+
+	const userIds = [...new Set(subs.map((s) => s.userId.toString()))];
+	const users = await User.find({ _id: { $in: userIds } });
+	const teamByUserId = new Map(
+		users.map((u) => [u._id.toString(), u.teamId]),
+	);
+
+	const withEffectiveDate = subs.map((sub) => ({
+		sub,
+		effectiveDate: sub.finishedAt
+			? new Date(sub.finishedAt)
+			: (sub.createdAt ?? new Date(0)),
+	}));
+
+	withEffectiveDate.sort(
+		(a, b) => b.effectiveDate.getTime() - a.effectiveDate.getTime(),
+	);
+
+	const shelf = withEffectiveDate.slice(0, SHELF_SIZE).map(({ sub, effectiveDate }) => {
+		const teamId = teamByUserId.get(sub.userId.toString());
+		const team = teamId ? config.teams.find((t) => t.id === teamId) : undefined;
+		return {
+			title: sub.bookTitle,
+			author: sub.bookAuthor,
+			realmName: team?.name ?? null,
+			realmColor: team?.color ?? null,
+			finishedAt: effectiveDate.toISOString(),
+		};
+	});
+
+	return c.json({ shelf });
 });
 
 app.get('/api/standings', async (c) => {
@@ -198,6 +279,7 @@ app.route('/api/submissions', submissionRoutes);
 app.use('/api/questions/*', writeLimiter);
 app.route('/api/questions', questionRoutes);
 app.route('/api/profile', profileRoutes);
+app.route('/api/readers', readerRoutes);
 app.use('/api/admin/*', adminLimiter);
 app.route('/api/admin', adminRoutes);
 
@@ -234,6 +316,11 @@ async function main() {
 	await connectDb();
 	await Promise.all([refreshPromptsCache(), refreshSiteSettingsCache()]);
 
+	// Checks every 60s whether it's time for the weekly (default Monday) scheduled publish.
+	startScheduledPublishChecker();
+	startMetricsGaugeRefresh();
+	startBetterStackHeartbeat();
+
 	const pngFonts = getSvgFontStatus();
 	const pngText = getSvgTextPathStatus();
 	if (!pngText.ready) {
@@ -248,9 +335,21 @@ async function main() {
 
 	serve({ fetch: app.fetch, port }, () => {
 		const mode = isProduction ? 'production' : 'development';
-		console.log(`Server running (${mode}) at http://localhost:${port}`);
+		log.info(`Server running (${mode}) at http://localhost:${port}`, {
+			posthog: isPostHogEnabled(),
+			betterstack: betterStackStatus(),
+		});
 	});
 }
+
+async function gracefulShutdown(signal: string) {
+	log.info(`Shutting down (${signal})…`);
+	await Promise.allSettled([shutdownPostHog(), flushBetterStackLogs()]);
+	process.exit(0);
+}
+
+process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
 
 main().catch((err) => {
 	console.error('Failed to start server:', err);

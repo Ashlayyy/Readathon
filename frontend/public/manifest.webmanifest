@@ -1,0 +1,24 @@
+{
+	"name": "The Crucible - Readathon",
+	"short_name": "The Crucible",
+	"description": "A team-based reading competition. Log books, earn points, sabotage rival realms.",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "portrait-primary",
+	"background_color": "#08070b",
+	"theme_color": "#d4634a",
+	"icons": [
+		{
+			"src": "/favicon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml",
+			"purpose": "any"
+		},
+		{
+			"src": "/favicon.ico",
+			"sizes": "32x32",
+			"type": "image/x-icon"
+		}
+	]
+}

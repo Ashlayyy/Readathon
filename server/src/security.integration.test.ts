@@ -105,6 +105,8 @@ describe('security manual checks', () => {
 			promptIds: [DRAFT_PROMPT_ID],
 			bonusCompetition: false,
 			bonusTeamPromptIds: [],
+			startedAt: '2026-07-01',
+			finishedAt: '2026-07-10',
 		};
 
 		const draftError = await validateSubmission(user, input);

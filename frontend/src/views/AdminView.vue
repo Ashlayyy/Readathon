@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { RouterLink } from 'vue-router';
 import {
 	api,
 	apiUrl,
@@ -9,7 +10,11 @@ import {
 	type AdminStandingsData,
 	type AdminSubmission,
 	type AdminUser,
+	type AuditLogEntry,
 	type PublishedWeek,
+	type PublishPreview,
+	type SeasonArchive,
+	type StandingsDigestDraft,
 	type StandingsHistoryEntry,
 	type StandingsBreakdown,
 	type TeamStanding,
@@ -19,11 +24,13 @@ import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue';
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue';
 import AdminStatsPanel from '../components/AdminStatsPanel.vue';
 import AdminAddSubmissionModal from '../components/AdminAddSubmissionModal.vue';
+import ReaderLink from '../components/ReaderLink.vue';
 import { useConfig } from '../composables/useConfig';
 import { useCopy } from '../composables/useCopy';
 import { useAdminCopy } from '../composables/useAdminCopy';
 import { useAuth } from '../composables/useAuth';
 import { useBodyScrollLock } from '../composables/useBodyScrollLock';
+import { useFocusTrap } from '../composables/useFocusTrap';
 
 const { config, loadConfig } = useConfig();
 const { t } = useCopy();
@@ -49,9 +56,64 @@ const discordWebhookUrl = ref('');
 const discordWebhookDraft = ref('');
 const discordRoleId = ref('');
 const discordRoleIdDraft = ref('');
+
+// Weekly digest draft + publish preview
+const digestDraft = ref<StandingsDigestDraft | null>(null);
+const digestDraftLoading = ref(false);
+const customDigestNote = ref('');
+const previewOpen = ref(false);
+const previewData = ref<PublishPreview | null>(null);
+const previewLoading = ref(false);
+
+// Scheduled (Monday) publish settings
+const scheduledPublishEnabled = ref(false);
+const scheduledPublishDay = ref(1);
+const scheduledPublishHour = ref(9);
+const scheduledPublishTimezone = ref('Europe/Amsterdam');
+const SCHEDULED_PUBLISH_DAYS = [
+	{ value: 0, label: 'Sunday' },
+	{ value: 1, label: 'Monday' },
+	{ value: 2, label: 'Tuesday' },
+	{ value: 3, label: 'Wednesday' },
+	{ value: 4, label: 'Thursday' },
+	{ value: 5, label: 'Friday' },
+	{ value: 6, label: 'Saturday' },
+];
+
+// Optional per-realm chat webhooks (separate from the weekly publish above)
+const teamChatHooksEnabled = ref(false);
+const teamChatWebhookDrafts = ref<Record<string, string>>({});
+
+// Audit log
+const auditLoaded = ref(false);
+const auditLog = ref<AuditLogEntry[]>([]);
+const auditTotal = ref(0);
+const auditOffset = ref(0);
+const AUDIT_PAGE_SIZE = 50;
+
+// Config draft/live
+const configDraftText = ref('');
+const configOverridesPreview = ref('');
+const configError = ref('');
+// Kept out of the template: a literal "}}" inside a mustache interpolation
+// confuses the Vue template tokenizer (it looks like the closing delimiter).
+const configDraftLeadFallback =
+	'Stage copy overrides as JSON (e.g. {"copy": {"faqPageTitle": "New title"}}), then publish to go live without a redeploy.';
+
+// Season archive
+const archiveSlug = ref('');
+const archiveTitle = ref('');
+const archiveFrom = ref('');
+const archiveTo = ref('');
+const archiveMessage = ref('');
+const seasonArchiveActive = ref<SeasonArchive>(null);
+
 const addUserOpen = ref(false);
 const newUser = ref({ displayName: '', email: '', teamId: '' });
 const submissions = ref<AdminSubmission[]>([]);
+const deletedSubmissions = ref<AdminSubmission[]>([]);
+const showDeleted = ref(false);
+const restoringId = ref('');
 const questions = ref<AdminQuestion[]>([]);
 const unreadQuestions = ref(0);
 const standings = ref<TeamStanding[] | null>(null);
@@ -98,6 +160,8 @@ const activeTab = ref<
 	| 'submissions'
 	| 'prompts'
 	| 'stats'
+	| 'audit'
+	| 'config'
 >('inbox');
 const addSubmissionOpen = ref(false);
 const navOpen = ref(false);
@@ -109,9 +173,21 @@ const anyModalOpen = computed(
 		!!editSubmission.value ||
 		!!viewSubmission.value ||
 		!!deleteTarget.value ||
-		addSubmissionOpen.value,
+		addSubmissionOpen.value ||
+		previewOpen.value,
 );
 useBodyScrollLock(anyModalOpen);
+
+const answerModalRef = ref<HTMLElement | null>(null);
+const addUserModalRef = ref<HTMLElement | null>(null);
+const deleteModalRef = ref<HTMLElement | null>(null);
+const previewModalRef = ref<HTMLElement | null>(null);
+const answerModalActive = computed(() => !!answerModal.value);
+const deleteModalActive = computed(() => !!deleteTarget.value);
+useFocusTrap(answerModalActive, answerModalRef);
+useFocusTrap(addUserOpen, addUserModalRef);
+useFocusTrap(deleteModalActive, deleteModalRef);
+useFocusTrap(previewOpen, previewModalRef);
 
 const filteredSubmissions = computed(() => {
 	const q = submissionSearch.value.trim().toLowerCase();
@@ -290,10 +366,81 @@ async function loadUsers(force = false) {
 
 async function loadSubmissions(force = false) {
 	if (submissionsLoaded.value && !force) return;
-	const s = await api<{ submissions: AdminSubmission[] }>('/admin/submissions');
+	const query = showDeleted.value ? '?includeDeleted=1' : '';
+	const s = await api<{
+		submissions: AdminSubmission[];
+		deletedSubmissions: AdminSubmission[];
+	}>(`/admin/submissions${query}`);
 	submissions.value = s.submissions;
+	deletedSubmissions.value = s.deletedSubmissions ?? [];
 	submissionsLoaded.value = true;
 	stats.value.submissions = s.submissions.length;
+}
+
+async function toggleShowDeleted() {
+	showDeleted.value = !showDeleted.value;
+	await loadSubmissions(true);
+}
+
+async function restoreSubmission(s: AdminSubmission) {
+	restoringId.value = s.id;
+	showMessage('');
+	try {
+		await api(`/admin/submissions/${s.id}/restore`, { method: 'POST' });
+		showMessage(msg('submissionRestored') || 'Submission restored.');
+		await Promise.all([loadSubmissions(true), loadStats()]);
+	} catch (e) {
+		showMessage(
+			e instanceof Error
+				? e.message
+				: msg('submissionRestoreFailed') || 'Failed to restore submission',
+			true,
+		);
+	} finally {
+		restoringId.value = '';
+	}
+}
+
+async function loadAuditLog(force = false) {
+	if (auditLoaded.value && !force) return;
+	const data = await api<{ total: number; limit: number; offset: number; logs: AuditLogEntry[] }>(
+		`/admin/audit-log?limit=${AUDIT_PAGE_SIZE}&offset=${auditOffset.value}`,
+	);
+	auditLog.value = data.logs;
+	auditTotal.value = data.total;
+	auditLoaded.value = true;
+}
+
+async function goAuditPage(offset: number) {
+	auditOffset.value = Math.max(0, offset);
+	await loadAuditLog(true);
+}
+
+function auditDetailText(detail: unknown): string {
+	if (detail == null) return '';
+	if (typeof detail === 'string') return detail;
+	try {
+		return JSON.stringify(detail);
+	} catch {
+		return String(detail);
+	}
+}
+
+async function downloadSubmissionsCsv() {
+	try {
+		const query = showDeleted.value ? '?includeDeleted=1' : '';
+		await downloadFile(`/admin/export/submissions.csv${query}`, 'submissions.csv');
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : msg('downloadFailed'), true);
+	}
+}
+
+async function downloadStandingsHistoryCsv() {
+	try {
+		await downloadFile('/admin/export/standings-history.csv', 'standings-history.csv');
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : msg('downloadFailed'), true);
+	}
 }
 
 async function loadQuestions(force = false) {
@@ -317,12 +464,148 @@ async function loadAdminSettings(force = false) {
 		discordWebhookDraft.value = settings.discordWebhookUrl ?? '';
 		discordRoleId.value = settings.discordRoleId ?? '';
 		discordRoleIdDraft.value = settings.discordRoleId ?? '';
+		scheduledPublishEnabled.value = settings.scheduledPublishEnabled ?? false;
+		scheduledPublishDay.value = settings.scheduledPublishDay ?? 1;
+		scheduledPublishHour.value = settings.scheduledPublishHour ?? 9;
+		scheduledPublishTimezone.value =
+			settings.scheduledPublishTimezone ?? 'Europe/Amsterdam';
+		teamChatHooksEnabled.value = settings.teamChatHooksEnabled ?? false;
+		teamChatWebhookDrafts.value = { ...settings.teamChatWebhookUrls };
+		applySettingsToConfigForms(settings);
 		settingsLoaded.value = true;
 	} catch (e) {
 		showMessage(
 			e instanceof Error ? e.message : msg('settingsLoadFailed'),
 			true,
 		);
+	}
+}
+
+function applySettingsToConfigForms(settings: AdminSiteSettings) {
+	configDraftText.value = settings.configDraft
+		? JSON.stringify(settings.configDraft, null, 2)
+		: '';
+	configOverridesPreview.value = settings.configOverrides
+		? JSON.stringify(settings.configOverrides, null, 2)
+		: '';
+	const archive = settings.seasonArchive ?? null;
+	seasonArchiveActive.value = archive;
+	archiveSlug.value = archive?.slug ?? '';
+	archiveTitle.value = archive?.title ?? '';
+	archiveFrom.value = archive?.from ?? '';
+	archiveTo.value = archive?.to ?? '';
+	archiveMessage.value = archive?.message ?? '';
+}
+
+async function saveConfigDraft() {
+	configError.value = '';
+	let parsed: unknown = null;
+	if (configDraftText.value.trim()) {
+		try {
+			parsed = JSON.parse(configDraftText.value);
+		} catch {
+			configError.value = 'That draft is not valid JSON.';
+			return;
+		}
+	}
+	loading.value = 'config-draft';
+	showMessage('');
+	try {
+		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings', {
+			method: 'PATCH',
+			body: JSON.stringify({ configDraft: parsed }),
+		});
+		applySettingsToConfigForms(settings);
+		showMessage(msg('draftSaved') || 'Draft saved.');
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : msg('draftSaveFailed') || 'Failed to save draft', true);
+	} finally {
+		loading.value = '';
+	}
+}
+
+async function publishConfigDraftToLive() {
+	loading.value = 'config-publish';
+	showMessage('');
+	try {
+		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/config/publish-draft', {
+			method: 'POST',
+		});
+		applySettingsToConfigForms(settings);
+		await loadConfig(true);
+		showMessage(msg('draftPublished') || 'Draft published to live.');
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : msg('draftPublishFailed') || 'Failed to publish draft', true);
+	} finally {
+		loading.value = '';
+	}
+}
+
+async function discardDraft() {
+	if (!confirm(confirmMsg('discardDraft') || 'Discard the staged draft? This cannot be undone.')) return;
+	loading.value = 'config-discard';
+	showMessage('');
+	try {
+		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/config/discard-draft', {
+			method: 'POST',
+		});
+		applySettingsToConfigForms(settings);
+		showMessage(msg('draftDiscarded') || 'Draft discarded.');
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : 'Failed to discard draft', true);
+	} finally {
+		loading.value = '';
+	}
+}
+
+async function clearLiveOverrides() {
+	if (!confirm(confirmMsg('clearOverrides') || 'Clear live copy overrides? The site will revert to the static copy.')) return;
+	loading.value = 'config-clear';
+	showMessage('');
+	try {
+		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/config/clear-overrides', {
+			method: 'POST',
+		});
+		applySettingsToConfigForms(settings);
+		await loadConfig(true);
+		showMessage(msg('overridesCleared') || 'Live overrides cleared.');
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : 'Failed to clear overrides', true);
+	} finally {
+		loading.value = '';
+	}
+}
+
+async function saveSeasonArchive(clear = false) {
+	loading.value = clear ? 'archive-clear' : 'archive-save';
+	showMessage('');
+	try {
+		const seasonArchive = clear
+			? null
+			: {
+					slug: archiveSlug.value.trim(),
+					title: archiveTitle.value.trim(),
+					from: archiveFrom.value.trim(),
+					to: archiveTo.value.trim(),
+					message: archiveMessage.value.trim(),
+					publishedStandingsIds: seasonArchiveActive.value?.publishedStandingsIds ?? [],
+				};
+		if (!clear && !seasonArchive?.slug) {
+			showMessage('Season archive needs a slug.', true);
+			loading.value = '';
+			return;
+		}
+		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings', {
+			method: 'PATCH',
+			body: JSON.stringify({ seasonArchive }),
+		});
+		applySettingsToConfigForms(settings);
+		await loadConfig(true);
+		showMessage(clear ? 'Season archive cleared.' : 'Season archive saved.');
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : 'Failed to save season archive', true);
+	} finally {
+		loading.value = '';
 	}
 }
 
@@ -333,7 +616,13 @@ async function ensureTabData(tab: typeof activeTab.value) {
 	else if (tab === 'submissions')
 		await Promise.all([loadSubmissions(), loadUsers()]);
 	else if (tab === 'standings')
-		await Promise.all([loadStandings(true), loadAdminSettings()]);
+		await Promise.all([
+			loadStandings(true),
+			loadAdminSettings(),
+			loadDigestDraft(true),
+		]);
+	else if (tab === 'audit') await loadAuditLog();
+	else if (tab === 'config') await loadAdminSettings();
 	// prompts: AdminPromptsPanel loads itself when mounted (v-if)
 }
 
@@ -628,9 +917,81 @@ function clearDiscordWebhook() {
 	void saveDiscordWebhook();
 }
 
+async function testDiscordWebhook() {
+	loading.value = 'discord-test';
+	showMessage('');
+	try {
+		await api('/admin/discord/test-webhook', { method: 'POST' });
+		showMessage(msg('webhookTestSent'));
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : msg('webhookTestFailed'), true);
+	} finally {
+		loading.value = '';
+	}
+}
+
 function clearDiscordRoleId() {
 	discordRoleIdDraft.value = '';
 	void saveDiscordWebhook();
+}
+
+async function saveScheduledPublishSettings() {
+	loading.value = 'scheduled-publish';
+	showMessage('');
+	try {
+		const { settings } = await api<{ settings: AdminSiteSettings }>(
+			'/admin/settings',
+			{
+				method: 'PATCH',
+				body: JSON.stringify({
+					scheduledPublishEnabled: scheduledPublishEnabled.value,
+					scheduledPublishDay: scheduledPublishDay.value,
+					scheduledPublishHour: scheduledPublishHour.value,
+					scheduledPublishTimezone:
+						scheduledPublishTimezone.value.trim() || 'Europe/Amsterdam',
+				}),
+			},
+		);
+		scheduledPublishEnabled.value = settings.scheduledPublishEnabled;
+		scheduledPublishDay.value = settings.scheduledPublishDay;
+		scheduledPublishHour.value = settings.scheduledPublishHour;
+		scheduledPublishTimezone.value = settings.scheduledPublishTimezone;
+		showMessage('Scheduled publish settings saved.');
+	} catch (e) {
+		showMessage(
+			e instanceof Error ? e.message : 'Failed to save scheduled publish settings',
+			true,
+		);
+	} finally {
+		loading.value = '';
+	}
+}
+
+async function saveTeamChatSettings() {
+	loading.value = 'team-chat';
+	showMessage('');
+	try {
+		const { settings } = await api<{ settings: AdminSiteSettings }>(
+			'/admin/settings',
+			{
+				method: 'PATCH',
+				body: JSON.stringify({
+					teamChatHooksEnabled: teamChatHooksEnabled.value,
+					teamChatWebhookUrls: { ...teamChatWebhookDrafts.value },
+				}),
+			},
+		);
+		teamChatHooksEnabled.value = settings.teamChatHooksEnabled;
+		teamChatWebhookDrafts.value = { ...settings.teamChatWebhookUrls };
+		showMessage('Realm chat webhook settings saved.');
+	} catch (e) {
+		showMessage(
+			e instanceof Error ? e.message : 'Failed to save realm chat settings',
+			true,
+		);
+	} finally {
+		loading.value = '';
+	}
 }
 
 function openAddUser() {
@@ -777,6 +1138,48 @@ async function loadStandings(force = false) {
 	}
 }
 
+async function loadDigestDraft(force = false) {
+	if (digestDraft.value && !force) return;
+	digestDraftLoading.value = true;
+	try {
+		digestDraft.value = await api<StandingsDigestDraft>(
+			'/admin/standings/digest-draft',
+		);
+		customDigestNote.value = digestDraft.value.draftText;
+	} catch (e) {
+		showMessage(
+			e instanceof Error ? e.message : 'Failed to load digest draft',
+			true,
+		);
+	} finally {
+		digestDraftLoading.value = false;
+	}
+}
+
+async function openPublishPreview() {
+	previewLoading.value = true;
+	showMessage('');
+	try {
+		previewData.value = await api<PublishPreview>(
+			'/admin/standings/publish-preview',
+		);
+		previewOpen.value = true;
+	} catch (e) {
+		showMessage(e instanceof Error ? e.message : 'Failed to load preview', true);
+	} finally {
+		previewLoading.value = false;
+	}
+}
+
+function closePreview() {
+	previewOpen.value = false;
+}
+
+async function confirmPublishFromPreview() {
+	previewOpen.value = false;
+	await publishThisWeek();
+}
+
 async function publishThisWeek() {
 	loading.value = 'publish';
 	showMessage('');
@@ -793,7 +1196,7 @@ async function publishThisWeek() {
 		showMessage(
 			msg('published', { weekLabel: result.weekLabel, emailNote, discordNote }),
 		);
-		await loadStandings(true);
+		await Promise.all([loadStandings(true), loadDigestDraft(true)]);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('publishFailed'), true);
 	} finally {
@@ -933,6 +1336,20 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					>
 						{{ section('tabs').prompts }}
 					</button>
+					<button
+						type="button"
+						:class="{ active: activeTab === 'audit' }"
+						@click="setTab('audit')"
+					>
+						{{ section('tabs').audit ?? 'Audit' }}
+					</button>
+					<button
+						type="button"
+						:class="{ active: activeTab === 'config' }"
+						@click="setTab('config')"
+					>
+						{{ section('tabs').config ?? 'Config' }}
+					</button>
 				</nav>
 			</aside>
 
@@ -1056,11 +1473,14 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 				</section>
 
 				<Teleport to="body">
-					<div v-if="answerModal" class="modal-backdrop">
+					<div v-if="answerModal" class="modal-backdrop" @keydown.esc="closeAnswerModal">
 						<div
+							ref="answerModalRef"
 							class="modal card modal-flush"
 							role="dialog"
+							aria-modal="true"
 							aria-labelledby="answer-modal-title"
+							tabindex="-1"
 						>
 							<header class="modal-header">
 								<h2 id="answer-modal-title">
@@ -1108,6 +1528,65 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 												: answerModal.answer
 													? section('inbox').updateAnswer
 													: section('inbox').sendAnswer
+										}}
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</Teleport>
+
+				<Teleport to="body">
+					<div
+						v-if="previewOpen && previewData"
+						class="modal-backdrop"
+						@keydown.esc="closePreview"
+					>
+						<div
+							ref="previewModalRef"
+							class="modal card modal-flush publish-preview-modal"
+							role="dialog"
+							aria-modal="true"
+							aria-labelledby="publish-preview-title"
+							tabindex="-1"
+						>
+							<header class="modal-header">
+								<h2 id="publish-preview-title">
+									Publish preview — {{ previewData.weekLabel }}
+								</h2>
+							</header>
+							<div class="modal-body">
+								<img
+									:src="apiUrl(previewData.standingsSvgUrl)"
+									alt="Standings preview"
+									class="preview-image"
+								/>
+								<h3>This week's vibes</h3>
+								<pre class="preview-draft-text">{{
+									previewData.digest.draftText
+								}}</pre>
+								<p class="webhook-status">
+									Notifies: {{ previewData.whoGetsNotified.emails }} email{{
+										previewData.whoGetsNotified.emails === 1 ? '' : 's'
+									}}
+									<span v-if="previewData.whoGetsNotified.discord">
+										+ Discord</span
+									>
+								</p>
+								<div class="modal-actions">
+									<button type="button" class="btn btn-ghost" @click="closePreview">
+										Cancel
+									</button>
+									<button
+										type="button"
+										class="btn btn-primary"
+										:disabled="loading === 'publish'"
+										@click="confirmPublishFromPreview"
+									>
+										{{
+											loading === 'publish'
+												? section('standings').publishing
+												: 'Confirm publish'
 										}}
 									</button>
 								</div>
@@ -1189,6 +1668,39 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
 				<!-- Standings -->
 				<section v-if="activeTab === 'standings'" class="admin-section">
+					<section
+						v-if="digestDraft"
+						class="card admin-section digest-draft-section"
+					>
+						<h2>This week's digest draft — {{ digestDraft.weekLabel }}</h2>
+						<p class="section-desc">
+							Auto-generated from the live (unpublished) standings snapshot.
+							Editing below is just for your own reference — publishing always
+							uses the live data at that moment, not this text.
+						</p>
+						<div v-if="digestDraft.leaderGap" class="digest-leader-gap">
+							🏆 <strong>{{ digestDraft.leaderGap.leaderTeamName }}</strong>
+							leads by
+							<strong>{{ digestDraft.leaderGap.gapXp }} XP</strong>
+							over {{ digestDraft.leaderGap.secondTeamName }}
+						</div>
+						<textarea
+							v-model="customDigestNote"
+							rows="7"
+							class="digest-textarea"
+						/>
+						<p class="webhook-status">
+							Publishing will notify:
+							{{ digestDraft.notify.emailCount }} email{{
+								digestDraft.notify.emailCount === 1 ? '' : 's'
+							}}
+							<span v-if="digestDraft.notify.discordConfigured"> + Discord</span>
+						</p>
+					</section>
+					<div v-else-if="digestDraftLoading" class="alert alert-info">
+						Loading digest draft…
+					</div>
+
 					<div class="card standings-actions">
 						<div class="standings-actions-top">
 							<div>
@@ -1198,6 +1710,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								</p>
 							</div>
 							<div class="btn-row">
+								<button
+									class="btn btn-secondary"
+									:disabled="previewLoading || !standings?.length"
+									@click="openPublishPreview"
+								>
+									{{ previewLoading ? 'Loading preview…' : 'Preview' }}
+								</button>
 								<button
 									class="btn btn-primary"
 									:disabled="loading === 'publish' || !standings?.length"
@@ -1311,6 +1830,22 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								>
 									Remove ping role
 								</button>
+								<button
+									type="button"
+									class="btn btn-secondary"
+									:disabled="
+										loading === 'discord-webhook' ||
+										loading === 'discord-test' ||
+										!discordWebhookUrl
+									"
+									@click="testDiscordWebhook"
+								>
+									{{
+										loading === 'discord-test'
+											? section('standings').testingWebhook
+											: section('standings').testWebhook
+									}}
+								</button>
 							</div>
 							<p v-if="discordWebhookUrl" class="webhook-status">
 								{{ section('standings').webhookConfigured }}
@@ -1318,7 +1853,111 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							<p v-if="discordRoleId" class="webhook-status">
 								Ping role configured.
 							</p>
+							<p class="webhook-status">
+								{{ section('standings').testWebhookHint }}
+							</p>
 						</form>
+					</section>
+
+					<section class="card admin-section scheduled-publish-section">
+						<h2>Scheduled publish</h2>
+						<p class="section-desc">
+							Automatically publish standings weekly - the server checks every
+							minute for the day/hour/timezone configured below.
+						</p>
+						<label class="setting-toggle">
+							<input
+								v-model="scheduledPublishEnabled"
+								type="checkbox"
+								:disabled="loading === 'scheduled-publish'"
+								@change="saveScheduledPublishSettings"
+							/>
+							<span>Enable weekly scheduled publish</span>
+						</label>
+						<div class="scheduled-publish-fields">
+							<label>
+								Day
+								<select
+									v-model.number="scheduledPublishDay"
+									:disabled="loading === 'scheduled-publish'"
+									@change="saveScheduledPublishSettings"
+								>
+									<option
+										v-for="day in SCHEDULED_PUBLISH_DAYS"
+										:key="day.value"
+										:value="day.value"
+									>
+										{{ day.label }}
+									</option>
+								</select>
+							</label>
+							<label>
+								Hour (0–23, local to timezone)
+								<input
+									v-model.number="scheduledPublishHour"
+									type="number"
+									min="0"
+									max="23"
+									:disabled="loading === 'scheduled-publish'"
+									@change="saveScheduledPublishSettings"
+								/>
+							</label>
+							<label>
+								Timezone
+								<input
+									v-model="scheduledPublishTimezone"
+									type="text"
+									placeholder="Europe/Amsterdam"
+									autocomplete="off"
+									spellcheck="false"
+									:disabled="loading === 'scheduled-publish'"
+									@change="saveScheduledPublishSettings"
+								/>
+							</label>
+						</div>
+					</section>
+
+					<section class="card admin-section team-chat-section">
+						<h2>Realm chat webhooks (optional)</h2>
+						<p class="section-desc">
+							Separate from the weekly publish above - posts a short note to
+							each realm's own Discord channel whenever a member logs a book.
+							Optional; feel free to leave this off and revisit later.
+						</p>
+						<label class="setting-toggle">
+							<input
+								v-model="teamChatHooksEnabled"
+								type="checkbox"
+								:disabled="loading === 'team-chat'"
+								@change="saveTeamChatSettings"
+							/>
+							<span>Enable realm Discord threads/webhooks</span>
+						</label>
+						<div v-if="config" class="team-chat-urls">
+							<label v-for="team in config.teams" :key="team.id">
+								{{ team.icon }} {{ team.name }}
+								<input
+									v-model="teamChatWebhookDrafts[team.id]"
+									type="url"
+									placeholder="https://discord.com/api/webhooks/..."
+									autocomplete="off"
+									spellcheck="false"
+									:disabled="loading === 'team-chat'"
+								/>
+							</label>
+							<button
+								type="button"
+								class="btn btn-primary btn-sm"
+								:disabled="loading === 'team-chat'"
+								@click="saveTeamChatSettings"
+							>
+								{{
+									loading === 'team-chat'
+										? 'Saving…'
+										: 'Save realm webhooks'
+								}}
+							</button>
+						</div>
 					</section>
 
 					<div v-if="loading === 'standings'" class="alert alert-info">
@@ -1339,24 +1978,36 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					/>
 
 					<section class="card admin-section history-section">
-						<h2>{{ section('standings').historyTitle }}</h2>
-						<p class="section-desc">{{ section('standings').historyLead }}</p>
+						<div class="section-header-row">
+							<div>
+								<h2>{{ section('standings').historyTitle }}</h2>
+								<p class="section-desc">{{ section('standings').historyLead }}</p>
+							</div>
+							<button
+								type="button"
+								class="btn btn-secondary btn-sm"
+								:disabled="standingsHistory.length === 0"
+								@click="downloadStandingsHistoryCsv"
+							>
+								{{ section('standings').exportCsv ?? 'Export CSV' }}
+							</button>
+						</div>
 
 						<div v-if="standingsHistory.length === 0" class="empty-inbox">
 							<p>{{ section('standings').historyEmpty }}</p>
 						</div>
 
 						<div v-else class="table-wrap">
-							<table class="data-table">
-								<thead>
-									<tr>
-										<th>{{ section('standings').colWhen }}</th>
-										<th>{{ section('standings').colAction }}</th>
-										<th>{{ section('standings').colWeek }}</th>
-										<th>{{ section('standings').colBy }}</th>
-										<th></th>
-									</tr>
-								</thead>
+						<table class="data-table" aria-label="Standings publish history">
+							<thead>
+								<tr>
+									<th scope="col">{{ section('standings').colWhen }}</th>
+									<th scope="col">{{ section('standings').colAction }}</th>
+									<th scope="col">{{ section('standings').colWeek }}</th>
+									<th scope="col">{{ section('standings').colBy }}</th>
+									<th scope="col"><span class="sr-only">Download</span></th>
+								</tr>
+							</thead>
 								<tbody>
 									<tr v-for="entry in standingsHistory" :key="entry.id">
 										<td>{{ new Date(entry.createdAt).toLocaleString() }}</td>
@@ -1422,20 +2073,22 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						</button>
 					</div>
 					<div class="table-wrap">
-						<table class="data-table">
+						<table class="data-table" aria-label="Participants">
 							<thead>
 								<tr>
-									<th>{{ section('users').colName }}</th>
-									<th>{{ section('users').colEmail }}</th>
-									<th>{{ section('users').colTeam }}</th>
-									<th>{{ section('users').colStatus }}</th>
-									<th>{{ section('users').colAdmin }}</th>
-									<th>{{ section('users').colJoined }}</th>
+									<th scope="col">{{ section('users').colName }}</th>
+									<th scope="col">{{ section('users').colEmail }}</th>
+									<th scope="col">{{ section('users').colTeam }}</th>
+									<th scope="col">{{ section('users').colStatus }}</th>
+									<th scope="col">{{ section('users').colAdmin }}</th>
+									<th scope="col">{{ section('users').colJoined }}</th>
 								</tr>
 							</thead>
 							<tbody>
 								<tr v-for="u in users" :key="u.id">
-									<td>{{ u.displayName }}</td>
+									<td>
+										<ReaderLink :id="u.id" :name="u.displayName" />
+									</td>
 									<td>{{ u.email }}</td>
 									<td>
 										<select
@@ -1507,12 +2160,14 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 				</section>
 
 				<!-- Add user modal -->
-				<div v-if="addUserOpen" class="modal-backdrop">
+				<div v-if="addUserOpen" class="modal-backdrop" @keydown.esc="closeAddUser">
 					<div
+						ref="addUserModalRef"
 						class="modal card add-user-modal"
 						role="dialog"
 						aria-modal="true"
 						aria-labelledby="add-user-title"
+						tabindex="-1"
 					>
 						<h2 id="add-user-title">{{ section('users').addTitle }}</h2>
 						<p class="section-desc">{{ section('users').addLead }}</p>
@@ -1582,14 +2237,32 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							<h2>{{ section('submissions').title }}</h2>
 							<p class="section-desc">{{ section('submissions').addLead }}</p>
 						</div>
-						<button
-							type="button"
-							class="btn btn-primary btn-sm"
-							@click="openAddSubmission"
-						>
-							{{ section('submissions').addButton }}
-						</button>
+						<div class="btn-row">
+							<button
+								type="button"
+								class="btn btn-secondary btn-sm"
+								@click="downloadSubmissionsCsv"
+							>
+								{{ section('submissions').exportCsv ?? 'Export CSV' }}
+							</button>
+							<button
+								type="button"
+								class="btn btn-primary btn-sm"
+								@click="openAddSubmission"
+							>
+								{{ section('submissions').addButton }}
+							</button>
+						</div>
 					</div>
+
+					<label class="setting-toggle show-deleted-toggle">
+						<input
+							type="checkbox"
+							:checked="showDeleted"
+							@change="toggleShowDeleted"
+						/>
+						<span>{{ section('submissions').showDeleted ?? 'Show deleted submissions' }}</span>
+					</label>
 
 					<div class="submission-filters">
 						<input
@@ -1626,10 +2299,10 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					</div>
 
 					<div class="table-wrap">
-						<table class="data-table submissions-table">
-							<thead>
+					<table class="data-table submissions-table" aria-label="Submissions">
+						<thead>
 								<tr>
-									<th :aria-sort="submissionSortAria('book')">
+									<th scope="col" :aria-sort="submissionSortAria('book')">
 										<button
 											type="button"
 											class="sort-th"
@@ -1642,7 +2315,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 											}}</span>
 										</button>
 									</th>
-									<th :aria-sort="submissionSortAria('reader')">
+									<th scope="col" :aria-sort="submissionSortAria('reader')">
 										<button
 											type="button"
 											class="sort-th"
@@ -1655,7 +2328,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 											}}</span>
 										</button>
 									</th>
-									<th :aria-sort="submissionSortAria('type')">
+									<th scope="col" :aria-sort="submissionSortAria('type')">
 										<button
 											type="button"
 											class="sort-th"
@@ -1668,7 +2341,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 											}}</span>
 										</button>
 									</th>
-									<th :aria-sort="submissionSortAria('affects')">
+									<th scope="col" :aria-sort="submissionSortAria('affects')">
 										<button
 											type="button"
 											class="sort-th"
@@ -1681,7 +2354,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 											}}</span>
 										</button>
 									</th>
-									<th :aria-sort="submissionSortAria('impact')">
+									<th scope="col" :aria-sort="submissionSortAria('impact')">
 										<button
 											type="button"
 											class="sort-th"
@@ -1694,7 +2367,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 											}}</span>
 										</button>
 									</th>
-									<th :aria-sort="submissionSortAria('date')">
+									<th scope="col" :aria-sort="submissionSortAria('date')">
 										<button
 											type="button"
 											class="sort-th"
@@ -1707,7 +2380,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 											}}</span>
 										</button>
 									</th>
-									<th>{{ section('submissions').colActions }}</th>
+									<th scope="col">{{ section('submissions').colActions }}</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -1734,8 +2407,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 										<br />
 										<small>{{ s.bookAuthor }} · {{ s.pageCount }}pg</small>
 									</td>
-									<td>
-										{{ s.userName }}
+									<td @click.stop>
+										<ReaderLink
+											v-if="s.userId"
+											:id="s.userId"
+											:name="s.userName"
+										/>
+										<template v-else>{{ s.userName }}</template>
 									</td>
 									<td>
 										<span
@@ -1871,6 +2549,68 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						.
 						{{ section('submissions').hint }}
 					</p>
+
+					<div v-if="showDeleted" class="deleted-submissions">
+						<h3>{{ section('submissions').deletedTitle ?? 'Deleted submissions' }}</h3>
+						<div v-if="deletedSubmissions.length === 0" class="empty-inbox">
+							<p>{{ section('submissions').deletedEmpty ?? 'Nothing deleted.' }}</p>
+						</div>
+						<div v-else class="table-wrap">
+							<table class="data-table" aria-label="Deleted submissions">
+								<thead>
+									<tr>
+										<th scope="col">{{ section('submissions').colBook }}</th>
+										<th scope="col">{{ section('submissions').colReader }}</th>
+										<th scope="col">
+											{{ section('submissions').colDeletedBy ?? 'Deleted by' }}
+										</th>
+										<th scope="col">
+											{{ section('submissions').colDeletedAt ?? 'Deleted at' }}
+										</th>
+										<th scope="col"><span class="sr-only">Restore</span></th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="s in deletedSubmissions" :key="s.id" tabindex="0">
+										<td>
+											<strong>{{ s.bookTitle }}</strong>
+											<br />
+											<small>{{ s.bookAuthor }} · {{ s.pageCount }}pg</small>
+										</td>
+										<td>
+											<ReaderLink
+												v-if="s.userId"
+												:id="s.userId"
+												:name="s.userName"
+											/>
+											<template v-else>{{ s.userName }}</template>
+										</td>
+										<td>{{ s.deletedByName ?? '-' }}</td>
+										<td>
+											<time v-if="s.deletedAt">{{
+												new Date(s.deletedAt).toLocaleString()
+											}}</time>
+											<span v-else>-</span>
+										</td>
+										<td>
+											<button
+												type="button"
+												class="btn btn-secondary btn-sm"
+												:disabled="restoringId === s.id"
+												@click="restoreSubmission(s)"
+											>
+												{{
+													restoringId === s.id
+														? 'Restoring…'
+														: (section('submissions').restore ?? 'Restore')
+												}}
+											</button>
+										</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</div>
 				</section>
 
 				<AdminStatsPanel
@@ -1891,6 +2631,205 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						}
 					"
 				/>
+
+				<!-- Audit log -->
+				<section v-if="activeTab === 'audit'" class="card admin-section">
+					<h2>{{ section('tabs').audit ?? 'Audit log' }}</h2>
+					<p class="section-desc">
+						{{
+							section('audit').lead ??
+							'Every admin action that changes data, newest first. Click a row and use arrow keys / Tab to review.'
+						}}
+					</p>
+
+					<div v-if="!auditLoaded" class="page-state" style="min-height: 10rem">
+						<div class="page-spinner" role="status" aria-label="Loading" />
+						<p>Loading audit log…</p>
+					</div>
+
+					<template v-else>
+						<div v-if="auditLog.length === 0" class="empty-inbox">
+							<p>{{ section('audit').empty ?? 'No audit entries yet.' }}</p>
+						</div>
+						<div v-else class="table-wrap">
+							<table class="data-table" aria-label="Audit log">
+								<caption class="sr-only">
+									Admin actions log, newest first
+								</caption>
+								<thead>
+									<tr>
+										<th scope="col">{{ section('audit').colWhen ?? 'When' }}</th>
+										<th scope="col">{{ section('audit').colWho ?? 'Who' }}</th>
+										<th scope="col">{{ section('audit').colAction ?? 'Action' }}</th>
+										<th scope="col">{{ section('audit').colEntity ?? 'Entity' }}</th>
+										<th scope="col">{{ section('audit').colDetail ?? 'Detail' }}</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="entry in auditLog" :key="entry.id" tabindex="0">
+										<td>{{ new Date(entry.createdAt).toLocaleString() }}</td>
+										<td>{{ entry.actorName }}</td>
+										<td>
+											<span class="badge badge-negative">{{ entry.action }}</span>
+										</td>
+										<td>
+											<template v-if="entry.entityType">
+												{{ entry.entityType }}
+												<small v-if="entry.entityId">#{{ entry.entityId.slice(-6) }}</small>
+											</template>
+											<span v-else>-</span>
+										</td>
+										<td class="audit-detail">{{ auditDetailText(entry.detail) }}</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+
+						<nav
+							v-if="auditTotal > AUDIT_PAGE_SIZE"
+							class="submissions-pagination"
+							aria-label="Audit log pages"
+						>
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								:disabled="auditOffset === 0"
+								@click="goAuditPage(auditOffset - AUDIT_PAGE_SIZE)"
+							>
+								Previous
+							</button>
+							<p class="hint">
+								{{ auditOffset + 1 }}–{{ Math.min(auditOffset + AUDIT_PAGE_SIZE, auditTotal) }}
+								of {{ auditTotal }}
+							</p>
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								:disabled="auditOffset + AUDIT_PAGE_SIZE >= auditTotal"
+								@click="goAuditPage(auditOffset + AUDIT_PAGE_SIZE)"
+							>
+								Next
+							</button>
+						</nav>
+					</template>
+				</section>
+
+				<!-- Config draft/live + season archive -->
+				<section v-if="activeTab === 'config'" class="admin-grid">
+					<section class="card admin-section config-draft-section">
+						<h2>{{ section('config').draftTitle ?? 'Copy draft → live' }}</h2>
+						<p class="section-desc">
+							{{ section('config').draftLead ?? configDraftLeadFallback }}
+						</p>
+						<label class="field">
+							<span class="sr-only">Draft JSON</span>
+							<textarea
+								v-model="configDraftText"
+								rows="10"
+								spellcheck="false"
+								class="config-json-editor"
+								placeholder='{"copy": {"faqPageTitle": "New title"}}'
+							/>
+						</label>
+						<p v-if="configError" class="alert alert-error">{{ configError }}</p>
+						<div class="btn-row">
+							<button
+								type="button"
+								class="btn btn-primary"
+								:disabled="loading === 'config-draft'"
+								@click="saveConfigDraft"
+							>
+								{{ loading === 'config-draft' ? 'Saving…' : 'Save draft' }}
+							</button>
+							<button
+								type="button"
+								class="btn btn-secondary"
+								:disabled="loading === 'config-publish'"
+								@click="publishConfigDraftToLive"
+							>
+								{{ loading === 'config-publish' ? 'Publishing…' : 'Publish draft to live' }}
+							</button>
+							<button
+								type="button"
+								class="btn btn-ghost"
+								:disabled="loading === 'config-discard' || !configDraftText"
+								@click="discardDraft"
+							>
+								Discard draft
+							</button>
+							<button
+								type="button"
+								class="btn btn-ghost"
+								:disabled="loading === 'config-clear' || !configOverridesPreview"
+								@click="clearLiveOverrides"
+							>
+								Clear live overrides
+							</button>
+						</div>
+						<p v-if="configOverridesPreview" class="hint">
+							Currently live: <code>{{ configOverridesPreview }}</code>
+						</p>
+					</section>
+
+					<section class="card admin-section season-archive-section">
+						<h2>{{ section('config').archiveTitle ?? 'Season archive' }}</h2>
+						<p class="section-desc">
+							{{
+								section('config').archiveLead ??
+								'When set, /archive/:slug shows a frozen, read-only page for readers once the season wraps.'
+							}}
+						</p>
+						<form class="add-user-form" @submit.prevent="saveSeasonArchive(false)">
+							<label>
+								Slug
+								<input v-model="archiveSlug" type="text" placeholder="realmathon-2026" />
+							</label>
+							<label>
+								Title
+								<input v-model="archiveTitle" type="text" placeholder="Realmathon 2026" />
+							</label>
+							<label>
+								From (date)
+								<input v-model="archiveFrom" type="date" />
+							</label>
+							<label>
+								To (date)
+								<input v-model="archiveTo" type="date" />
+							</label>
+							<label>
+								Message
+								<textarea
+									v-model="archiveMessage"
+									rows="3"
+									placeholder="This season is closed. Thanks for reading with us!"
+								/>
+							</label>
+							<div class="modal-actions">
+								<button
+									type="button"
+									class="btn btn-ghost"
+									:disabled="loading === 'archive-clear' || !seasonArchiveActive"
+									@click="saveSeasonArchive(true)"
+								>
+									Clear archive
+								</button>
+								<button
+									type="submit"
+									class="btn btn-primary"
+									:disabled="loading === 'archive-save'"
+								>
+									{{ loading === 'archive-save' ? 'Saving…' : 'Save archive' }}
+								</button>
+							</div>
+						</form>
+						<p v-if="seasonArchiveActive" class="hint">
+							Live at
+							<RouterLink :to="`/archive/${seasonArchiveActive.slug}`">/archive/{{
+								seasonArchiveActive.slug
+							}}</RouterLink>
+						</p>
+					</section>
+				</section>
 			</div>
 		</div>
 
@@ -1911,12 +2850,14 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 			@error="(m) => showMessage(m, true)"
 		/>
 
-		<div v-if="deleteTarget" class="modal-backdrop">
+		<div v-if="deleteTarget" class="modal-backdrop" @keydown.esc="cancelDeleteSubmission">
 			<div
+				ref="deleteModalRef"
 				class="modal card delete-confirm-modal"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="delete-sub-title"
+				tabindex="-1"
 			>
 				<h2 id="delete-sub-title">Delete submission?</h2>
 				<p class="section-desc">
@@ -2886,5 +3827,132 @@ small {
 	margin: 0;
 	font-size: 0.88rem;
 	color: var(--realm-text-muted);
+}
+
+.digest-draft-section {
+	margin-bottom: 1.25rem;
+}
+
+.digest-leader-gap {
+	margin: 0 0 0.85rem;
+	font-size: 0.92rem;
+	color: var(--realm-text-muted);
+}
+
+.digest-leader-gap strong {
+	color: var(--realm-text);
+}
+
+.digest-textarea {
+	width: 100%;
+	resize: vertical;
+	font-family: var(--font-body);
+	font-size: 0.88rem;
+	line-height: 1.55;
+	color: var(--realm-text);
+	background: var(--realm-bg);
+	border: 1px solid var(--realm-border);
+	border-radius: var(--radius);
+	padding: 0.75rem;
+	margin-bottom: 0.75rem;
+}
+
+.scheduled-publish-section,
+.team-chat-section {
+	margin-top: 1rem;
+	margin-bottom: 1.25rem;
+}
+
+.scheduled-publish-fields {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+	gap: 0.85rem;
+	margin-top: 0.5rem;
+}
+
+.scheduled-publish-fields label,
+.team-chat-urls label {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	font-size: 0.88rem;
+	color: var(--realm-text-muted);
+}
+
+.team-chat-urls {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	margin-top: 0.5rem;
+}
+
+.publish-preview-modal {
+	max-width: 40rem;
+}
+
+.preview-image {
+	width: 100%;
+	border-radius: var(--radius);
+	border: 1px solid var(--realm-border);
+	background: var(--realm-bg);
+	margin-bottom: 1rem;
+}
+
+.preview-draft-text {
+	white-space: pre-wrap;
+	font-family: var(--font-body);
+	font-size: 0.88rem;
+	line-height: 1.55;
+	color: var(--realm-text);
+	background: var(--realm-bg);
+	border: 1px solid var(--realm-border);
+	border-radius: var(--radius);
+	padding: 0.85rem;
+	margin: 0 0 0.85rem;
+}
+
+.show-deleted-toggle {
+	margin: 0.25rem 0 1rem;
+}
+
+.deleted-submissions {
+	margin-top: 1.5rem;
+	padding-top: 1.25rem;
+	border-top: 1px dashed var(--realm-border);
+}
+
+.deleted-submissions h3 {
+	font-family: var(--font-display);
+	color: var(--realm-text);
+	font-size: 1rem;
+	margin-bottom: 0.75rem;
+}
+
+.audit-detail {
+	max-width: 26rem;
+	font-size: 0.82rem;
+	font-family: ui-monospace, monospace;
+	color: var(--realm-text-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.config-json-editor {
+	font-family: ui-monospace, monospace;
+	font-size: 0.85rem;
+	min-height: 14rem;
+}
+
+.config-draft-section code,
+.season-archive-section code {
+	display: block;
+	margin-top: 0.35rem;
+	padding: 0.5rem 0.65rem;
+	background: var(--realm-bg);
+	border: 1px solid var(--realm-border);
+	border-radius: 8px;
+	font-size: 0.78rem;
+	white-space: pre-wrap;
+	word-break: break-word;
 }
 </style>

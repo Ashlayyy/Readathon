@@ -1,6 +1,7 @@
 import { File } from 'node:buffer'
-import { getDiscordRoleId, getDiscordWebhookUrl } from './siteSettings.js'
+import { getDiscordRoleId, getDiscordWebhookUrl, getSiteSettingsAdminSync } from './siteSettings.js'
 import { svgToPng, isPngBuffer } from './svgToPng.js'
+import { discordWebhookTotal } from './metrics.js'
 
 function weekNumberLabel(weekKey: string): string {
   const match = weekKey.match(/W(\d+)$/i)
@@ -126,6 +127,52 @@ async function postWebhookImage(
   return true
 }
 
+/**
+ * Plain text webhook smoke test. Never mentions a role — even if one is configured.
+ * Uses allowed_mentions.parse = [] so Discord will not expand any pings.
+ */
+export const DISCORD_TEST_WEBHOOK_CONTENT = 'This is a test message!'
+
+export async function sendDiscordWebhookTest(): Promise<{ sent: boolean; error?: string }> {
+  const webhookUrl = getDiscordWebhookUrl()
+  if (!webhookUrl) {
+    return { sent: false, error: 'No Discord webhook URL configured' }
+  }
+
+  try {
+    const res = await fetch(webhookUrlWithWait(webhookUrl), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: DISCORD_TEST_WEBHOOK_CONTENT,
+        allowed_mentions: { parse: [] },
+      }),
+    })
+    const bodyText = await res.text()
+    if (!res.ok) {
+      console.error('[discord] test webhook failed', {
+        status: res.status,
+        body: bodyText.slice(0, 300),
+      })
+      discordWebhookTotal.labels('test', 'fail').inc()
+      return {
+        sent: false,
+        error: `Discord returned ${res.status}`,
+      }
+    }
+    console.log('[discord] test webhook sent OK (no role ping)')
+    discordWebhookTotal.labels('test', 'ok').inc()
+    return { sent: true }
+  } catch (e) {
+    console.error('[discord] test webhook error:', e)
+    discordWebhookTotal.labels('test', 'fail').inc()
+    return {
+      sent: false,
+      error: e instanceof Error ? e.message : 'Failed to send test message',
+    }
+  }
+}
+
 export async function notifyDiscordStandingsPublished(
   weekKey: string,
   standingsSvg: string,
@@ -215,4 +262,39 @@ export async function notifyDiscordStandingsPublished(
     console.error('[discord] publish error before/during webhook post:', e)
     return { sent: false }
   }
+}
+
+/**
+ * Optional per-realm chat webhook, separate from the weekly standings publish.
+ * Fires a short, public-safe note (no dates/notes/prompt detail) to a team's own
+ * Discord channel when a member logs a book. Fire-and-forget: failures are logged
+ * and ignored so a bad webhook URL never breaks submission.
+ */
+export function notifyTeamChatSubmission(teamId: string | null | undefined, message: string): void {
+  if (!teamId) return
+  const settings = getSiteSettingsAdminSync()
+  if (!settings.teamChatHooksEnabled) return
+
+  const webhookUrl = settings.teamChatWebhookUrls[teamId]?.trim()
+  if (!webhookUrl) return
+
+  fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: message }),
+  })
+    .then((res) => {
+      discordWebhookTotal
+        .labels('team_chat', res.ok ? 'ok' : 'fail')
+        .inc()
+      if (!res.ok) {
+        console.error(
+          `[discord] team chat webhook failed for team ${teamId}: ${res.status}`,
+        )
+      }
+    })
+    .catch((e) => {
+      discordWebhookTotal.labels('team_chat', 'fail').inc()
+      console.error(`[discord] team chat webhook failed for team ${teamId} (ignored):`, e)
+    })
 }

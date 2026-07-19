@@ -18,6 +18,8 @@ const submissionSchema = new Schema(
     promptPoints: { type: Number, default: 0 },
     bonusPoints: { type: Number, default: 0 },
     totalImpact: { type: Number, default: 0 },
+    deletedAt: { type: Date, default: null, index: true },
+    deletedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },
 )

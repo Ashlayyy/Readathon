@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '../lib/api';
 import { useAdminCopy } from '../composables/useAdminCopy';
 import { useConfig } from '../composables/useConfig';
+import ReaderLink from './ReaderLink.vue';
 
 type NamedCount = { id: string; label: string; count: number; extra?: number };
 
@@ -48,6 +49,7 @@ type BookRow = {
 	pageCount: number;
 	format: string;
 	submissionType: string;
+	userId: string;
 	userName: string;
 	teamName: string;
 	createdAt: string;
@@ -331,6 +333,37 @@ const speedTable = useSortable<SpeedRow & Record<string, unknown>>(
 	{ pagesPerDay: (row) => pagesPerDay(row as unknown as SpeedRow) },
 );
 const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date', 'desc');
+
+/** NxN matrix of realms × realms, cell = hits/damage dealt from row realm onto column realm. */
+const rivalryMatrix = computed(() => {
+	const teams = config.value?.teams ?? [];
+	const rivalry = analytics.value?.rivalry ?? [];
+	const lookup = new Map(
+		rivalry.map((r) => [`${r.fromTeamId}→${r.toTeamId}`, r]),
+	);
+	const maxHits = Math.max(1, ...rivalry.map((r) => r.hits));
+	return {
+		teams,
+		maxHits,
+		rows: teams.map((fromTeam) => ({
+			team: fromTeam,
+			cells: teams.map((toTeam) => {
+				if (fromTeam.id === toTeam.id) return null;
+				const cell = lookup.get(`${fromTeam.id}→${toTeam.id}`);
+				return {
+					toTeam,
+					hits: cell?.hits ?? 0,
+					damage: cell?.damage ?? 0,
+				};
+			}),
+		})),
+	};
+});
+
+function heatOpacity(hits: number, maxHits: number) {
+	if (hits <= 0) return 0;
+	return 0.12 + (hits / maxHits) * 0.78;
+}
 </script>
 
 <template>
@@ -588,40 +621,40 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				<p class="chart-lead">Books, pages, and activity logged per realm.</p>
 				<div v-if="teamTable.rows.value.length === 0" class="empty-note">No realms configured.</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Team overview">
 						<thead>
 							<tr>
-								<th :aria-sort="teamTable.aria('teamName')">
+								<th scope="col" :aria-sort="teamTable.aria('teamName')">
 									<button type="button" class="sort-th" @click="teamTable.toggle('teamName', 'asc')">
 										Realm <span class="sort-mark">{{ teamTable.mark('teamName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="teamTable.aria('booksLogged')">
+								<th scope="col" :aria-sort="teamTable.aria('booksLogged')">
 									<button type="button" class="sort-th" @click="teamTable.toggle('booksLogged')">
 										Books <span class="sort-mark">{{ teamTable.mark('booksLogged') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="teamTable.aria('pagesLogged')">
+								<th scope="col" :aria-sort="teamTable.aria('pagesLogged')">
 									<button type="button" class="sort-th" @click="teamTable.toggle('pagesLogged')">
 										Pages <span class="sort-mark">{{ teamTable.mark('pagesLogged') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="teamTable.aria('addCount')">
+								<th scope="col" :aria-sort="teamTable.aria('addCount')">
 									<button type="button" class="sort-th" @click="teamTable.toggle('addCount')">
 										Adds <span class="sort-mark">{{ teamTable.mark('addCount') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="teamTable.aria('sabotageCount')">
+								<th scope="col" :aria-sort="teamTable.aria('sabotageCount')">
 									<button type="button" class="sort-th" @click="teamTable.toggle('sabotageCount')">
 										Sabotages <span class="sort-mark">{{ teamTable.mark('sabotageCount') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="teamTable.aria('hitCount')">
+								<th scope="col" :aria-sort="teamTable.aria('hitCount')">
 									<button type="button" class="sort-th" @click="teamTable.toggle('hitCount')">
 										Times hit <span class="sort-mark">{{ teamTable.mark('hitCount') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="teamTable.aria('damageTaken')">
+								<th scope="col" :aria-sort="teamTable.aria('damageTaken')">
 									<button type="button" class="sort-th" @click="teamTable.toggle('damageTaken')">
 										Damage taken <span class="sort-mark">{{ teamTable.mark('damageTaken') }}</span>
 									</button>
@@ -651,20 +684,20 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 					No sabotage submissions yet.
 				</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Most sabotaged realms">
 						<thead>
 							<tr>
-								<th :aria-sort="dogpileTable.aria('teamName')">
+								<th scope="col" :aria-sort="dogpileTable.aria('teamName')">
 									<button type="button" class="sort-th" @click="dogpileTable.toggle('teamName', 'asc')">
 										Realm <span class="sort-mark">{{ dogpileTable.mark('teamName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="dogpileTable.aria('hitCount')">
+								<th scope="col" :aria-sort="dogpileTable.aria('hitCount')">
 									<button type="button" class="sort-th" @click="dogpileTable.toggle('hitCount')">
 										Times hit <span class="sort-mark">{{ dogpileTable.mark('hitCount') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="dogpileTable.aria('damageTaken')">
+								<th scope="col" :aria-sort="dogpileTable.aria('damageTaken')">
 									<button type="button" class="sort-th" @click="dogpileTable.toggle('damageTaken')">
 										Damage taken <span class="sort-mark">{{ dogpileTable.mark('damageTaken') }}</span>
 									</button>
@@ -682,6 +715,62 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				</div>
 			</article>
 
+			<!-- Rivalry heat map -->
+			<article class="card table-card">
+				<h3>Rivalry heat map</h3>
+				<p class="chart-lead">
+					Rows attack columns. Darker cells mean more sabotage hits from that realm onto that
+					target.
+				</p>
+				<div v-if="rivalryMatrix.teams.length === 0" class="empty-note">No realms configured.</div>
+				<div v-else class="table-wrap">
+					<table class="data-table heatmap-table" aria-label="Rivalry heat map, attacker by target">
+						<caption class="sr-only">
+							Rivalry heat map: each cell shows sabotage hits and damage from the row realm
+							(attacker) onto the column realm (target). Darker cells mean more hits.
+						</caption>
+						<thead>
+							<tr>
+								<th scope="col">
+									<span class="sr-only">Attacker</span>
+								</th>
+								<th v-for="toTeam in rivalryMatrix.teams" :key="toTeam.id" scope="col">
+									{{ toTeam.icon }} {{ toTeam.name }}
+								</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="row in rivalryMatrix.rows" :key="row.team.id">
+								<th scope="row">{{ row.team.icon }} {{ row.team.name }}</th>
+								<td
+									v-for="cell in row.cells"
+									:key="cell ? cell.toTeam.id : 'self'"
+									class="heat-cell"
+									tabindex="0"
+									:aria-label="
+										cell
+											? `${row.team.name} attacked ${cell.toTeam.name}: ${cell.hits} hits, ${cell.damage} damage`
+											: 'Same realm'
+									"
+								>
+									<span
+										v-if="cell"
+										class="heat-fill"
+										:style="{
+											background: `rgba(212, 99, 74, ${heatOpacity(cell.hits, rivalryMatrix.maxHits)})`,
+										}"
+									>
+										<strong v-if="cell.hits > 0">{{ cell.hits }}</strong>
+										<span v-else class="heat-zero">–</span>
+									</span>
+									<span v-else class="heat-self" aria-hidden="true">·</span>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</article>
+
 			<!-- Rivalry -->
 			<article class="card table-card">
 				<h3>Team rivalries</h3>
@@ -690,25 +779,25 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 					No cross-realm sabotage yet.
 				</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Team rivalries">
 						<thead>
 							<tr>
-								<th :aria-sort="rivalryTable.aria('fromTeamName')">
+								<th scope="col" :aria-sort="rivalryTable.aria('fromTeamName')">
 									<button type="button" class="sort-th" @click="rivalryTable.toggle('fromTeamName', 'asc')">
 										Attacker <span class="sort-mark">{{ rivalryTable.mark('fromTeamName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="rivalryTable.aria('toTeamName')">
+								<th scope="col" :aria-sort="rivalryTable.aria('toTeamName')">
 									<button type="button" class="sort-th" @click="rivalryTable.toggle('toTeamName', 'asc')">
 										Target <span class="sort-mark">{{ rivalryTable.mark('toTeamName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="rivalryTable.aria('hits')">
+								<th scope="col" :aria-sort="rivalryTable.aria('hits')">
 									<button type="button" class="sort-th" @click="rivalryTable.toggle('hits')">
 										Hits <span class="sort-mark">{{ rivalryTable.mark('hits') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="rivalryTable.aria('damage')">
+								<th scope="col" :aria-sort="rivalryTable.aria('damage')">
 									<button type="button" class="sort-th" @click="rivalryTable.toggle('damage')">
 										Damage <span class="sort-mark">{{ rivalryTable.mark('damage') }}</span>
 									</button>
@@ -735,25 +824,25 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 					No sabotage submissions yet.
 				</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Top saboteurs">
 						<thead>
 							<tr>
-								<th :aria-sort="warmongerTable.aria('displayName')">
+								<th scope="col" :aria-sort="warmongerTable.aria('displayName')">
 									<button type="button" class="sort-th" @click="warmongerTable.toggle('displayName', 'asc')">
 										Reader <span class="sort-mark">{{ warmongerTable.mark('displayName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="warmongerTable.aria('teamName')">
+								<th scope="col" :aria-sort="warmongerTable.aria('teamName')">
 									<button type="button" class="sort-th" @click="warmongerTable.toggle('teamName', 'asc')">
 										Realm <span class="sort-mark">{{ warmongerTable.mark('teamName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="warmongerTable.aria('sabotageCount')">
+								<th scope="col" :aria-sort="warmongerTable.aria('sabotageCount')">
 									<button type="button" class="sort-th" @click="warmongerTable.toggle('sabotageCount')">
 										Attacks <span class="sort-mark">{{ warmongerTable.mark('sabotageCount') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="warmongerTable.aria('damageDealt')">
+								<th scope="col" :aria-sort="warmongerTable.aria('damageDealt')">
 									<button type="button" class="sort-th" @click="warmongerTable.toggle('damageDealt')">
 										Damage dealt <span class="sort-mark">{{ warmongerTable.mark('damageDealt') }}</span>
 									</button>
@@ -762,7 +851,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 						</thead>
 						<tbody>
 							<tr v-for="row in warmongerTable.rows.value" :key="row.userId">
-								<td>{{ row.displayName }}</td>
+								<td>
+									<ReaderLink :id="row.userId" :name="row.displayName" />
+								</td>
 								<td>{{ row.teamName }}</td>
 								<td>{{ row.sabotageCount }}</td>
 								<td class="dmg">−{{ row.damageDealt }}</td>
@@ -780,25 +871,25 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 					Everyone who submitted has sabotaged at least once.
 				</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Add-only readers">
 						<thead>
 							<tr>
-								<th :aria-sort="pacifistTable.aria('displayName')">
+								<th scope="col" :aria-sort="pacifistTable.aria('displayName')">
 									<button type="button" class="sort-th" @click="pacifistTable.toggle('displayName', 'asc')">
 										Reader <span class="sort-mark">{{ pacifistTable.mark('displayName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="pacifistTable.aria('teamName')">
+								<th scope="col" :aria-sort="pacifistTable.aria('teamName')">
 									<button type="button" class="sort-th" @click="pacifistTable.toggle('teamName', 'asc')">
 										Realm <span class="sort-mark">{{ pacifistTable.mark('teamName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="pacifistTable.aria('addCount')">
+								<th scope="col" :aria-sort="pacifistTable.aria('addCount')">
 									<button type="button" class="sort-th" @click="pacifistTable.toggle('addCount')">
 										Books <span class="sort-mark">{{ pacifistTable.mark('addCount') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="pacifistTable.aria('pointsGained')">
+								<th scope="col" :aria-sort="pacifistTable.aria('pointsGained')">
 									<button type="button" class="sort-th" @click="pacifistTable.toggle('pointsGained')">
 										Points <span class="sort-mark">{{ pacifistTable.mark('pointsGained') }}</span>
 									</button>
@@ -807,7 +898,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 						</thead>
 						<tbody>
 							<tr v-for="row in pacifistTable.rows.value" :key="row.userId">
-								<td>{{ row.displayName }}</td>
+								<td>
+									<ReaderLink :id="row.userId" :name="row.displayName" />
+								</td>
 								<td>{{ row.teamName }}</td>
 								<td>{{ row.addCount }}</td>
 								<td class="gain">+{{ row.pointsGained }}</td>
@@ -823,30 +916,30 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				<p class="chart-lead">Who has logged the most, across every realm.</p>
 				<div v-if="booksTable.rows.value.length === 0" class="empty-note">Nothing logged yet.</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Books per reader">
 						<thead>
 							<tr>
-								<th :aria-sort="booksTable.aria('displayName')">
+								<th scope="col" :aria-sort="booksTable.aria('displayName')">
 									<button type="button" class="sort-th" @click="booksTable.toggle('displayName', 'asc')">
 										Reader <span class="sort-mark">{{ booksTable.mark('displayName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="booksTable.aria('teamName')">
+								<th scope="col" :aria-sort="booksTable.aria('teamName')">
 									<button type="button" class="sort-th" @click="booksTable.toggle('teamName', 'asc')">
 										Realm <span class="sort-mark">{{ booksTable.mark('teamName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="booksTable.aria('books')">
+								<th scope="col" :aria-sort="booksTable.aria('books')">
 									<button type="button" class="sort-th" @click="booksTable.toggle('books')">
 										Books <span class="sort-mark">{{ booksTable.mark('books') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="booksTable.aria('pages')">
+								<th scope="col" :aria-sort="booksTable.aria('pages')">
 									<button type="button" class="sort-th" @click="booksTable.toggle('pages')">
 										Pages <span class="sort-mark">{{ booksTable.mark('pages') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="booksTable.aria('avgPages')">
+								<th scope="col" :aria-sort="booksTable.aria('avgPages')">
 									<button type="button" class="sort-th" @click="booksTable.toggle('avgPages')">
 										Avg pages <span class="sort-mark">{{ booksTable.mark('avgPages') }}</span>
 									</button>
@@ -855,7 +948,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 						</thead>
 						<tbody>
 							<tr v-for="row in booksTable.rows.value" :key="row.userId">
-								<td>{{ row.displayName }}</td>
+								<td>
+									<ReaderLink :id="row.userId" :name="row.displayName" />
+								</td>
 								<td>{{ row.teamName }}</td>
 								<td>{{ row.books }}</td>
 								<td>{{ row.pages.toLocaleString() }}</td>
@@ -874,20 +969,20 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 					No prompts claimed yet.
 				</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Prompt usage">
 						<thead>
 							<tr>
-								<th :aria-sort="promptTable.aria('label')">
+								<th scope="col" :aria-sort="promptTable.aria('label')">
 									<button type="button" class="sort-th" @click="promptTable.toggle('label', 'asc')">
 										Prompt <span class="sort-mark">{{ promptTable.mark('label') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="promptTable.aria('kind')">
+								<th scope="col" :aria-sort="promptTable.aria('kind')">
 									<button type="button" class="sort-th" @click="promptTable.toggle('kind', 'asc')">
 										Kind <span class="sort-mark">{{ promptTable.mark('kind') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="promptTable.aria('count')">
+								<th scope="col" :aria-sort="promptTable.aria('count')">
 									<button type="button" class="sort-th" @click="promptTable.toggle('count')">
 										Times used <span class="sort-mark">{{ promptTable.mark('count') }}</span>
 									</button>
@@ -911,20 +1006,20 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				<p class="chart-lead">Most-read authors across all logged books.</p>
 				<div v-if="authorTable.rows.value.length === 0" class="empty-note">Nothing logged yet.</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Top authors">
 						<thead>
 							<tr>
-								<th :aria-sort="authorTable.aria('author')">
+								<th scope="col" :aria-sort="authorTable.aria('author')">
 									<button type="button" class="sort-th" @click="authorTable.toggle('author', 'asc')">
 										Author <span class="sort-mark">{{ authorTable.mark('author') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="authorTable.aria('books')">
+								<th scope="col" :aria-sort="authorTable.aria('books')">
 									<button type="button" class="sort-th" @click="authorTable.toggle('books')">
 										Books <span class="sort-mark">{{ authorTable.mark('books') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="authorTable.aria('pages')">
+								<th scope="col" :aria-sort="authorTable.aria('pages')">
 									<button type="button" class="sort-th" @click="authorTable.toggle('pages')">
 										Pages <span class="sort-mark">{{ authorTable.mark('pages') }}</span>
 									</button>
@@ -950,35 +1045,35 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 					Nothing logged yet.
 				</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Longest books">
 						<thead>
 							<tr>
-								<th :aria-sort="longestTable.aria('bookTitle')">
+								<th scope="col" :aria-sort="longestTable.aria('bookTitle')">
 									<button type="button" class="sort-th" @click="longestTable.toggle('bookTitle', 'asc')">
 										Book <span class="sort-mark">{{ longestTable.mark('bookTitle') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="longestTable.aria('bookAuthor')">
+								<th scope="col" :aria-sort="longestTable.aria('bookAuthor')">
 									<button type="button" class="sort-th" @click="longestTable.toggle('bookAuthor', 'asc')">
 										Author <span class="sort-mark">{{ longestTable.mark('bookAuthor') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="longestTable.aria('pageCount')">
+								<th scope="col" :aria-sort="longestTable.aria('pageCount')">
 									<button type="button" class="sort-th" @click="longestTable.toggle('pageCount')">
 										Pages <span class="sort-mark">{{ longestTable.mark('pageCount') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="longestTable.aria('format')">
+								<th scope="col" :aria-sort="longestTable.aria('format')">
 									<button type="button" class="sort-th" @click="longestTable.toggle('format', 'asc')">
 										Format <span class="sort-mark">{{ longestTable.mark('format') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="longestTable.aria('userName')">
+								<th scope="col" :aria-sort="longestTable.aria('userName')">
 									<button type="button" class="sort-th" @click="longestTable.toggle('userName', 'asc')">
 										Reader <span class="sort-mark">{{ longestTable.mark('userName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="longestTable.aria('teamName')">
+								<th scope="col" :aria-sort="longestTable.aria('teamName')">
 									<button type="button" class="sort-th" @click="longestTable.toggle('teamName', 'asc')">
 										Realm <span class="sort-mark">{{ longestTable.mark('teamName') }}</span>
 									</button>
@@ -991,7 +1086,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 								<td>{{ row.bookAuthor }}</td>
 								<td>{{ row.pageCount }}</td>
 								<td>{{ formatLabel(row.format) }}</td>
-								<td>{{ row.userName }}</td>
+								<td>
+									<ReaderLink :id="row.userId" :name="row.userName" />
+								</td>
 								<td>{{ row.teamName }}</td>
 							</tr>
 						</tbody>
@@ -1007,30 +1104,30 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 					Nothing logged yet.
 				</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Recently logged">
 						<thead>
 							<tr>
-								<th :aria-sort="recentTable.aria('bookTitle')">
+								<th scope="col" :aria-sort="recentTable.aria('bookTitle')">
 									<button type="button" class="sort-th" @click="recentTable.toggle('bookTitle', 'asc')">
 										Book <span class="sort-mark">{{ recentTable.mark('bookTitle') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="recentTable.aria('userName')">
+								<th scope="col" :aria-sort="recentTable.aria('userName')">
 									<button type="button" class="sort-th" @click="recentTable.toggle('userName', 'asc')">
 										Reader <span class="sort-mark">{{ recentTable.mark('userName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="recentTable.aria('submissionType')">
+								<th scope="col" :aria-sort="recentTable.aria('submissionType')">
 									<button type="button" class="sort-th" @click="recentTable.toggle('submissionType', 'asc')">
 										Type <span class="sort-mark">{{ recentTable.mark('submissionType') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="recentTable.aria('pageCount')">
+								<th scope="col" :aria-sort="recentTable.aria('pageCount')">
 									<button type="button" class="sort-th" @click="recentTable.toggle('pageCount')">
 										Pages <span class="sort-mark">{{ recentTable.mark('pageCount') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="recentTable.aria('createdAt')">
+								<th scope="col" :aria-sort="recentTable.aria('createdAt')">
 									<button type="button" class="sort-th" @click="recentTable.toggle('createdAt')">
 										Logged <span class="sort-mark">{{ recentTable.mark('createdAt') }}</span>
 									</button>
@@ -1040,7 +1137,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 						<tbody>
 							<tr v-for="row in recentTable.rows.value" :key="row.id">
 								<td>{{ row.bookTitle }}</td>
-								<td>{{ row.userName }}</td>
+								<td>
+									<ReaderLink :id="row.userId" :name="row.userName" />
+								</td>
 								<td>
 									<span
 										class="badge"
@@ -1065,30 +1164,30 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 					No start/finish dates logged yet.
 				</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Fastest finishes">
 						<thead>
 							<tr>
-								<th :aria-sort="speedTable.aria('displayName')">
+								<th scope="col" :aria-sort="speedTable.aria('displayName')">
 									<button type="button" class="sort-th" @click="speedTable.toggle('displayName', 'asc')">
 										Reader <span class="sort-mark">{{ speedTable.mark('displayName') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="speedTable.aria('bookTitle')">
+								<th scope="col" :aria-sort="speedTable.aria('bookTitle')">
 									<button type="button" class="sort-th" @click="speedTable.toggle('bookTitle', 'asc')">
 										Book <span class="sort-mark">{{ speedTable.mark('bookTitle') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="speedTable.aria('pages')">
+								<th scope="col" :aria-sort="speedTable.aria('pages')">
 									<button type="button" class="sort-th" @click="speedTable.toggle('pages')">
 										Pages <span class="sort-mark">{{ speedTable.mark('pages') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="speedTable.aria('days')">
+								<th scope="col" :aria-sort="speedTable.aria('days')">
 									<button type="button" class="sort-th" @click="speedTable.toggle('days')">
 										Days <span class="sort-mark">{{ speedTable.mark('days') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="speedTable.aria('pagesPerDay')">
+								<th scope="col" :aria-sort="speedTable.aria('pagesPerDay')">
 									<button type="button" class="sort-th" @click="speedTable.toggle('pagesPerDay')">
 										Pages/day <span class="sort-mark">{{ speedTable.mark('pagesPerDay') }}</span>
 									</button>
@@ -1097,7 +1196,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 						</thead>
 						<tbody>
 							<tr v-for="(row, i) in speedTable.rows.value" :key="`${row.userId}-${row.bookTitle}-${i}`">
-								<td>{{ row.displayName }}</td>
+								<td>
+									<ReaderLink :id="row.userId" :name="row.displayName" />
+								</td>
 								<td>{{ row.bookTitle }}</td>
 								<td>{{ row.pages }}</td>
 								<td>{{ row.days }}</td>
@@ -1114,30 +1215,30 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				<p class="chart-lead">One row per day with submissions in this range.</p>
 				<div v-if="dayTable.rows.value.length === 0" class="empty-note">Nothing logged yet.</div>
 				<div v-else class="table-wrap">
-					<table class="data-table">
+					<table class="data-table" aria-label="Daily activity log">
 						<thead>
 							<tr>
-								<th :aria-sort="dayTable.aria('date')">
+								<th scope="col" :aria-sort="dayTable.aria('date')">
 									<button type="button" class="sort-th" @click="dayTable.toggle('date')">
 										Date <span class="sort-mark">{{ dayTable.mark('date') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="dayTable.aria('count')">
+								<th scope="col" :aria-sort="dayTable.aria('count')">
 									<button type="button" class="sort-th" @click="dayTable.toggle('count')">
 										Submissions <span class="sort-mark">{{ dayTable.mark('count') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="dayTable.aria('pages')">
+								<th scope="col" :aria-sort="dayTable.aria('pages')">
 									<button type="button" class="sort-th" @click="dayTable.toggle('pages')">
 										Pages <span class="sort-mark">{{ dayTable.mark('pages') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="dayTable.aria('adds')">
+								<th scope="col" :aria-sort="dayTable.aria('adds')">
 									<button type="button" class="sort-th" @click="dayTable.toggle('adds')">
 										Adds <span class="sort-mark">{{ dayTable.mark('adds') }}</span>
 									</button>
 								</th>
-								<th :aria-sort="dayTable.aria('sabotages')">
+								<th scope="col" :aria-sort="dayTable.aria('sabotages')">
 									<button type="button" class="sort-th" @click="dayTable.toggle('sabotages')">
 										Sabotages <span class="sort-mark">{{ dayTable.mark('sabotages') }}</span>
 									</button>

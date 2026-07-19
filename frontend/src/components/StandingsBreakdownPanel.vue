@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { StandingsBreakdown, MemberContribution } from '../lib/api';
+import ReaderLink from './ReaderLink.vue';
 
 const props = defineProps<{
 	breakdown: StandingsBreakdown;
@@ -79,7 +80,9 @@ const teams = computed(() =>
 						</thead>
 						<tbody>
 							<tr v-for="m in team.members" :key="m.userId">
-								<td>{{ m.displayName }}</td>
+								<td>
+									<ReaderLink :id="m.userId" :name="m.displayName" />
+								</td>
 								<td class="gain">+{{ m.xpGained }}</td>
 								<td class="dealt">
 									{{ m.xpDealt > 0 ? `−${m.xpDealt}` : '0' }}
@@ -96,10 +99,8 @@ const teams = computed(() =>
 					<h4>Attacked by rivals</h4>
 					<ul>
 						<li v-for="(atk, i) in team.attacksFromOthers" :key="i">
-							{{ atk.displayName }} ({{ atk.attackerTeamName }}) → −{{
-								atk.damage
-							}}
-							points
+							<ReaderLink :id="atk.userId" :name="atk.displayName" />
+							({{ atk.attackerTeamName }}) → −{{ atk.damage }} points
 						</li>
 					</ul>
 				</div>

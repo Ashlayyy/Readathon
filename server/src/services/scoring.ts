@@ -3,6 +3,7 @@ import { getConfigWithPrompts, getPromptById, getTeamById } from './prompts.js';
 import { type HydratedDocument } from 'mongoose';
 import { type IUser, User } from '../db/models/User.js';
 import { Submission, type ISubmission } from '../db/models/Submission.js';
+import { withActive } from '../db/activeSubmission.js';
 
 export type SubmissionInput = {
 	bookTitle: string;
@@ -25,20 +26,31 @@ function normalizeBook(title: string, author: string) {
 	};
 }
 
+/** Exported for unit tests + duplicate-check helpers. */
+export function booksMatch(
+	a: { bookTitle: string; bookAuthor: string },
+	b: { bookTitle: string; bookAuthor: string },
+): boolean {
+	const na = normalizeBook(a.bookTitle, a.bookAuthor);
+	const nb = normalizeBook(b.bookTitle, b.bookAuthor);
+	return na.title === nb.title && na.author === nb.author;
+}
+
 export async function findDuplicateSubmission(
 	userId: import('mongoose').Types.ObjectId,
 	bookTitle: string,
 	bookAuthor: string,
 	excludeSubmissionId?: string,
 ): Promise<boolean> {
-	const { title, author } = normalizeBook(bookTitle, bookAuthor);
-	const existing = await Submission.find({ userId });
+	const existing = await Submission.find(withActive({ userId }));
 
 	return existing.some((sub) => {
 		if (excludeSubmissionId && sub._id.toString() === excludeSubmissionId)
 			return false;
-		const n = normalizeBook(sub.bookTitle, sub.bookAuthor);
-		return n.title === title && n.author === author;
+		return booksMatch(
+			{ bookTitle: sub.bookTitle, bookAuthor: sub.bookAuthor },
+			{ bookTitle, bookAuthor },
+		);
 	});
 }
 
@@ -64,29 +76,27 @@ export async function validateSubmission(
 		return 'Book title and author are required.';
 	}
 
-	if (
-		await findDuplicateSubmission(
-			user._id,
-			input.bookTitle,
-			input.bookAuthor,
-			options?.excludeSubmissionId,
-		)
-	) {
-		return 'You have already submitted this book.';
-	}
+	// Duplicate books are no longer a hard block - the client warns readers via
+	// GET /submissions/check-duplicate but they may still submit the same title again.
 
-	if (
-		input.startedAt?.trim() &&
-		!/^\d{4}-\d{2}-\d{2}$/.test(input.startedAt.trim())
-	) {
+	const started = input.startedAt?.trim() ?? ''
+	const finished = input.finishedAt?.trim() ?? ''
+	const dateRe = /^\d{4}-\d{2}-\d{2}$/
+
+	if (!started) {
+		return 'Start date is required.';
+	}
+	if (!dateRe.test(started)) {
 		return 'Start date must be YYYY-MM-DD.';
 	}
-
-	if (
-		input.finishedAt?.trim() &&
-		!/^\d{4}-\d{2}-\d{2}$/.test(input.finishedAt.trim())
-	) {
+	if (!finished) {
+		return 'Finish date is required.';
+	}
+	if (!dateRe.test(finished)) {
 		return 'Finish date must be YYYY-MM-DD.';
+	}
+	if (finished < started) {
+		return 'Finish date cannot be before the start date.';
 	}
 
 	if (input.pageCount < 1) {
@@ -227,7 +237,7 @@ export async function calculateStandings(): Promise<TeamStanding[]> {
 	const lost = new Map<string, number>();
 	const dealt = new Map<string, number>();
 
-	const allSubs = await Submission.find();
+	const allSubs = await Submission.find(withActive());
 	for (const sub of allSubs) {
 		const teamId = userTeamMap.get(sub.userId.toString());
 		if (!teamId) continue;
