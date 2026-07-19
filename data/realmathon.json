@@ -21,7 +21,7 @@
 		"pendingBanner": "You're in the pool - an admin will sort you into a realm soon.",
 		"loginTitle": "Enter The Crucible",
 		"loginRegisterLead": "Sign up with your name and email, or continue with Google.",
-		"loginMagicLinkLead": "We'll email you a one-time sign-in link — no password needed.",
+		"loginMagicLinkLead": "We'll email you a one-time sign-in link - no password needed.",
 		"loginRegisterTab": "New Recruit",
 		"loginSignInTab": "Returning Reader",
 		"loginDisplayNameLabel": "Display Name",
@@ -102,14 +102,14 @@
 		"submitTargetLabel": "Choose a realm to attack",
 		"submitTargetSelected": "Selected target",
 		"submitPromptsTitle": "Pick prompts",
-		"submitPromptsHint": "Choose up to {maxPrompts} that match your book — or continue with none if nothing applies.",
+		"submitPromptsHint": "Choose up to {maxPrompts} that match your book - or continue with none if nothing applies.",
 		"submitPromptsEmpty": "No prompts match your search.",
 		"submitBonusesTitle": "Bonus prompts",
-		"submitBonusesHint": "Optional extras — they don't count toward your {maxPrompts} prompts.",
+		"submitBonusesHint": "Optional extras - they don't count toward your {maxPrompts} prompts.",
 		"submitTeamBonusesLabel": "{teamName} team bonuses",
 		"submitTeamBonusSub": "Team bonus prompt",
 		"submitReviewTitle": "Review & submit",
-		"submitReviewHint": "Double-check everything — submissions can't be edited after sending.",
+		"submitReviewHint": "Double-check everything - submissions can't be edited after sending.",
 		"submitReviewBook": "Book",
 		"submitReviewDetails": "Details",
 		"submitReviewType": "Type",
@@ -143,7 +143,7 @@
 		"profileSaveSettings": "Save Settings",
 		"profileSaving": "Saving…",
 		"rosterPageTitle": "Team Rosters",
-		"rosterPageLead": "Everyone sorted into a realm — see who's on your team.",
+		"rosterPageLead": "Everyone sorted into a realm - see who's on your team.",
 		"admin": {
 			"nav": "Admin",
 			"title": "Admin Panel",
@@ -241,7 +241,7 @@
 				"colStatus": "Status",
 				"colAdmin": "Admin",
 				"colJoined": "Joined",
-				"unassigned": "— Unassigned —",
+				"unassigned": "- Unassigned -",
 				"displayNameLabel": "Display name",
 				"emailLabel": "Email",
 				"teamOptionalLabel": "Team (optional)"
@@ -257,6 +257,7 @@
 				"colBook": "Book",
 				"colReader": "Reader",
 				"colType": "Type",
+				"colAffects": "Affects",
 				"colImpact": "Impact",
 				"colDate": "Date",
 				"colActions": "Actions",
@@ -264,7 +265,7 @@
 				"delete": "Delete",
 				"hint": "Manage prompts in the Prompts tab. Event copy still lives in data/realmathon.json.",
 				"editTitle": "Edit submission",
-				"editLead": "Update {name}'s book — including prompts and bonuses.",
+				"editLead": "Update {name}'s book - including prompts and bonuses.",
 				"titleLabel": "Title",
 				"authorLabel": "Author",
 				"pagesLabel": "Pages",
@@ -342,7 +343,7 @@
 				"importTitle": "Import from config file",
 				"importLead": "Load global and team bonus prompts from data/realmathon.json into the database. This does not run automatically.",
 				"importReplace": "Replace all existing prompts first (destructive)",
-				"importMergeHint": "Without replace, prompts are merged by ID — existing entries with the same ID get updated.",
+				"importMergeHint": "Without replace, prompts are merged by ID - existing entries with the same ID get updated.",
 				"importing": "Importing…",
 				"importSubmit": "Import prompts"
 			},
@@ -401,10 +402,10 @@
 			}
 		},
 		"scoringSummary": [
-			"Up to {maxPrompts} prompts per book — all positive OR all negative",
+			"Up to {maxPrompts} prompts per book - all positive OR all negative",
 			"Bonus prompts layer on top (team prompts, page count, competition/trials)",
 			"Page-count bonus always goes to your team",
-			"One book = add XP or sabotage — never both",
+			"One book = add XP or sabotage - never both",
 			"Standings rank by total team XP (each realm starts with 400 team XP)"
 		],
 		"homeSubmitBanner": {
@@ -422,8 +423,8 @@
 			"faqDescription": "Everything you need to know."
 		},
 		"notifications": {
-			"answerSubject": "Your question was answered — {eventName}",
-			"standingsSubject": "New standings published — {weekLabel}",
+			"answerSubject": "Your question was answered - {eventName}",
+			"standingsSubject": "New standings published - {weekLabel}",
 			"standingsIntro": "Weekly standings for {weekLabel} are now live on the site."
 		},
 		"nav": {

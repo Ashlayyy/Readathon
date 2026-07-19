@@ -112,7 +112,14 @@ export async function calculateStandingsBreakdown(): Promise<StandingsBreakdown>
           sabotageCount: s.sabotageCount,
         }
       })
-      .sort((a, b) => b.xpGained + b.xpDealt - (a.xpGained + a.xpDealt))
+      .sort((a, b) => {
+        const aTotal = a.xpGained + a.xpDealt
+        const bTotal = b.xpGained + b.xpDealt
+        if (bTotal !== aTotal) return bTotal - aTotal
+        if (b.xpDealt !== a.xpDealt) return b.xpDealt - a.xpDealt
+        if (b.xpGained !== a.xpGained) return b.xpGained - a.xpGained
+        return a.displayName.localeCompare(b.displayName)
+      })
 
     const attacksFromOthers = [...(attacksOnTeam.get(team.id)?.values() ?? [])].sort(
       (a, b) => b.damage - a.damage,

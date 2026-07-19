@@ -6,6 +6,7 @@ import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 import SubmitXpPreview from '../components/SubmitXpPreview.vue'
+import OptionalDatePicker from '../components/OptionalDatePicker.vue'
 import type { Prompt } from '../lib/api'
 
 const { user } = useAuth()
@@ -362,14 +363,14 @@ function reset() {
               <option value="graphic-novel">Graphic Novel</option>
             </select>
           </label>
-          <label class="field">
-            {{ config.copy.submitStartedLabel }} <span class="optional">{{ config.copy.submitOptional }}</span>
-            <input v-model="startedAt" type="date" />
-          </label>
-          <label class="field">
-            {{ config.copy.submitFinishedLabel }} <span class="optional">{{ config.copy.submitOptional }}</span>
-            <input v-model="finishedAt" type="date" />
-          </label>
+          <OptionalDatePicker
+            v-model="startedAt"
+            :label="String(config.copy.submitStartedLabel)"
+          />
+          <OptionalDatePicker
+            v-model="finishedAt"
+            :label="String(config.copy.submitFinishedLabel)"
+          />
         </div>
 
         <SubmitXpPreview

@@ -7,7 +7,7 @@ Vue 3 single-page app for the Readathon 2026 readathon. All event copy, branding
 - Vue 3 + TypeScript (`<script setup>`)
 - Vue Router 5
 - Vite 8
-- Plain CSS design system (`src/assets/main.css`) — no UI framework
+- Plain CSS design system (`src/assets/main.css`) - no UI framework
 - Cookie-based session auth (no tokens in localStorage)
 
 ## Scripts
@@ -23,12 +23,12 @@ Requires **Node 22.18+** (see root `.nvmrc`).
 
 ## Environment
 
-| File | When | Purpose |
-|------|------|---------|
-| `.env.example` | Dev reference | Optional overrides |
+| File              | When            | Purpose                                |
+| ----------------- | --------------- | -------------------------------------- |
+| `.env.example`    | Dev reference   | Optional overrides                     |
 | `.env.production` | `npm run build` | `VITE_API_URL` for production API host |
 
-Leave `VITE_API_URL` unset in dev — Vite proxies `/api` to the backend.
+Leave `VITE_API_URL` unset in dev - Vite proxies `/api` to the backend.
 
 ## Project layout
 
@@ -59,26 +59,26 @@ public/
 
 The app does not hardcode event strings. Key patterns:
 
-- **Pages** — `config.copy.submitPageTitle`, `config.copy.faqPageTitle`, etc.
-- **Admin** — `config.copy.admin` nested object (inbox, teams, standings, users, submissions, prompts, messages, confirm)
-- **Branding** — `config.branding.theme` applied to `:root` CSS variables on config load
-- **Placeholders** — `useCopy().t('Hello {teamCount} realms', { teamCount: 2 })`
+- **Pages** - `config.copy.submitPageTitle`, `config.copy.faqPageTitle`, etc.
+- **Admin** - `config.copy.admin` nested object (inbox, teams, standings, users, submissions, prompts, messages, confirm)
+- **Branding** - `config.branding.theme` applied to `:root` CSS variables on config load
+- **Placeholders** - `useCopy().t('Hello {teamCount} realms', { teamCount: 2 })`
 
 ## Routes
 
-| Path | View | Access |
-|------|------|--------|
-| `/` | Home | Public |
-| `/how-it-works` | HowItWorks | Public |
-| `/teams` | Teams | Public |
-| `/rosters` | TeamRoster | Public when enabled |
-| `/prompts` | Prompts | Public |
-| `/faq` | FAQ | Public |
-| `/standings` | Standings | Public |
-| `/login` | Login | Guests only |
-| `/submit` | Submit | Assigned readers |
-| `/profile` | Profile | Authenticated |
-| `/admin` | Admin | Admins only |
+| Path            | View       | Access              |
+| --------------- | ---------- | ------------------- |
+| `/`             | Home       | Public              |
+| `/how-it-works` | HowItWorks | Public              |
+| `/teams`        | Teams      | Public              |
+| `/rosters`      | TeamRoster | Public when enabled |
+| `/prompts`      | Prompts    | Public              |
+| `/faq`          | FAQ        | Public              |
+| `/standings`    | Standings  | Public              |
+| `/login`        | Login      | Guests only         |
+| `/submit`       | Submit     | Assigned readers    |
+| `/profile`      | Profile    | Authenticated       |
+| `/admin`        | Admin      | Admins only         |
 
 ## Production build
 

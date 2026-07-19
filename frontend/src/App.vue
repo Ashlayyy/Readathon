@@ -19,7 +19,9 @@ const menuOpen = ref(false);
 let unreadPromise: Promise<void> | null = null;
 
 const isMaintenancePage = computed(() => route.name === 'maintenance');
-const downtimeActive = computed(() => config.value?.site?.downtimeMode === true);
+const downtimeActive = computed(
+	() => config.value?.site?.downtimeMode === true,
+);
 
 const nav = computed(() => config.value?.copy.nav ?? {});
 
@@ -60,7 +62,7 @@ watch(
 );
 
 watch(config, (c) => {
-	if (c) document.title = `${c.event.name} — ${c.event.subtitle}`;
+	if (c) document.title = `${c.event.name} - ${c.event.subtitle}`;
 });
 
 async function loadUnreadCount() {
@@ -229,7 +231,8 @@ function closeMenu() {
 				class="alert alert-warning status-banner"
 			>
 				<strong>Downtime mode is on.</strong>
-				Only admins can use the site. Turn it off in Admin → Teams when you're done.
+				Only admins can use the site. Turn it off in Admin → Teams when you're
+				done.
 			</div>
 
 			<div
@@ -258,7 +261,7 @@ function closeMenu() {
 
 		<footer v-if="config && !isMaintenancePage" class="site-footer">
 			<p>
-				{{ config.event.name }} — <em>{{ config.event.subtitle }}</em>
+				{{ config.event.name }} - <em>{{ config.event.subtitle }}</em>
 			</p>
 			<p class="app-version">v{{ APP_VERSION }}</p>
 		</footer>
