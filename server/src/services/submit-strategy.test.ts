@@ -7,7 +7,7 @@ function team(
   id: string,
   name: string,
   totalTeamXp: number,
-  averagePerMember = totalTeamXp - 400,
+  averagePerMember = totalTeamXp - 100,
 ): TeamStanding {
   return {
     teamId: id,

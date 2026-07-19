@@ -406,7 +406,7 @@
 			"Bonus prompts layer on top (team prompts, page count, competition/trials)",
 			"Page-count bonus always goes to your team",
 			"One book = add XP or sabotage - never both",
-			"Standings rank by total team XP (each realm starts with 400 team XP)"
+			"Standings rank by total team XP (each realm starts with 100 team XP)"
 		],
 		"homeSubmitBanner": {
 			"title": "Finished a book?",
@@ -779,7 +779,7 @@
 	],
 	"scoringRules": {
 		"maxPromptsPerBook": 5,
-		"startingTeamXp": 400,
+		"startingTeamXp": 100,
 		"promptsMustBeSameSign": true,
 		"pageBonusAlwaysPositiveToOwnTeam": true,
 		"standingsUseAveragePerMember": false,

@@ -60,7 +60,7 @@ function standingsDetailLine(team: TeamStanding, index: number, standings: TeamS
           <span v-else>No members assigned yet</span>
         </div>
         <div class="score">
-          <strong>{{ team.totalTeamXp ?? 400 }}</strong>
+          <strong>{{ team.totalTeamXp ?? 100 }}</strong>
           <small>team XP</small>
         </div>
       </li>

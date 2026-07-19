@@ -33,8 +33,11 @@ function standingsDetailLine(
 }
 
 function leaderSubtitle(standings: TeamStanding[]): string {
+	const starting =
+		(getStaticConfig().scoringRules as { startingTeamXp?: number })
+			.startingTeamXp ?? 100;
 	if (standings.length < 2) {
-		return 'Ranked by total team XP (400 starting pool per realm)';
+		return `Ranked by total team XP (${starting} starting pool per realm)`;
 	}
 	const leader = standings[0]!;
 	const runnerUp = standings[1]!;
