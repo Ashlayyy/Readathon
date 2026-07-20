@@ -1,33 +1,33 @@
-import { getStaticConfig } from '../config.js'
-import { formatCopy, getCopyVars } from '../lib/copy.js'
+import { getStaticConfig } from '../config.js';
+import { formatCopy, getCopyVars } from '../lib/copy.js';
 
 function themeColors() {
-  const theme = getStaticConfig().branding.theme as Record<string, string>
-  return {
-    bg: theme.background ?? '#08070b',
-    surface: theme.surface ?? '#12101a',
-    text: theme.text ?? '#f4efe8',
-    textMuted: theme.textMuted ?? '#9a9188',
-    accent: theme.accent ?? '#d4634a',
-    accentGlow: theme.accentGlow ?? '#ff8a6a',
-    border: theme.border ?? '#2e2a3d',
-    success: '#6ecf8a',
-  }
+	const theme = getStaticConfig().branding.theme as Record<string, string>;
+	return {
+		bg: theme.background ?? '#08070b',
+		surface: theme.surface ?? '#12101a',
+		text: theme.text ?? '#f4efe8',
+		textMuted: theme.textMuted ?? '#9a9188',
+		accent: theme.accent ?? '#d4634a',
+		accentGlow: theme.accentGlow ?? '#ff8a6a',
+		border: theme.border ?? '#2e2a3d',
+		success: '#6ecf8a',
+	};
 }
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+	return s
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
 }
 
 function emailShell(title: string, bodyHtml: string): string {
-  const theme = themeColors()
-  const { eventName, eventSubtitle } = getCopyVars()
+	const theme = themeColors();
+	const { eventName, eventSubtitle } = getCopyVars();
 
-  return `<!DOCTYPE html>
+	return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -56,23 +56,27 @@ function emailShell(title: string, bodyHtml: string): string {
     </tr>
   </table>
 </body>
-</html>`
+</html>`;
 }
 
 export function answerNotificationEmail(opts: {
-  displayName: string
-  question: string
-  answer: string
-  adminName: string
-  profileUrl: string
+	displayName: string;
+	question: string;
+	answer: string;
+	adminName: string;
+	profileUrl: string;
 }): { subject: string; html: string; text: string } {
-  const { eventName } = getCopyVars()
-  const copy = getStaticConfig().copy as Record<string, Record<string, string>>
-  const subject = formatCopy(copy.notifications?.answerSubject ?? 'Your question was answered — {eventName}', getCopyVars())
+	const { eventName } = getCopyVars();
+	const copy = getStaticConfig().copy as Record<string, Record<string, string>>;
+	const subject = formatCopy(
+		copy.notifications?.answerSubject ??
+			'Your question was answered - {eventName}',
+		getCopyVars(),
+	);
 
-  const html = emailShell(
-    subject,
-    `<p style="margin:0 0 16px;color:${themeColors().text};font-size:15px;line-height:1.6;">
+	const html = emailShell(
+		subject,
+		`<p style="margin:0 0 16px;color:${themeColors().text};font-size:15px;line-height:1.6;">
       Hi <strong>${escapeHtml(opts.displayName)}</strong>, an admin replied to your question.
     </p>
     <p style="margin:0 0 8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:${themeColors().textMuted};">Your question</p>
@@ -82,9 +86,9 @@ export function answerNotificationEmail(opts: {
     <p style="margin:0;text-align:center;">
       <a href="${opts.profileUrl}" style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,${themeColors().accent},#a84030);color:#fff;font-weight:700;text-decoration:none;border-radius:8px;">View on your profile →</a>
     </p>`,
-  )
+	);
 
-  const text = `${subject}
+	const text = `${subject}
 
 Hi ${opts.displayName},
 
@@ -94,36 +98,41 @@ ${opts.question}
 Reply from ${opts.adminName}:
 ${opts.answer}
 
-Read it on your profile: ${opts.profileUrl}`
+Read it on your profile: ${opts.profileUrl}`;
 
-  return { subject, html, text }
+	return { subject, html, text };
 }
 
 export function standingsNotificationEmail(opts: {
-  weekLabel: string
-  standingsUrl: string
+	weekLabel: string;
+	standingsUrl: string;
 }): { subject: string; html: string; text: string } {
-  const copy = getStaticConfig().copy as Record<string, Record<string, string>>
-  const vars = { ...getCopyVars(), weekLabel: opts.weekLabel }
-  const subject = formatCopy(copy.notifications?.standingsSubject ?? 'New standings published — {weekLabel}', vars)
-  const intro = formatCopy(
-    copy.notifications?.standingsIntro ?? 'Weekly standings for {weekLabel} are now live.',
-    vars,
-  )
+	const copy = getStaticConfig().copy as Record<string, Record<string, string>>;
+	const vars = { ...getCopyVars(), weekLabel: opts.weekLabel };
+	const subject = formatCopy(
+		copy.notifications?.standingsSubject ??
+			'New standings published - {weekLabel}',
+		vars,
+	);
+	const intro = formatCopy(
+		copy.notifications?.standingsIntro ??
+			'Weekly standings for {weekLabel} are now live.',
+		vars,
+	);
 
-  const html = emailShell(
-    subject,
-    `<p style="margin:0 0 24px;color:${themeColors().text};font-size:15px;line-height:1.65;">${escapeHtml(intro)}</p>
+	const html = emailShell(
+		subject,
+		`<p style="margin:0 0 24px;color:${themeColors().text};font-size:15px;line-height:1.65;">${escapeHtml(intro)}</p>
     <p style="margin:0;text-align:center;">
       <a href="${opts.standingsUrl}" style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,${themeColors().accent},#a84030);color:#fff;font-weight:700;text-decoration:none;border-radius:8px;">View standings →</a>
     </p>`,
-  )
+	);
 
-  const text = `${subject}
+	const text = `${subject}
 
 ${intro}
 
-View standings: ${opts.standingsUrl}`
+View standings: ${opts.standingsUrl}`;
 
-  return { subject, html, text }
+	return { subject, html, text };
 }

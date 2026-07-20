@@ -10,6 +10,11 @@ const userSchema = new Schema(
     status: { type: String, enum: ['pending', 'assigned'], default: 'pending' },
     notifyStandings: { type: Boolean, default: false },
     notifyAnswers: { type: Boolean, default: false },
+    /** Optional, not scored — what they're currently reading. */
+    currentlyReadingTitle: { type: String, default: null, trim: true },
+    currentlyReadingAuthor: { type: String, default: null, trim: true },
+    currentlyReadingCoverUrl: { type: String, default: null, trim: true },
+    currentlyReadingUpdatedAt: { type: Date, default: null },
   },
   { timestamps: true },
 )

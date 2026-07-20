@@ -8,6 +8,9 @@ const publishedStandingsSchema = new Schema(
     svgData: { type: String, required: true },
     breakdownJson: { type: String, default: '' },
     breakdownSvgData: { type: String, default: '' },
+    /** Frozen weekly vibes JSON (PublicStandingsVibes) at publish time */
+    vibesJson: { type: String, default: '' },
+    vibesSvgData: { type: String, default: '' },
     isActive: { type: Boolean, default: true },
     unpublishedAt: { type: Date, default: null },
   },

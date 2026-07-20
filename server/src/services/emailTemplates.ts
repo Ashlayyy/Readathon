@@ -1,29 +1,29 @@
-import { getStaticConfig } from '../config.js'
+import { getStaticConfig } from '../config.js';
 
 function themeColors() {
-  const theme = getStaticConfig().branding.theme as Record<string, string>
-  return {
-    bg: theme.background ?? '#08070b',
-    surface: theme.surface ?? '#12101a',
-    surfaceAlt: theme.surfaceAlt ?? '#1c1928',
-    text: theme.text ?? '#f4efe8',
-    textMuted: theme.textMuted ?? '#9a9188',
-    accent: theme.accent ?? '#d4634a',
-    accentGlow: theme.accentGlow ?? '#ff8a6a',
-    border: theme.border ?? '#2e2a3d',
-    success: '#6ecf8a',
-  }
+	const theme = getStaticConfig().branding.theme as Record<string, string>;
+	return {
+		bg: theme.background ?? '#08070b',
+		surface: theme.surface ?? '#12101a',
+		surfaceAlt: theme.surfaceAlt ?? '#1c1928',
+		text: theme.text ?? '#f4efe8',
+		textMuted: theme.textMuted ?? '#9a9188',
+		accent: theme.accent ?? '#d4634a',
+		accentGlow: theme.accentGlow ?? '#ff8a6a',
+		border: theme.border ?? '#2e2a3d',
+		success: '#6ecf8a',
+	};
 }
 
 export function magicLinkEmailHtml(link: string, email: string): string {
-  const { event, copy } = getStaticConfig()
-  const theme = themeColors()
-  const year = new Date().getFullYear()
-  const eventTitle = event.name as string
-  const eventSubtitle = event.subtitle as string
-  const enterCta = (copy as { enterCta: string }).enterCta
+	const { event, copy } = getStaticConfig();
+	const theme = themeColors();
+	const year = new Date().getFullYear();
+	const eventTitle = event.name as string;
+	const eventSubtitle = event.subtitle as string;
+	const enterCta = (copy as { enterCta: string }).enterCta;
 
-  return `<!DOCTYPE html>
+	return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -79,7 +79,7 @@ export function magicLinkEmailHtml(link: string, email: string): string {
             <td style="background-color:${theme.surfaceAlt};border:1px solid ${theme.border};border-top:none;padding:16px 32px;">
               <p style="margin:0;font-size:13px;line-height:1.55;color:${theme.textMuted};">
                 <span style="color:${theme.success};">◆</span>
-                If you didn't request this, ignore this message — your account stays safe.
+                If you didn't request this, ignore this message - your account stays safe.
               </p>
             </td>
           </tr>
@@ -96,27 +96,27 @@ export function magicLinkEmailHtml(link: string, email: string): string {
     </tr>
   </table>
 </body>
-</html>`
+</html>`;
 }
 
 export function magicLinkEmailText(link: string): string {
-  const { event } = getStaticConfig()
-  const eventTitle = event.name as string
-  const eventSubtitle = event.subtitle as string
+	const { event } = getStaticConfig();
+	const eventTitle = event.name as string;
+	const eventSubtitle = event.subtitle as string;
 
-  return `${eventTitle} — ${eventSubtitle}
+	return `${eventTitle} - ${eventSubtitle}
 
 Enter the realm using this sign-in link (expires in 15 minutes):
 
 ${link}
 
-If you didn't request this, you can safely ignore this email.`
+If you didn't request this, you can safely ignore this email.`;
 }
 
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+	return s
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;');
 }

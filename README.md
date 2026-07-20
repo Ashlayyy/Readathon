@@ -1,6 +1,6 @@
-# Readathon 2026 — The Crucible
+# Readathon 2026 - The Crucible
 
-A team-based reading competition for the Book Baddies community. Readers join realms, submit finished books, stack prompts and bonuses for XP, sabotage rival teams, and climb weekly standings.
+A team-based reading competition for the Book Baddies community. Readers join realms, submit finished books, stack prompts and bonuses for points, sabotage rival teams, and climb weekly standings.
 
 Built with **Vue 3 + Vite** (frontend), **Hono + MongoDB** (API), and a single config file that drives almost all site copy, teams, prompts, FAQ, branding, and admin UI text.
 
@@ -9,12 +9,12 @@ Built with **Vue 3 + Vite** (frontend), **Hono + MongoDB** (API), and a single c
 ## Features
 
 - **Sign up & magic-link login** (email via Resend, optional Google OAuth)
-- **Team assignment** — admins sort readers into realms (Sun & Moon)
-- **Book submission wizard** — prompts, bonuses, add XP or sabotage
-- **Standings** — weekly publish with SVG leaderboard, optional Discord webhook
-- **FAQ inbox** — readers ask questions; admins reply by email
-- **Admin panel** — users, teams, submissions, prompts, standings, rosters
-- **Config-driven UI** — event name, copy, colors, and admin labels live in `data/realmathon.json`
+- **Team assignment** - admins sort readers into realms (Sun & Moon)
+- **Book submission wizard** - prompts, bonuses, add points or sabotage
+- **Standings** - weekly publish with SVG leaderboard, optional Discord webhook
+- **FAQ inbox** - readers ask questions; admins reply by email
+- **Admin panel** - users, teams, submissions, prompts, standings, rosters
+- **Config-driven UI** - event name, copy, colors, and admin labels live in `data/realmathon.json`
 
 ---
 
@@ -51,13 +51,13 @@ npm install --prefix frontend
 npm install --prefix server
 
 cp server/.env.example server/.env
-# Edit server/.env — at minimum MONGODB_URI and SESSION_SECRET
+# Edit server/.env - at minimum MONGODB_URI and SESSION_SECRET
 
 npm run dev
 ```
 
-| Service  | URL |
-|----------|-----|
+| Service  | URL                   |
+| -------- | --------------------- |
 | Frontend | http://localhost:5173 |
 | API      | http://localhost:3001 |
 
@@ -73,21 +73,21 @@ This file is the **single source of truth** for static event content. The server
 
 ### What's in the file
 
-| Section | Purpose |
-|---------|---------|
-| `event` | Name, subtitle, tagline, lore, schedule month |
-| `copy` | All user-facing UI strings (login, nav, submit wizard, profile, pages) |
-| `copy.admin` | **All admin panel labels, buttons, messages, and confirm dialogs** |
-| `copy.nav` | Main navigation labels |
-| `schedule` | Readathon start/end dates (used in FAQ copy) |
-| `branding.theme` | CSS theme colors applied at runtime |
-| `teams` | Realm definitions, colors, bonus prompts |
-| `prompts` | Global positive/negative prompts (fallback if DB empty) |
-| `globalBonuses` | Competition/trials bonus (+10 XP) |
-| `pageCountBonuses` | Page-count XP tiers |
-| `howItWorks` | Step-by-step guide |
-| `faq` | Questions and answers |
-| `scoringRules` | Game rules (max prompts, averaging, etc.) |
+| Section            | Purpose                                                                |
+| ------------------ | ---------------------------------------------------------------------- |
+| `event`            | Name, subtitle, tagline, lore, schedule month                          |
+| `copy`             | All user-facing UI strings (login, nav, submit wizard, profile, pages) |
+| `copy.admin`       | **All admin panel labels, buttons, messages, and confirm dialogs**     |
+| `copy.nav`         | Main navigation labels                                                 |
+| `schedule`         | Readathon start/end dates (used in FAQ copy)                           |
+| `branding.theme`   | CSS theme colors applied at runtime                                    |
+| `teams`            | Realm definitions, colors, bonus prompts                               |
+| `prompts`          | Global positive/negative prompts (fallback if DB empty)                |
+| `globalBonuses`    | Competition/trials bonus (+10 points)                                  |
+| `pageCountBonuses` | Page-count point tiers                                                 |
+| `howItWorks`       | Step-by-step guide                                                     |
+| `faq`              | Questions and answers                                                  |
+| `scoringRules`     | Game rules (max prompts, averaging, etc.)                              |
 
 ### Editing copy
 
@@ -100,8 +100,8 @@ After editing the JSON on a **running production server**, reload config:
 
 ### Prompts: JSON vs database
 
-- **JSON** — default prompts, team shells, FAQ, all copy
-- **Database** — admins can import JSON prompts and edit them live (Admin → Prompts → Import from config file)
+- **JSON** - default prompts, team shells, FAQ, all copy
+- **Database** - admins can import JSON prompts and edit them live (Admin → Prompts → Import from config file)
 - If the DB has prompts, those take precedence over JSON for the public site
 
 ---
@@ -129,7 +129,7 @@ PORT=3001
 ### Frontend production (`frontend/.env.production`)
 
 ```env
-# API subdomain — same value as server API_URL (no trailing slash)
+# API subdomain - same value as server API_URL (no trailing slash)
 VITE_API_URL=https://api.your-domain.com
 ```
 
@@ -139,8 +139,8 @@ VITE_API_URL=https://api.your-domain.com
 
 Frontend and API run on **separate URLs**:
 
-- `https://your-domain.com` — static Vue app (`frontend/dist`)
-- `https://api.your-domain.com` — Hono on port 3001 behind nginx
+- `https://your-domain.com` - static Vue app (`frontend/dist`)
+- `https://api.your-domain.com` - Hono on port 3001 behind nginx
 
 ```bash
 cp frontend/.env.production.example frontend/.env.production
@@ -153,7 +153,7 @@ npm run pm2:start
 
 ### nginx examples
 
-**Frontend** — serve `frontend/dist` with SPA fallback:
+**Frontend** - serve `frontend/dist` with SPA fallback:
 
 ```nginx
 server {
@@ -168,7 +168,7 @@ server {
 }
 ```
 
-**API** — proxy to PM2 (nginx adds the internal `/api` prefix; public URLs are `https://api.your-domain.com/auth/...`):
+**API** - proxy to PM2 (nginx adds the internal `/api` prefix; public URLs are `https://api.your-domain.com/auth/...`):
 
 ```nginx
 server {
@@ -217,14 +217,14 @@ pm2 save
 
 Access via **Admin** in the nav (users listed in `ADMIN_EMAILS`).
 
-| Tab | What it does |
-|-----|----------------|
-| **Inbox** | FAQ questions from readers — reply, mark read, dismiss |
-| **Teams** | Random assign, roster visibility toggle, quick stats |
-| **Standings** | Publish/unpublish weeks, Discord webhook, download SVG |
-| **Users** | View participants, assign teams, add users manually |
-| **Submissions** | Edit or delete reader submissions |
-| **Prompts** | Manage live/scheduled/draft prompts, import from JSON |
+| Tab             | What it does                                           |
+| --------------- | ------------------------------------------------------ |
+| **Inbox**       | FAQ questions from readers - reply, mark read, dismiss |
+| **Teams**       | Random assign, roster visibility toggle, quick stats   |
+| **Standings**   | Publish/unpublish weeks, Discord webhook, download SVG |
+| **Users**       | View participants, assign teams, add users manually    |
+| **Submissions** | Edit or delete reader submissions                      |
+| **Prompts**     | Manage live/scheduled/draft prompts, import from JSON  |
 
 All admin UI text is in `data/realmathon.json` under `copy.admin`.
 
@@ -232,10 +232,10 @@ All admin UI text is in `data/realmathon.json` under `copy.admin`.
 
 ## Auth
 
-- **Signup** — name + email → magic link emailed (15 min, single-use)
-- **Login** — same magic-link flow
-- **Google** — optional OAuth (requires server env vars)
-- **Admins** — emails in `ADMIN_EMAILS`
+- **Signup** - name + email → magic link emailed (15 min, single-use)
+- **Login** - same magic-link flow
+- **Google** - optional OAuth (requires server env vars)
+- **Admins** - emails in `ADMIN_EMAILS`
 
 ---
 

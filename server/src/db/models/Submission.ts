@@ -7,6 +7,8 @@ const submissionSchema = new Schema(
     bookAuthor: { type: String, required: true, trim: true },
     pageCount: { type: Number, required: true },
     format: { type: String, required: true },
+    /** Open Library URL or /api/covers/files/... */
+    coverUrl: { type: String, default: null, trim: true },
     startedAt: { type: String, default: null },
     finishedAt: { type: String, default: null },
     submissionType: { type: String, enum: ['add', 'sabotage'], required: true },
@@ -18,6 +20,8 @@ const submissionSchema = new Schema(
     promptPoints: { type: Number, default: 0 },
     bonusPoints: { type: Number, default: 0 },
     totalImpact: { type: Number, default: 0 },
+    deletedAt: { type: Date, default: null, index: true },
+    deletedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },
 )

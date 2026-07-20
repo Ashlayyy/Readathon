@@ -14,10 +14,14 @@ const router = createRouter({
     { path: '/prompts', name: 'prompts', component: () => import('../views/PromptsView.vue') },
     { path: '/faq', name: 'faq', component: () => import('../views/FaqView.vue') },
     { path: '/standings', name: 'standings', component: () => import('../views/StandingsView.vue') },
+    { path: '/archive', name: 'archive', component: () => import('../views/ArchiveView.vue') },
+    { path: '/archive/:slug', name: 'archive-slug', component: () => import('../views/ArchiveView.vue') },
+    { path: '/shelf', name: 'shelf', component: () => import('../views/ShelfView.vue') },
     { path: '/login', name: 'login', component: () => import('../views/LoginView.vue') },
     { path: '/maintenance', name: 'maintenance', component: () => import('../views/MaintenanceView.vue') },
     { path: '/submit', name: 'submit', component: () => import('../views/SubmitView.vue'), meta: { requiresAssigned: true } },
     { path: '/profile', name: 'profile', component: () => import('../views/ProfileView.vue'), meta: { requiresAuth: true } },
+    { path: '/readers/:id', name: 'reader', component: () => import('../views/ReaderProfileView.vue') },
     { path: '/my-reads', redirect: (to) => ({ name: 'profile', query: { ...to.query, tab: 'books' } }) },
     { path: '/admin', name: 'admin', component: () => import('../views/AdminView.vue'), meta: { requiresAdmin: true } },
   ],
@@ -35,7 +39,7 @@ router.beforeEach(async (to) => {
   const isAdmin = user.value?.isAdmin === true
 
   if (downtime && !isAdmin) {
-    const allowed = new Set(['maintenance', 'login'])
+    const allowed = new Set(['maintenance', 'login', 'archive', 'archive-slug', 'reader'])
     if (!allowed.has(String(to.name))) return { name: 'maintenance' }
   }
 
@@ -57,6 +61,12 @@ router.beforeEach(async (to) => {
     if (!user.value) return '/login'
     return '/'
   }
+})
+
+router.afterEach((to) => {
+  void import('../lib/posthog').then(({ capturePageview }) => {
+    capturePageview(to.fullPath)
+  })
 })
 
 export default router

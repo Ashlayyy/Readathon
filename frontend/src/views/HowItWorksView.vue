@@ -33,7 +33,7 @@ onMounted(loadConfig)
       <div class="table-wrap">
         <table class="data-table">
           <thead>
-            <tr><th>Pages</th><th>Bonus XP</th></tr>
+            <tr><th>Pages</th><th>Bonus points</th></tr>
           </thead>
           <tbody>
             <tr v-for="tier in config.pageCountBonuses" :key="tier.label">

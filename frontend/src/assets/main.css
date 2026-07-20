@@ -17,7 +17,7 @@
 	--color-border: var(--realm-border);
 	--color-heading: var(--realm-text);
 	--color-text: var(--realm-text-muted);
-	--color-text-muted: #7a7268;
+	--color-text-muted: var(--realm-text-muted);
 	--color-accent: var(--realm-accent);
 	--color-accent-hover: var(--realm-accent-glow);
 
@@ -25,14 +25,21 @@
 	--font-body: 'Source Sans 3', system-ui, sans-serif;
 	--radius: 10px;
 	--shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+	--realm-overlay: rgba(0, 0, 0, 0.65);
+	--realm-header-bg: color-mix(in srgb, var(--realm-bg) 92%, transparent);
+	--realm-panel-bg: color-mix(in srgb, var(--realm-bg) 96%, transparent);
 	--page-max: 1440px;
 	--page-gutter: clamp(1.25rem, 4vw, 2.5rem);
 	--safe-top: env(safe-area-inset-top, 0px);
 	--safe-right: env(safe-area-inset-right, 0px);
 	--safe-bottom: env(safe-area-inset-bottom, 0px);
 	--safe-left: env(safe-area-inset-left, 0px);
-	--realm-bg-image: url('/dragons.png');
-	--realm-bg-image-opacity: 0.25;
+	--realm-bg-image: image-set(
+		url('/dragons.webp') type('image/webp'),
+		url('/dragons.png') type('image/png')
+	);
+	--realm-bg-image-opacity: 0.22;
+	color-scheme: dark;
 }
 
 *,
@@ -42,7 +49,7 @@
 }
 
 html {
-	background-color: #000;
+	background-color: var(--realm-bg);
 	min-height: 100%;
 }
 
@@ -51,9 +58,15 @@ html::before {
 	position: fixed;
 	inset: 0;
 	background: var(--realm-bg-image) center / cover no-repeat;
-	background-attachment: fixed;
 	opacity: var(--realm-bg-image-opacity);
 	pointer-events: none;
+	z-index: -1;
+}
+
+@media (min-width: 769px) {
+	html::before {
+		background-attachment: fixed;
+	}
 }
 
 body {
@@ -63,18 +76,17 @@ body {
 	background-image:
 		radial-gradient(
 			ellipse 80% 50% at 50% -10%,
-			var(--realm-body-glow-accent, rgba(212, 99, 74, 0.12)),
+			var(--realm-body-glow-accent, rgba(212, 99, 74, 0.1)),
 			transparent
 		),
 		radial-gradient(
-			ellipse 60% 40% at 100% 100%,
-			rgba(155, 126, 217, 0.06),
+			ellipse 50% 35% at 100% 100%,
+			rgba(155, 126, 217, 0.03),
 			transparent
 		);
 	background-size: cover, cover;
 	background-position: center, center;
 	background-repeat: no-repeat;
-	background-attachment: fixed;
 	min-height: 100vh;
 	min-height: 100dvh;
 	color: var(--realm-text-muted);
@@ -82,8 +94,40 @@ body {
 	overflow-x: hidden;
 }
 
+/* Light theme: quieter art + softer purple wash so cream surfaces stay readable */
+html[data-theme='light'] {
+	color-scheme: light;
+}
+
+html[data-theme='light'] body {
+	background-image:
+		radial-gradient(
+			ellipse 80% 50% at 50% -10%,
+			var(--realm-body-glow-accent, rgba(200, 86, 61, 0.12)),
+			transparent
+		),
+		radial-gradient(ellipse 50% 35% at 100% 100%, rgba(120, 100, 70, 0.06), transparent);
+}
+
 body.modal-open {
 	overflow: hidden;
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	border: 0;
+	white-space: nowrap;
+}
+
+:focus-visible {
+	outline: 2px solid var(--realm-accent-glow);
+	outline-offset: 2px;
 }
 
 /* Shared modal shell: page stays fixed; content scrolls inside the dialog */
@@ -96,7 +140,7 @@ body.modal-open {
 	justify-content: center;
 	padding: 1rem;
 	overflow: hidden;
-	background: rgba(0, 0, 0, 0.65);
+	background: var(--realm-overlay, rgba(0, 0, 0, 0.65));
 	backdrop-filter: blur(4px);
 }
 
@@ -124,7 +168,7 @@ a {
 }
 
 a:hover {
-	color: #ffc4ad;
+	color: var(--realm-accent);
 }
 
 .page {
@@ -171,6 +215,43 @@ a:hover {
 	to {
 		opacity: 1;
 		transform: translateY(0);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.page {
+		animation: none;
+	}
+
+	html::before {
+		background-attachment: scroll !important;
+	}
+}
+
+.skeleton {
+	background: linear-gradient(
+		90deg,
+		var(--realm-surface) 0%,
+		var(--realm-surface-alt) 50%,
+		var(--realm-surface) 100%
+	);
+	background-size: 200% 100%;
+	animation: skeleton-shine 1.2s ease-in-out infinite;
+	border-radius: 6px;
+}
+
+@keyframes skeleton-shine {
+	0% {
+		background-position: 100% 0;
+	}
+	100% {
+		background-position: -100% 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton {
+		animation: none;
 	}
 }
 

@@ -7,6 +7,7 @@ import { useConfig } from './composables/useConfig';
 import { useAdminCopy } from './composables/useAdminCopy';
 import { closeAllNavDropdowns } from './composables/useNavDropdown';
 import SiteNavDropdown from './components/SiteNavDropdown.vue';
+import ThemeSwitcher from './components/ThemeSwitcher.vue';
 import { APP_VERSION } from './lib/version';
 
 const { user, logout } = useAuth();
@@ -19,7 +20,9 @@ const menuOpen = ref(false);
 let unreadPromise: Promise<void> | null = null;
 
 const isMaintenancePage = computed(() => route.name === 'maintenance');
-const downtimeActive = computed(() => config.value?.site?.downtimeMode === true);
+const downtimeActive = computed(
+	() => config.value?.site?.downtimeMode === true,
+);
 
 const nav = computed(() => config.value?.copy.nav ?? {});
 
@@ -36,6 +39,7 @@ const playNavItems = computed(() => [
 const aboutNavItems = computed(() => [
 	{ to: '/how-it-works', label: nav.value.howItWorks ?? 'Rules' },
 	{ to: '/teams', label: nav.value.teams ?? 'Teams' },
+	{ to: '/shelf', label: nav.value.shelf ?? 'Shelf' },
 	{ to: '/faq', label: nav.value.faq ?? 'FAQ' },
 ]);
 
@@ -59,8 +63,12 @@ watch(
 	},
 );
 
+watch(menuOpen, (open) => {
+	document.body.classList.toggle('modal-open', open);
+});
+
 watch(config, (c) => {
-	if (c) document.title = `${c.event.name} — ${c.event.subtitle}`;
+	if (c) document.title = `${c.event.name} - ${c.event.subtitle}`;
 });
 
 async function loadUnreadCount() {
@@ -96,6 +104,8 @@ function closeMenu() {
 
 <template>
 	<div class="app-shell">
+		<a href="#main-content" class="skip-link">Skip to content</a>
+
 		<header v-if="!isMaintenancePage" class="site-header">
 			<div class="header-inner">
 				<div class="header-top">
@@ -165,6 +175,8 @@ function closeMenu() {
 				</nav>
 
 				<div class="header-actions" :class="{ open: menuOpen }">
+					<ThemeSwitcher compact class="nav-theme-switcher" />
+
 					<div v-if="user?.isAdmin" class="action-buttons">
 						<RouterLink
 							to="/admin"
@@ -223,13 +235,14 @@ function closeMenu() {
 
 		<div v-if="menuOpen" class="menu-backdrop" @click="closeMenu" />
 
-		<div class="app-content">
+		<div id="main-content" class="app-content" tabindex="-1">
 			<div
 				v-if="downtimeActive && user?.isAdmin && !isMaintenancePage"
 				class="alert alert-warning status-banner"
 			>
 				<strong>Downtime mode is on.</strong>
-				Only admins can use the site. Turn it off in Admin → Teams when you're done.
+				Only admins can use the site. Turn it off in Admin → Teams when you're
+				done.
 			</div>
 
 			<div
@@ -253,14 +266,30 @@ function closeMenu() {
 				</button>
 			</div>
 
-			<RouterView v-else />
+			<RouterView v-else v-slot="{ Component }">
+				<Transition name="page-fade" mode="out-in">
+					<component :is="Component" />
+				</Transition>
+			</RouterView>
 		</div>
 
 		<footer v-if="config && !isMaintenancePage" class="site-footer">
-			<p>
-				{{ config.event.name }} — <em>{{ config.event.subtitle }}</em>
-			</p>
-			<p class="app-version">v{{ APP_VERSION }}</p>
+			<div class="footer-inner">
+				<p class="footer-brand">
+					{{ config.event.name }}
+					<span class="footer-sub">{{ config.event.subtitle }}</span>
+				</p>
+				<nav class="footer-links" aria-label="Footer">
+					<RouterLink to="/how-it-works">{{
+						nav.howItWorks ?? 'Rules'
+					}}</RouterLink>
+					<RouterLink to="/standings">{{
+						nav.standings ?? 'Standings'
+					}}</RouterLink>
+					<RouterLink to="/faq">{{ nav.faq ?? 'FAQ' }}</RouterLink>
+				</nav>
+				<p class="app-version">v{{ APP_VERSION }}</p>
+			</div>
 		</footer>
 	</div>
 </template>
@@ -272,9 +301,32 @@ function closeMenu() {
 	flex-direction: column;
 }
 
+.skip-link {
+	position: absolute;
+	top: -3rem;
+	left: 1rem;
+	z-index: 500;
+	padding: 0.65rem 1.1rem;
+	border-radius: var(--radius);
+	background: var(--realm-accent);
+	color: white;
+	font-weight: 600;
+	font-size: 0.9rem;
+	text-decoration: none;
+	transition: top 0.15s ease;
+}
+
+.skip-link:focus-visible {
+	top: 1rem;
+}
+
+.app-content:focus-visible {
+	outline: none;
+}
+
 .site-header {
 	border-bottom: 1px solid var(--realm-border);
-	background: rgba(8, 7, 11, 0.92);
+	background: var(--realm-header-bg, color-mix(in srgb, var(--realm-bg) 92%, transparent));
 	backdrop-filter: blur(8px);
 	position: sticky;
 	top: 0;
@@ -478,6 +530,10 @@ function closeMenu() {
 	z-index: 0;
 }
 
+.nav-theme-switcher {
+	flex-shrink: 0;
+}
+
 .action-buttons {
 	display: flex;
 	align-items: center;
@@ -643,24 +699,87 @@ function closeMenu() {
 }
 
 .site-footer {
-	margin-top: 2rem;
-	padding-top: 1.5rem;
-	text-align: center;
+	margin-top: auto;
+	padding-top: 2rem;
+	padding-bottom: 0.5rem;
+	border-top: 1px solid var(--realm-border);
 	color: var(--realm-text-muted);
 	font-size: 0.85rem;
-	opacity: 0.65;
 }
 
-.site-footer em {
+.footer-inner {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.85rem;
+	text-align: center;
+}
+
+.footer-brand {
+	margin: 0;
+	color: var(--realm-text);
+	font-family: var(--font-display);
+	font-size: 0.95rem;
+	letter-spacing: 0.04em;
+}
+
+.footer-sub {
+	display: block;
+	margin-top: 0.2rem;
 	color: var(--realm-accent);
-	font-style: normal;
+	font-family: var(--font-body);
+	font-size: 0.8rem;
+	font-weight: 500;
+	letter-spacing: 0;
+	opacity: 0.9;
+}
+
+.footer-links {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.75rem 1.25rem;
+}
+
+.footer-links a {
+	color: var(--realm-text-muted);
+	font-size: 0.85rem;
+}
+
+.footer-links a:hover {
+	color: var(--realm-accent-glow);
 }
 
 .app-version {
-	margin-top: 0.35rem;
+	margin: 0;
 	font-size: 0.75rem;
-	opacity: 0.85;
+	opacity: 0.7;
 	font-family: ui-monospace, monospace;
+}
+
+.page-fade-enter-active,
+.page-fade-leave-active {
+	transition:
+		opacity 0.2s ease,
+		transform 0.2s ease;
+}
+
+.page-fade-enter-from,
+.page-fade-leave-to {
+	opacity: 0;
+	transform: translateY(6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.page-fade-enter-active,
+	.page-fade-leave-active {
+		transition: none;
+	}
+
+	.page-fade-enter-from,
+	.page-fade-leave-to {
+		transform: none;
+	}
 }
 
 /* Tablet */
@@ -745,21 +864,52 @@ function closeMenu() {
 		display: block;
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
-		z-index: 150;
+		background: var(--realm-overlay, rgba(0, 0, 0, 0.55));
+		z-index: 180;
 	}
 
 	.main-nav {
 		display: none;
+		position: fixed;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		width: min(20rem, 86vw);
 		flex-direction: column;
 		gap: 0;
-		width: 100%;
-		padding: 0.5rem 0;
-		border-top: 1px solid var(--realm-border);
-		margin-top: 0.65rem;
+		padding: calc(4.5rem + var(--safe-top)) 1.25rem 11rem;
+		margin: 0;
+		border: none;
+		border-left: 1px solid var(--realm-border);
+		background: var(--realm-panel-bg, color-mix(in srgb, var(--realm-bg) 96%, transparent));
+		backdrop-filter: blur(12px);
+		z-index: 190;
+		overflow-y: auto;
+		transform: translateX(100%);
+		transition: transform 0.25s ease;
 	}
 
 	.main-nav.open {
+		display: flex;
+		transform: translateX(0);
+	}
+
+	.header-actions {
+		display: none;
+		position: fixed;
+		right: 0;
+		bottom: 0;
+		width: min(20rem, 86vw);
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.65rem;
+		padding: 1rem 1.25rem calc(1.25rem + var(--safe-bottom));
+		border-left: 1px solid var(--realm-border);
+		background: var(--realm-panel-bg, color-mix(in srgb, var(--realm-bg) 96%, transparent));
+		z-index: 191;
+	}
+
+	.header-actions.open {
 		display: flex;
 	}
 
@@ -782,17 +932,8 @@ function closeMenu() {
 	}
 
 	.header-actions {
-		display: none;
-		flex-direction: column;
-		align-items: stretch;
-		gap: 0.65rem;
-		width: 100%;
-		padding: 0.75rem 0 0.25rem;
+		padding-bottom: calc(1.25rem + var(--safe-bottom));
 		border-top: 1px solid var(--realm-border);
-	}
-
-	.header-actions.open {
-		display: flex;
 	}
 
 	.action-buttons {

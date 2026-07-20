@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: readathon
+    metrics_path: /metrics
+    scrape_interval: 15s
+    # Host machine when Prometheus runs in Docker Desktop (Windows/Mac).
+    # On Linux, use host.docker.internal or replace with your server IP.
+    static_configs:
+      - targets: ['host.docker.internal:3001']
+        labels:
+          app: readathon
+          env: local
+    # Uncomment if you set METRICS_TOKEN in server/.env:
+    # authorization:
+    #   type: Bearer
+    #   credentials: 'your-metrics-token-here'

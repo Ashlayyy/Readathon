@@ -1,6 +1,7 @@
 import { getConfigWithPrompts } from './prompts.js'
 import { User } from '../db/models/User.js'
 import { Submission } from '../db/models/Submission.js'
+import { withActive } from '../db/activeSubmission.js'
 
 export type MemberContribution = {
   userId: string
@@ -12,6 +13,7 @@ export type MemberContribution = {
 }
 
 export type IncomingAttack = {
+  userId: string
   displayName: string
   attackerTeamId: string
   attackerTeamName: string
@@ -59,7 +61,7 @@ export async function calculateStandingsBreakdown(): Promise<StandingsBreakdown>
 
   const attacksOnTeam = new Map<string, Map<string, IncomingAttack>>()
 
-  const allSubs = await Submission.find()
+  const allSubs = await Submission.find(withActive())
   for (const sub of allSubs) {
     const userId = sub.userId.toString()
     const teamId = userTeamMap.get(userId)
@@ -87,6 +89,7 @@ export async function calculateStandingsBreakdown(): Promise<StandingsBreakdown>
       } else {
         const attackerTeam = config.teams.find((t) => t.id === teamId)
         targetAttacks.set(key, {
+          userId,
           displayName: userNameMap.get(userId) ?? 'Unknown',
           attackerTeamId: teamId,
           attackerTeamName: attackerTeam?.name ?? teamId,
@@ -112,7 +115,14 @@ export async function calculateStandingsBreakdown(): Promise<StandingsBreakdown>
           sabotageCount: s.sabotageCount,
         }
       })
-      .sort((a, b) => b.xpGained + b.xpDealt - (a.xpGained + a.xpDealt))
+      .sort((a, b) => {
+        const aTotal = a.xpGained + a.xpDealt
+        const bTotal = b.xpGained + b.xpDealt
+        if (bTotal !== aTotal) return bTotal - aTotal
+        if (b.xpDealt !== a.xpDealt) return b.xpDealt - a.xpDealt
+        if (b.xpGained !== a.xpGained) return b.xpGained - a.xpGained
+        return a.displayName.localeCompare(b.displayName)
+      })
 
     const attacksFromOthers = [...(attacksOnTeam.get(team.id)?.values() ?? [])].sort(
       (a, b) => b.damage - a.damage,

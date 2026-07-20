@@ -1,29 +1,61 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { api } from '../lib/api';
 import { useAuth } from '../composables/useAuth';
 import { useConfig } from '../composables/useConfig';
 import { useCopy } from '../composables/useCopy';
 import { useBodyScrollLock } from '../composables/useBodyScrollLock';
+import { useFocusTrap } from '../composables/useFocusTrap';
 
 const { config, loadConfig } = useConfig();
 const { user } = useAuth();
 const { t } = useCopy();
 
-const openIndex = ref<number | null>(0);
+const openIndices = ref<Set<number>>(new Set([0]));
+const search = ref('');
 const showModal = ref(false);
 const questionText = ref('');
 const sending = ref(false);
 const sent = ref(false);
 const error = ref('');
+const modalRef = ref<HTMLElement | null>(null);
 
 useBodyScrollLock(showModal);
+useFocusTrap(showModal, modalRef);
 
 onMounted(loadConfig);
 
+const faqItems = computed(() =>
+	(config.value?.faq ?? []).map((item, i) => ({
+		index: i,
+		q: t(item.q),
+		a: t(item.a),
+	})),
+);
+
+const isSearching = computed(() => search.value.trim().length > 0);
+
+const filteredItems = computed(() => {
+	const q = search.value.trim().toLowerCase();
+	if (!q) return faqItems.value;
+	return faqItems.value.filter(
+		(item) =>
+			item.q.toLowerCase().includes(q) || item.a.toLowerCase().includes(q),
+	);
+});
+
+function isOpen(index: number) {
+	// While searching, auto-expand every match so answers are visible at a glance.
+	if (isSearching.value) return true;
+	return openIndices.value.has(index);
+}
+
 function toggle(i: number) {
-	openIndex.value = openIndex.value === i ? null : i;
+	const next = new Set(openIndices.value);
+	if (next.has(i)) next.delete(i);
+	else next.add(i);
+	openIndices.value = next;
 }
 
 function openAsk() {
@@ -65,15 +97,31 @@ async function submitQuestion() {
 			</div>
 		</header>
 
-		<div class="faq-list">
-			<div v-for="(item, i) in config.faq" :key="i" class="faq-item card">
-				<button type="button" class="faq-q" @click="toggle(i)">
-					<span class="faq-q-text">{{ t(item.q) }}</span>
+		<input
+			v-model="search"
+			type="search"
+			class="faq-search"
+			:placeholder="String(config.copy.faqSearchPlaceholder ?? 'Search questions…')"
+			aria-label="Search FAQ"
+		/>
+
+		<div v-if="filteredItems.length === 0" class="faq-empty card">
+			{{ config.copy.faqSearchEmpty ?? 'No questions match your search.' }}
+		</div>
+
+		<div v-else class="faq-list">
+			<div
+				v-for="item in filteredItems"
+				:key="item.index"
+				class="faq-item card"
+			>
+				<button type="button" class="faq-q" @click="toggle(item.index)">
+					<span class="faq-q-text">{{ item.q }}</span>
 					<span class="faq-toggle" aria-hidden="true">{{
-						openIndex === i ? '−' : '+'
+						isOpen(item.index) ? '−' : '+'
 					}}</span>
 				</button>
-				<p v-if="openIndex === i" class="faq-a">{{ t(item.a) }}</p>
+				<p v-if="isOpen(item.index)" class="faq-a">{{ item.a }}</p>
 			</div>
 		</div>
 
@@ -99,8 +147,15 @@ async function submitQuestion() {
 	</main>
 
 	<Teleport to="body">
-		<div v-if="showModal" class="modal-backdrop">
-			<div class="modal card" role="dialog" aria-labelledby="ask-title">
+		<div v-if="showModal" class="modal-backdrop" @keydown.esc="closeModal">
+			<div
+				ref="modalRef"
+				class="modal card"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="ask-title"
+				tabindex="-1"
+			>
 				<header class="modal-header">
 					<h2 id="ask-title">
 						{{ config?.copy.faqModalTitle ?? 'Ask the Admins' }}
@@ -172,6 +227,16 @@ async function submitQuestion() {
 <style scoped>
 .page-header {
 	margin-bottom: 0.5rem;
+}
+
+.faq-search {
+	margin-bottom: 1.25rem;
+}
+
+.faq-empty {
+	text-align: center;
+	color: var(--realm-text-muted);
+	margin-bottom: 2rem;
 }
 
 .faq-list {

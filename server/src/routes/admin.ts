@@ -6,7 +6,9 @@ import { Question, questionToAdminPublic } from '../db/models/Question.js'
 import { PublishedStandings } from '../db/models/PublishedStandings.js'
 import { StandingsEvent } from '../db/models/StandingsEvent.js'
 import { Submission } from '../db/models/Submission.js'
+import { withActive } from '../db/activeSubmission.js'
 import { User } from '../db/models/User.js'
+import { logAudit, listAuditLog } from '../services/audit.js'
 import {
   assignTeamsRandomly,
   createUserByAdmin,
@@ -26,13 +28,21 @@ import {
 import { generateStandingsSvg } from '../services/standings-image.js'
 import { calculateStandingsBreakdown } from '../services/standings-breakdown.js'
 import { generateBreakdownSvg } from '../services/standings-breakdown-image.js'
-import { maybeNotifyQuestionAnswered, notifyStandingsPublished } from '../services/notifications.js'
-import { notifyDiscordStandingsPublished } from '../services/discord.js'
+import { maybeNotifyQuestionAnswered } from '../services/notifications.js'
 import { svgToPng } from '../services/svgToPng.js'
 import {
+  clearConfigOverrides,
+  discardConfigDraft,
+  getDiscordRoleId,
   getSiteSettingsAdminSync,
+  publishConfigDraft,
   updateSiteSettings,
+  type SeasonArchive,
 } from '../services/siteSettings.js'
+import { publishStandings } from '../services/standingsPublish.js'
+import { buildStandingsDigestDraft } from '../services/standingsDigest.js'
+import { sendDiscordWebhookTest } from '../services/discord.js'
+import { submissionsCreatedTotal } from '../services/metrics.js'
 import {
   createPrompt,
   deletePrompt,
@@ -57,6 +67,35 @@ adminRoutes.use('*', async (c, next) => {
     await next()
   } catch {
     return c.json({ error: 'Admin access required' }, 403)
+  }
+})
+
+adminRoutes.get('/stats', async (c) => {
+  const [totalUsers, pending, assigned, submissions, unreadQuestions] = await Promise.all([
+    User.countDocuments(),
+    User.countDocuments({ status: 'pending' }),
+    User.countDocuments({ status: 'assigned' }),
+    Submission.countDocuments(withActive()),
+    Question.countDocuments({ status: 'unread' }),
+  ])
+  return c.json({ totalUsers, pending, assigned, submissions, unreadQuestions })
+})
+
+adminRoutes.get('/analytics', async (c) => {
+  const { buildAdminAnalytics } = await import('../services/adminAnalytics.js')
+  try {
+    const analytics = await buildAdminAnalytics({
+      from: c.req.query('from'),
+      to: c.req.query('to'),
+      preset: c.req.query('preset'),
+      teamId: c.req.query('teamId'),
+    })
+    return c.json({ analytics })
+  } catch (e) {
+    return c.json(
+      { error: e instanceof Error ? e.message : 'Failed to build analytics' },
+      400,
+    )
   }
 })
 
@@ -85,14 +124,45 @@ adminRoutes.get('/settings', (c) => {
 })
 
 adminRoutes.patch('/settings', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
   const body = await c.req.json<{
     showTeamRosters?: boolean
     downtimeMode?: boolean
     discordWebhookUrl?: string
     discordRoleId?: string
+    teamChatHooksEnabled?: boolean
+    teamChatWebhookUrls?: Record<string, string>
+    scheduledPublishEnabled?: boolean
+    scheduledPublishDay?: number
+    scheduledPublishHour?: number
+    scheduledPublishTimezone?: string
+    configDraft?: unknown
+    configOverrides?: unknown
+    seasonArchive?: SeasonArchive
   }>()
   try {
+    const before = getSiteSettingsAdminSync()
     const settings = await updateSiteSettings(body)
+
+    if (typeof body.downtimeMode === 'boolean' && body.downtimeMode !== before.downtimeMode) {
+      await logAudit({
+        actor: admin,
+        action: 'settings.downtime_toggled',
+        entityType: 'SiteSettings',
+        detail: { downtimeMode: settings.downtimeMode },
+      })
+    }
+
+    const changedKeys = Object.keys(body).filter((key) => key !== 'downtimeMode')
+    if (changedKeys.length > 0) {
+      await logAudit({
+        actor: admin,
+        action: 'settings.updated',
+        entityType: 'SiteSettings',
+        detail: { changedKeys },
+      })
+    }
+
     return c.json({ settings })
   } catch (e) {
     if (e instanceof Error && e.message === 'Invalid Discord webhook URL') {
@@ -105,16 +175,62 @@ adminRoutes.patch('/settings', async (c) => {
   }
 })
 
+/** Smoke-test the standings Discord webhook. Never pings a role. */
+adminRoutes.post('/discord/test-webhook', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const result = await sendDiscordWebhookTest()
+  if (!result.sent) {
+    return c.json({ error: result.error ?? 'Failed to send test message' }, 400)
+  }
+  return c.json({ ok: true })
+})
+
+adminRoutes.post('/config/publish-draft', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
+  const settings = await publishConfigDraft()
+  await logAudit({
+    actor: admin,
+    action: 'config.draft_published',
+    entityType: 'SiteSettings',
+    detail: { configOverrides: settings.configOverrides },
+  })
+  return c.json({ settings })
+})
+
+adminRoutes.post('/config/discard-draft', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
+  const settings = await discardConfigDraft()
+  await logAudit({
+    actor: admin,
+    action: 'config.draft_discarded',
+    entityType: 'SiteSettings',
+  })
+  return c.json({ settings })
+})
+
+adminRoutes.post('/config/clear-overrides', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
+  const settings = await clearConfigOverrides()
+  await logAudit({
+    actor: admin,
+    action: 'config.overrides_cleared',
+    entityType: 'SiteSettings',
+  })
+  return c.json({ settings })
+})
+
 adminRoutes.post('/assign-teams', async (c) => {
   const result = await assignTeamsRandomly()
   return c.json(result)
 })
 
 adminRoutes.patch('/users/:id/team', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
   const body = await c.req.json<{ teamId?: string | null }>()
   const user = await User.findById(c.req.param('id'))
   if (!user) return c.json({ error: 'User not found' }, 404)
 
+  const previousTeamId = user.teamId ?? null
   const teamId = body.teamId?.trim() || null
 
   if (teamId === null) {
@@ -127,6 +243,15 @@ adminRoutes.patch('/users/:id/team', async (c) => {
   }
 
   await user.save()
+
+  await logAudit({
+    actor: admin,
+    action: 'user.team_assigned',
+    entityType: 'User',
+    entityId: user._id.toString(),
+    detail: { userName: user.displayName, from: previousTeamId, to: teamId },
+  })
+
   return c.json({ user: userToPublic(user) })
 })
 
@@ -151,21 +276,71 @@ adminRoutes.patch('/users/:id/admin', async (c) => {
 })
 
 adminRoutes.get('/submissions', async (c) => {
-  const rows = await Submission.find().sort({ createdAt: -1 })
+  const includeDeleted = c.req.query('includeDeleted') === '1'
+  const rows = await Submission.find(includeDeleted ? {} : withActive()).sort({ createdAt: -1 })
   const userIds = [...new Set(rows.map((sub) => sub.userId.toString()))]
-  const users = await User.find({ _id: { $in: userIds } })
+  const deletedByIds = [
+    ...new Set(rows.filter((sub) => sub.deletedBy).map((sub) => sub.deletedBy!.toString())),
+  ]
+  const users = await User.find({ _id: { $in: userIds } }).select('displayName teamId')
+  const deletedByUsers = await User.find({ _id: { $in: deletedByIds } }).select('displayName')
   const userById = new Map(users.map((u) => [u._id.toString(), u]))
-  return c.json({
-    submissions: rows.map((sub) => {
-      const user = userById.get(sub.userId.toString())
+  const deletedByNameById = new Map(deletedByUsers.map((u) => [u._id.toString(), u.displayName]))
 
-      return {
-        ...submissionToPublic(sub),
-        userName: user?.displayName ?? 'Unknown reader',
-        userEmail: user?.email ?? '',
-        userTeamId: user?.teamId ?? null,
-      }
-    }),
+  const active: unknown[] = []
+  const deleted: unknown[] = []
+
+  for (const sub of rows) {
+    const user = userById.get(sub.userId.toString())
+    const pub = submissionToPublic(sub)
+    const row = {
+      id: pub.id,
+      bookTitle: pub.bookTitle,
+      bookAuthor: pub.bookAuthor,
+      pageCount: pub.pageCount,
+      format: pub.format,
+      submissionType: pub.submissionType,
+      targetTeamId: pub.targetTeamId,
+      pageBonus: pub.pageBonus,
+      promptPoints: pub.promptPoints,
+      bonusPoints: pub.bonusPoints,
+      totalImpact: pub.totalImpact,
+      createdAt: pub.createdAt,
+      userId: sub.userId.toString(),
+      userName: user?.displayName ?? 'Unknown reader',
+      userEmail: '',
+      userTeamId: user?.teamId ?? null,
+      // Full prompt/date fields loaded via GET /submissions/:id when editing
+      startedAt: null,
+      finishedAt: null,
+      promptIds: [] as string[],
+      bonusCompetition: false,
+      bonusTeamPromptIds: [] as string[],
+      deletedAt: sub.deletedAt ?? null,
+      deletedBy: sub.deletedBy?.toString() ?? null,
+      deletedByName: sub.deletedBy ? deletedByNameById.get(sub.deletedBy.toString()) ?? null : null,
+    }
+    if (sub.deletedAt) deleted.push(row)
+    else active.push(row)
+  }
+
+  return c.json({
+    submissions: active,
+    deletedSubmissions: includeDeleted ? deleted : [],
+  })
+})
+
+adminRoutes.get('/submissions/:id', async (c) => {
+  const submission = await Submission.findById(c.req.param('id'))
+  if (!submission) return c.json({ error: 'Submission not found' }, 404)
+  const owner = await User.findById(submission.userId)
+  return c.json({
+    submission: {
+      ...submissionToPublic(submission),
+      userName: owner?.displayName ?? 'Unknown reader',
+      userEmail: owner?.email ?? '',
+      userTeamId: owner?.teamId ?? null,
+    },
   })
 })
 
@@ -193,6 +368,7 @@ adminRoutes.post('/submissions', async (c) => {
     bookAuthor: body.bookAuthor.trim(),
     pageCount: body.pageCount,
     format: body.format,
+    coverUrl: body.coverUrl?.trim() || null,
     startedAt: optionalDate(body.startedAt),
     finishedAt: optionalDate(body.finishedAt),
     submissionType: body.submissionType,
@@ -205,6 +381,10 @@ adminRoutes.post('/submissions', async (c) => {
     bonusPoints: score.bonusPoints,
     totalImpact: score.totalImpact,
   })
+
+  submissionsCreatedTotal
+    .labels(body.submissionType, body.format || 'unknown')
+    .inc()
 
   return c.json({
     submission: {
@@ -236,6 +416,7 @@ adminRoutes.patch('/submissions/:id', async (c) => {
   submission.bookAuthor = body.bookAuthor.trim()
   submission.pageCount = body.pageCount
   submission.format = body.format
+  submission.coverUrl = body.coverUrl?.trim() || null
   submission.startedAt = optionalDate(body.startedAt)
   submission.finishedAt = optionalDate(body.finishedAt)
   submission.submissionType = body.submissionType
@@ -263,29 +444,75 @@ adminRoutes.patch('/submissions/:id', async (c) => {
 })
 
 adminRoutes.delete('/submissions/:id', async (c) => {
-  const submission = await Submission.findByIdAndDelete(c.req.param('id'))
+  const admin = requireAdmin(await getSessionUser(c))
+  const submission = await Submission.findById(c.req.param('id'))
   if (!submission) return c.json({ error: 'Submission not found' }, 404)
+  if (submission.deletedAt) return c.json({ error: 'Submission is already deleted' }, 400)
+
+  submission.deletedAt = new Date()
+  submission.deletedBy = admin._id
+  await submission.save()
+
+  await logAudit({
+    actor: admin,
+    action: 'submission.soft_deleted',
+    entityType: 'Submission',
+    entityId: submission._id.toString(),
+    detail: { bookTitle: submission.bookTitle, bookAuthor: submission.bookAuthor },
+  })
+
   return c.json({ ok: true })
 })
 
+adminRoutes.post('/submissions/:id/restore', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
+  const submission = await Submission.findById(c.req.param('id'))
+  if (!submission) return c.json({ error: 'Submission not found' }, 404)
+  if (!submission.deletedAt) return c.json({ error: 'Submission is not deleted' }, 400)
+
+  submission.deletedAt = null
+  submission.deletedBy = null
+  await submission.save()
+
+  await logAudit({
+    actor: admin,
+    action: 'submission.restored',
+    entityType: 'Submission',
+    entityId: submission._id.toString(),
+    detail: { bookTitle: submission.bookTitle, bookAuthor: submission.bookAuthor },
+  })
+
+  return c.json({ submission: submissionToPublic(submission) })
+})
+
 function svgAttachment(c: Context, filename: string, svg: string) {
-  c.header('Content-Type', 'image/svg+xml')
+  c.header('Content-Type', 'image/svg+xml; charset=utf-8')
   c.header('Content-Disposition', `attachment; filename="${filename}"`)
+  return c.body(svg)
+}
+
+function svgInline(c: Context, svg: string) {
+  c.header('Content-Type', 'image/svg+xml; charset=utf-8')
+  c.header('Content-Disposition', 'inline')
+  c.header('Cache-Control', 'no-store')
   return c.body(svg)
 }
 
 adminRoutes.get('/standings/current', async (c) => {
   const standings = await calculateStandings()
   const breakdown = await calculateStandingsBreakdown()
-  const { weekLabel } = getWeekInfo()
-  const svg = generateStandingsSvg(standings, weekLabel)
-  const breakdownSvg = generateBreakdownSvg(breakdown, weekLabel)
   const active = await PublishedStandings.findOne({ isActive: true }).sort({ createdAt: -1 })
   const activeWeeks = await PublishedStandings.find({ isActive: true }).sort({ createdAt: -1 })
   const history = await StandingsEvent.find().sort({ createdAt: -1 }).limit(100)
 
   return c.json({
-    current: { standings, svg, breakdown, breakdownSvg },
+    current: {
+      standings,
+      breakdown,
+      // Vector for crisp admin preview (PNG stayed for Discord only)
+      imageUrl: '/admin/standings/preview.svg?kind=standings',
+      breakdownImageUrl: '/admin/standings/preview.svg?kind=breakdown',
+    },
     activePublication: active
       ? {
           id: active._id.toString(),
@@ -317,6 +544,53 @@ adminRoutes.get('/standings/current.svg', async (c) => {
   const { weekKey, weekLabel } = getWeekInfo()
   const svg = generateStandingsSvg(standings, weekLabel)
   return svgAttachment(c, `standings-${weekKey}.svg`, svg)
+})
+
+adminRoutes.get('/standings/preview.svg', async (c) => {
+  const kind = c.req.query('kind') ?? 'standings'
+  const { weekKey, weekLabel } = getWeekInfo()
+
+  let svg: string
+  if (kind === 'breakdown') {
+    const breakdown = await calculateStandingsBreakdown()
+    svg = generateBreakdownSvg(breakdown, weekLabel)
+  } else if (kind === 'vibes') {
+    // Live (unpublished) vibes for this week - not persisted, just rendered on the fly.
+    const { buildPublicStandingsVibes } = await import('../services/adminAnalytics.js')
+    const { generateVibesSvg } = await import('../services/vibes-image.js')
+    const vibes = await buildPublicStandingsVibes({ weekKey, weekLabel, to: new Date() })
+    svg = generateVibesSvg(vibes)
+  } else {
+    const standings = await calculateStandings()
+    svg = generateStandingsSvg(standings, weekLabel)
+  }
+
+  return svgInline(c, svg)
+})
+
+adminRoutes.get('/standings/digest-draft', async (c) => {
+  const draft = await buildStandingsDigestDraft()
+  return c.json(draft)
+})
+
+adminRoutes.get('/standings/publish-preview', async (c) => {
+  const digest = await buildStandingsDigestDraft()
+  const discordRoleId = getDiscordRoleId()
+
+  return c.json({
+    weekKey: digest.weekKey,
+    weekLabel: digest.weekLabel,
+    // Dry-run only: these render the current unpublished snapshot live, nothing is written to the DB.
+    standingsSvgUrl: '/admin/standings/preview.svg?kind=standings',
+    breakdownSvgUrl: '/admin/standings/preview.svg?kind=breakdown',
+    vibesSvgUrl: '/admin/standings/preview.svg?kind=vibes',
+    digest,
+    whoGetsNotified: {
+      emails: digest.notify.emailCount,
+      discord: digest.notify.discordConfigured,
+      ...(discordRoleId ? { discordRoleId } : {}),
+    },
+  })
 })
 
 adminRoutes.get('/standings/discord-preview.png', async (c) => {
@@ -351,59 +625,8 @@ adminRoutes.get('/standings/history/:id.svg', async (c) => {
 
 adminRoutes.post('/standings/publish', async (c) => {
   const admin = requireAdmin(await getSessionUser(c))
-  const { weekKey, weekLabel } = getWeekInfo()
-
-  const standings = await calculateStandings()
-  const breakdown = await calculateStandingsBreakdown()
-  const svg = generateStandingsSvg(standings, weekLabel)
-  const breakdownSvg = generateBreakdownSvg(breakdown, weekLabel)
-  const breakdownJson = JSON.stringify(breakdown)
-
-  await PublishedStandings.updateMany({ isActive: true }, { isActive: false, unpublishedAt: new Date() })
-
-  const doc = await PublishedStandings.create({
-    weekKey,
-    weekLabel,
-    standingsJson: JSON.stringify(standings),
-    svgData: svg,
-    breakdownJson,
-    breakdownSvgData: breakdownSvg,
-    isActive: true,
-  })
-
-  await StandingsEvent.create({
-    action: 'published',
-    weekKey,
-    weekLabel,
-    standingsJson: JSON.stringify(standings),
-    svgData: svg,
-    breakdownJson,
-    breakdownSvgData: breakdownSvg,
-    adminName: admin.displayName,
-    adminEmail: admin.email,
-    publicationId: doc._id,
-  })
-
-  const emailResult = await notifyStandingsPublished(weekLabel).catch((e) => {
-    console.error('[notifications] Standings emails failed:', e)
-    return { sent: 0, skipped: 0 }
-  })
-
-  const discordResult = await notifyDiscordStandingsPublished(weekKey, svg, breakdownSvg).catch((e) => {
-    console.error('[discord] Standings webhook failed:', e)
-    return { sent: false }
-  })
-
-  return c.json({
-    id: doc._id.toString(),
-    weekKey,
-    weekLabel,
-    publishedAt: doc.createdAt,
-    standings,
-    emailsSent: emailResult.sent,
-    emailsSkipped: emailResult.skipped,
-    discordSent: discordResult.sent,
-  })
+  const result = await publishStandings(admin)
+  return c.json(result)
 })
 
 adminRoutes.post('/standings/unpublish', async (c) => {
@@ -429,6 +652,14 @@ adminRoutes.post('/standings/unpublish', async (c) => {
     adminName: admin.displayName,
     adminEmail: admin.email,
     publicationId: publication._id,
+  })
+
+  await logAudit({
+    actor: admin,
+    action: 'standings.unpublished',
+    entityType: 'PublishedStandings',
+    entityId: publication._id.toString(),
+    detail: { weekKey: publication.weekKey, weekLabel: publication.weekLabel },
   })
 
   return c.json({ ok: true, weekLabel: publication.weekLabel })
@@ -565,4 +796,104 @@ adminRoutes.delete('/questions/:id', async (c) => {
   const result = await Question.findByIdAndDelete(id)
   if (!result) return c.json({ error: 'Question not found' }, 404)
   return c.json({ ok: true })
+})
+
+adminRoutes.get('/audit-log', async (c) => {
+  const limit = Number(c.req.query('limit') ?? '50')
+  const offset = Number(c.req.query('offset') ?? '0')
+  const result = await listAuditLog({
+    limit: Number.isFinite(limit) ? limit : 50,
+    offset: Number.isFinite(offset) ? offset : 0,
+  })
+  return c.json(result)
+})
+
+function csvEscape(value: unknown): string {
+  const str = value == null ? '' : String(value)
+  if (/[",\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+function csvAttachment(c: Context, filename: string, rows: (string | number)[][]): Response {
+  const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\r\n')
+  c.header('Content-Type', 'text/csv; charset=utf-8')
+  c.header('Content-Disposition', `attachment; filename="${filename}"`)
+  return c.body(csv)
+}
+
+adminRoutes.get('/export/submissions.csv', async (c) => {
+  const includeDeleted = c.req.query('includeDeleted') === '1'
+  const rows = await Submission.find(includeDeleted ? {} : withActive()).sort({ createdAt: -1 })
+  const userIds = [...new Set(rows.map((sub) => sub.userId.toString()))]
+  const users = await User.find({ _id: { $in: userIds } }).select('displayName teamId')
+  const userById = new Map(users.map((u) => [u._id.toString(), u]))
+
+  const header = [
+    'id',
+    'bookTitle',
+    'bookAuthor',
+    'pageCount',
+    'format',
+    'submissionType',
+    'targetTeamId',
+    'userName',
+    'userTeamId',
+    'totalImpact',
+    'startedAt',
+    'finishedAt',
+    'createdAt',
+    'deletedAt',
+  ]
+
+  const body = rows.map((sub) => {
+    const user = userById.get(sub.userId.toString())
+    return [
+      sub._id.toString(),
+      sub.bookTitle,
+      sub.bookAuthor,
+      sub.pageCount,
+      sub.format,
+      sub.submissionType,
+      sub.targetTeamId ?? '',
+      user?.displayName ?? 'Unknown reader',
+      user?.teamId ?? '',
+      sub.totalImpact,
+      sub.startedAt ?? '',
+      sub.finishedAt ?? '',
+      sub.createdAt?.toISOString() ?? '',
+      sub.deletedAt ? sub.deletedAt.toISOString() : '',
+    ]
+  })
+
+  return csvAttachment(c, 'submissions.csv', [header, ...body])
+})
+
+adminRoutes.get('/export/standings-history.csv', async (c) => {
+  const events = await StandingsEvent.find().sort({ createdAt: -1 })
+
+  const header = [
+    'id',
+    'action',
+    'weekKey',
+    'weekLabel',
+    'adminName',
+    'adminEmail',
+    'publicationId',
+    'createdAt',
+  ]
+
+  const body = events.map((e) => [
+    e._id.toString(),
+    e.action,
+    e.weekKey,
+    e.weekLabel,
+    e.adminName,
+    e.adminEmail,
+    e.publicationId?.toString() ?? '',
+    e.createdAt?.toISOString() ?? '',
+  ])
+
+  return csvAttachment(c, 'standings-history.csv', [header, ...body])
 })

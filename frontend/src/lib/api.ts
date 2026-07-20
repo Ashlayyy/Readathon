@@ -99,11 +99,42 @@ export type SiteCopy = {
 
 export type AdminCopyBlock = Record<string, string | Record<string, string>>
 
+export type SeasonArchive = {
+  slug: string
+  title: string
+  from: string
+  to: string
+  message: string
+  publishedStandingsIds: string[]
+} | null
+
 export type AdminSiteSettings = {
   showTeamRosters: boolean
   downtimeMode: boolean
   discordWebhookUrl: string
   discordRoleId: string
+  teamChatHooksEnabled: boolean
+  /** teamId -> Discord webhook URL */
+  teamChatWebhookUrls: Record<string, string>
+  scheduledPublishEnabled: boolean
+  /** 0 = Sunday .. 6 = Saturday (matches JS Date#getDay) */
+  scheduledPublishDay: number
+  scheduledPublishHour: number
+  scheduledPublishTimezone: string
+  configDraft?: unknown
+  configOverrides?: unknown
+  seasonArchive?: SeasonArchive
+}
+
+export type AuditLogEntry = {
+  id: string
+  actorId: string | null
+  actorName: string
+  action: string
+  entityType: string | null
+  entityId: string | null
+  detail: unknown
+  createdAt: string
 }
 
 export type RealmathonConfig = {
@@ -129,7 +160,7 @@ export type RealmathonConfig = {
   howItWorks: { step: number; title: string; body: string }[]
   scoringRules: { maxPromptsPerBook: number }
   faq: { q: string; a: string }[]
-  site?: { showTeamRosters: boolean; downtimeMode: boolean }
+  site?: { showTeamRosters: boolean; downtimeMode: boolean; seasonArchive?: SeasonArchive }
 }
 
 export type TeamStanding = {
@@ -152,6 +183,7 @@ export type Submission = {
   bookAuthor: string
   pageCount: number
   format: string
+  coverUrl?: string | null
   startedAt: string | null
   finishedAt: string | null
   submissionType: 'add' | 'sabotage'
@@ -167,9 +199,13 @@ export type Submission = {
 }
 
 export type AdminSubmission = Submission & {
+  userId: string
   userName: string
   userEmail: string
   userTeamId: string | null
+  deletedAt?: string | null
+  deletedBy?: string | null
+  deletedByName?: string | null
 }
 
 export type AdminQuestion = {
@@ -193,6 +229,33 @@ export type UserQuestion = {
   answeredByName: string | null
   answerSeen: boolean
   createdAt: string
+}
+
+export type ProfileDashboard = {
+  booksLogged: number
+  pointsContributed: number
+  sabotageDealt: number
+  sabotageTaken: number
+  streakWeeks: number
+  teamAvgBooks: number | null
+  teamAvgPoints: number | null
+  vsTeam: { booksDelta: number; pointsDelta: number } | null
+}
+
+export type Achievement = {
+  id: string
+  label: string
+  description: string
+  earned: boolean
+  earnedAt?: string | null
+}
+
+export type ShelfBook = {
+  title: string
+  author: string
+  realmName: string | null
+  realmColor: string | null
+  finishedAt: string
 }
 
 export type PublishedWeek = {
@@ -222,6 +285,7 @@ export type MemberContribution = {
 }
 
 export type IncomingAttack = {
+  userId: string
   displayName: string
   attackerTeamId: string
   attackerTeamName: string
@@ -241,23 +305,112 @@ export type StandingsBreakdown = {
   teams: TeamBreakdown[]
 }
 
+export type SubmitStrategyRival = {
+  teamId: string
+  teamName: string
+  /** their totalTeamXp - your totalTeamXp. Positive = they're ahead of your realm. */
+  xpGap: number
+  /** how much a typical sabotage would close this gap by, if they're ahead. */
+  ifSabotageCloseBy: number
+}
+
 export type SubmitStrategy = {
   standingsAvailable: boolean
-  yourRank: number | null
   yourTeamId: string | null
   yourTeamName: string | null
+  yourTeamXp: number | null
   suggestion: 'add' | 'sabotage' | null
   targetTeamId: string | null
   targetTeamName: string | null
+  gapToClose: number | null
+  estimatedCloseBy: number | null
   reason: string
+  rivals: SubmitStrategyRival[]
+}
+
+export type StandingsNamedCount = {
+  id: string
+  label: string
+  count: number
+  extra?: number
+}
+
+export type StandingsDogpileRow = {
+  teamId: string
+  teamName: string
+  hitCount: number
+  damageTaken: number
+  booksLogged: number
+  pagesLogged: number
+  addCount: number
+  sabotageCount: number
+}
+
+export type PublicStandingsVibes = {
+  weekKey: string
+  weekLabel: string
+  rangeLabel: string
+  overview: {
+    submissions: number
+    activeReaders: number
+    addCount: number
+    sabotageCount: number
+    chaosRatio: number
+    competitionRate: number
+    avgPages: number
+    totalPages: number
+  }
+  byType: StandingsNamedCount[]
+  byFormat: StandingsNamedCount[]
+  byPageTier: StandingsNamedCount[]
+  dogpile: StandingsDogpileRow[]
+  byTeam: StandingsDogpileRow[]
+}
+
+export type StandingsLeaderGap = {
+  leaderTeamName: string
+  secondTeamName: string
+  gapXp: number
+} | null
+
+export type StandingsPreviewRow = {
+  teamId: string
+  teamName: string
+  totalTeamXp: number
+  netXp: number
+  memberCount: number
+}
+
+export type StandingsDigestDraft = {
+  weekKey: string
+  weekLabel: string
+  vibes: PublicStandingsVibes
+  leaderGap: StandingsLeaderGap
+  standingsPreview: StandingsPreviewRow[]
+  notify: { emailCount: number; discordConfigured: boolean }
+  draftText: string
+}
+
+export type PublishPreview = {
+  weekKey: string
+  weekLabel: string
+  standingsSvgUrl: string
+  breakdownSvgUrl: string
+  vibesSvgUrl: string
+  digest: StandingsDigestDraft
+  whoGetsNotified: { emails: number; discord: boolean; discordRoleId?: string }
 }
 
 export type AdminStandingsData = {
   current: {
     standings: TeamStanding[]
-    svg: string
     breakdown: StandingsBreakdown
-    breakdownSvg: string
+    imageUrl?: string
+    breakdownImageUrl?: string
+    /** @deprecated Prefer imageUrl */
+    svg?: string
+    /** @deprecated Prefer breakdownImageUrl */
+    breakdownSvg?: string
   }
   activePublication: PublishedWeek | null
   activeWeeks: PublishedWeek[]
