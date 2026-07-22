@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
 	endOfIsoWeek,
+	getDefaultPublishRange,
 	getWeekBoundsFromKey,
 	getWeekInfo,
+	resolvePublishRange,
 	startOfIsoWeek,
 	toDateInputValue,
 } from '../utils/week.js'
@@ -56,5 +58,27 @@ describe('week utils', () => {
 	it('toDateInputValue formats YYYY-MM-DD', () => {
 		assert.equal(toDateInputValue(new Date(2026, 0, 5)), '2026-01-05')
 		assert.equal(toDateInputValue(new Date(2026, 11, 31)), '2026-12-31')
+	})
+
+	it('getDefaultPublishRange is last Monday through this Monday inclusive', () => {
+		// Monday Jul 20, 2026 afternoon
+		const now = new Date(2026, 6, 20, 15, 0, 0)
+		const range = getDefaultPublishRange(now)
+		assert.equal(range.fromInput, '2026-07-13')
+		assert.equal(range.toInput, '2026-07-20')
+		assert.equal(range.preset, 'lastMonToThisMon')
+		// Exclusive end is Tuesday Jul 21 00:00 so Monday is fully included
+		assert.equal(toDateInputValue(range.toExclusive), '2026-07-21')
+	})
+
+	it('resolvePublishRange custom uses inclusive end-of-day', () => {
+		const range = resolvePublishRange({
+			preset: 'custom',
+			from: '2026-07-13',
+			to: '2026-07-20',
+		})
+		assert.equal(range.fromInput, '2026-07-13')
+		assert.equal(range.toInput, '2026-07-20')
+		assert.equal(toDateInputValue(range.toExclusive), '2026-07-21')
 	})
 })

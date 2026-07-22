@@ -9,7 +9,7 @@ import { buildPublicStandingsVibes } from './adminAnalytics.js'
 import { notifyStandingsPublished } from './notifications.js'
 import { notifyDiscordStandingsPublished } from './discord.js'
 import { logAudit, type AuditActor } from './audit.js'
-import { getWeekInfo } from '../utils/week.js'
+import { getWeekInfo, resolvePublishRange } from '../utils/week.js'
 import {
   discordWebhookTotal,
   emailsSentTotal,
@@ -17,6 +17,12 @@ import {
 } from './metrics.js'
 import { captureServerEvent } from './posthog.js'
 import { log } from './betterstack.js'
+
+export type PublishStandingsOptions = {
+  preset?: string | null
+  from?: string | null
+  to?: string | null
+}
 
 export type PublishStandingsResult = {
   id: string
@@ -27,16 +33,30 @@ export type PublishStandingsResult = {
   emailsSent: number
   emailsSkipped: number
   discordSent: boolean
+  range: {
+    from: string
+    to: string
+    preset: string
+    label: string
+  }
 }
 
 /**
- * Publishes the current standings snapshot: freezes standings/breakdown/vibes,
- * fires email + Discord notifications, and writes the audit trail.
+ * Publishes the current standings snapshot: standings/breakdown/vibes for the
+ * chosen date range, fires email + Discord notifications, and writes the audit trail.
  * Shared between the admin "Publish" button and the Monday scheduled publisher -
  * keep this the single source of truth for what "publish" means.
  */
-export async function publishStandings(actor: AuditActor): Promise<PublishStandingsResult> {
-  const { weekKey, weekLabel } = getWeekInfo()
+export async function publishStandings(
+  actor: AuditActor,
+  options: PublishStandingsOptions = {},
+): Promise<PublishStandingsResult> {
+  const range = resolvePublishRange({
+    preset: options.preset,
+    from: options.from,
+    to: options.to,
+  })
+  const { weekKey, weekLabel } = range
 
   const standings = await calculateStandings()
   const breakdown = await calculateStandingsBreakdown()
@@ -47,7 +67,8 @@ export async function publishStandings(actor: AuditActor): Promise<PublishStandi
   const vibes = await buildPublicStandingsVibes({
     weekKey,
     weekLabel,
-    to: new Date(),
+    from: range.from,
+    toExclusive: range.toExclusive,
   })
   const vibesSvg = generateVibesSvg(vibes)
   const vibesJson = JSON.stringify(vibes)
@@ -79,7 +100,11 @@ export async function publishStandings(actor: AuditActor): Promise<PublishStandi
     publicationId: doc._id,
   })
 
-  const emailResult = await notifyStandingsPublished(weekLabel).catch((e) => {
+  const emailResult = await notifyStandingsPublished({
+    weekLabel,
+    vibes,
+    standings,
+  }).catch((e) => {
     console.error('[notifications] Standings emails failed:', e)
     return { sent: 0, skipped: 0 }
   })
@@ -99,7 +124,13 @@ export async function publishStandings(actor: AuditActor): Promise<PublishStandi
     action: 'standings.published',
     entityType: 'PublishedStandings',
     entityId: doc._id.toString(),
-    detail: { weekKey, weekLabel },
+    detail: {
+      weekKey,
+      weekLabel,
+      rangeFrom: range.fromInput,
+      rangeTo: range.toInput,
+      rangePreset: range.preset,
+    },
   })
 
   const source =
@@ -143,5 +174,20 @@ export async function publishStandings(actor: AuditActor): Promise<PublishStandi
     emailsSent: emailResult.sent,
     emailsSkipped: emailResult.skipped,
     discordSent: discordResult.sent,
+    range: {
+      from: range.fromInput,
+      to: range.toInput,
+      preset: range.preset,
+      label: range.label,
+    },
   }
 }
+
+/** Scheduler keeps current-ISO-week semantics via default lastMon→thisMon when run Monday. */
+export async function publishStandingsScheduled(actor: AuditActor): Promise<PublishStandingsResult> {
+  // On scheduled Monday morning, default inclusive window is last Mon → this Mon.
+  return publishStandings(actor, { preset: 'lastMonToThisMon' })
+}
+
+// Re-export for callers that still import getWeekInfo alongside publish
+export { getWeekInfo }

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { RouterLink } from 'vue-router';
 import {
 	api,
 	apiUrl,
@@ -13,8 +12,7 @@ import {
 	type AuditLogEntry,
 	type PublishedWeek,
 	type PublishPreview,
-	type SeasonArchive,
-	type StandingsDigestDraft,
+	type PublishRangePreset,
 	type StandingsHistoryEntry,
 	type StandingsBreakdown,
 	type TeamStanding,
@@ -57,13 +55,20 @@ const discordWebhookDraft = ref('');
 const discordRoleId = ref('');
 const discordRoleIdDraft = ref('');
 
-// Weekly digest draft + publish preview
-const digestDraft = ref<StandingsDigestDraft | null>(null);
-const digestDraftLoading = ref(false);
-const customDigestNote = ref('');
+// Publish date range + preview
 const previewOpen = ref(false);
 const previewData = ref<PublishPreview | null>(null);
 const previewLoading = ref(false);
+const publishPreset = ref<PublishRangePreset>('lastMonToThisMon');
+const publishFrom = ref(''); // YYYY-MM-DD
+const publishTo = ref(''); // YYYY-MM-DD
+const PUBLISH_PRESETS: { value: PublishRangePreset; label: string }[] = [
+	{ value: 'lastMonToThisMon', label: 'Last Mon → this Mon' },
+	{ value: 'thisWeek', label: 'This week' },
+	{ value: 'lastWeek', label: 'Last week' },
+	{ value: 'last7', label: 'Last 7 days' },
+	{ value: 'custom', label: 'Custom' },
+];
 
 // Scheduled (Monday) publish settings
 const scheduledPublishEnabled = ref(false);
@@ -90,23 +95,6 @@ const auditLog = ref<AuditLogEntry[]>([]);
 const auditTotal = ref(0);
 const auditOffset = ref(0);
 const AUDIT_PAGE_SIZE = 50;
-
-// Config draft/live
-const configDraftText = ref('');
-const configOverridesPreview = ref('');
-const configError = ref('');
-// Kept out of the template: a literal "}}" inside a mustache interpolation
-// confuses the Vue template tokenizer (it looks like the closing delimiter).
-const configDraftLeadFallback =
-	'Stage copy overrides as JSON (e.g. {"copy": {"faqPageTitle": "New title"}}), then publish to go live without a redeploy.';
-
-// Season archive
-const archiveSlug = ref('');
-const archiveTitle = ref('');
-const archiveFrom = ref('');
-const archiveTo = ref('');
-const archiveMessage = ref('');
-const seasonArchiveActive = ref<SeasonArchive>(null);
 
 const addUserOpen = ref(false);
 const newUser = ref({ displayName: '', email: '', teamId: '' });
@@ -161,7 +149,6 @@ const activeTab = ref<
 	| 'prompts'
 	| 'stats'
 	| 'audit'
-	| 'config'
 >('inbox');
 const addSubmissionOpen = ref(false);
 const navOpen = ref(false);
@@ -326,6 +313,7 @@ function goSubmissionPage(page: number) {
 }
 
 onMounted(async () => {
+	applyPublishPreset('lastMonToThisMon');
 	await loadConfig();
 	showTeamRosters.value = config.value?.site?.showTeamRosters ?? false;
 	downtimeMode.value = config.value?.site?.downtimeMode ?? false;
@@ -471,7 +459,6 @@ async function loadAdminSettings(force = false) {
 			settings.scheduledPublishTimezone ?? 'Europe/Amsterdam';
 		teamChatHooksEnabled.value = settings.teamChatHooksEnabled ?? false;
 		teamChatWebhookDrafts.value = { ...settings.teamChatWebhookUrls };
-		applySettingsToConfigForms(settings);
 		settingsLoaded.value = true;
 	} catch (e) {
 		showMessage(
@@ -481,132 +468,56 @@ async function loadAdminSettings(force = false) {
 	}
 }
 
-function applySettingsToConfigForms(settings: AdminSiteSettings) {
-	configDraftText.value = settings.configDraft
-		? JSON.stringify(settings.configDraft, null, 2)
-		: '';
-	configOverridesPreview.value = settings.configOverrides
-		? JSON.stringify(settings.configOverrides, null, 2)
-		: '';
-	const archive = settings.seasonArchive ?? null;
-	seasonArchiveActive.value = archive;
-	archiveSlug.value = archive?.slug ?? '';
-	archiveTitle.value = archive?.title ?? '';
-	archiveFrom.value = archive?.from ?? '';
-	archiveTo.value = archive?.to ?? '';
-	archiveMessage.value = archive?.message ?? '';
+function toDateInputValue(d: Date): string {
+	const y = d.getFullYear();
+	const m = String(d.getMonth() + 1).padStart(2, '0');
+	const day = String(d.getDate()).padStart(2, '0');
+	return `${y}-${m}-${day}`;
 }
 
-async function saveConfigDraft() {
-	configError.value = '';
-	let parsed: unknown = null;
-	if (configDraftText.value.trim()) {
-		try {
-			parsed = JSON.parse(configDraftText.value);
-		} catch {
-			configError.value = 'That draft is not valid JSON.';
-			return;
-		}
-	}
-	loading.value = 'config-draft';
-	showMessage('');
-	try {
-		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings', {
-			method: 'PATCH',
-			body: JSON.stringify({ configDraft: parsed }),
-		});
-		applySettingsToConfigForms(settings);
-		showMessage(msg('draftSaved') || 'Draft saved.');
-	} catch (e) {
-		showMessage(e instanceof Error ? e.message : msg('draftSaveFailed') || 'Failed to save draft', true);
-	} finally {
-		loading.value = '';
-	}
+/** Monday 00:00 local for the ISO week containing `date`. */
+function startOfIsoWeek(date = new Date()): Date {
+	const monday = new Date(date);
+	monday.setHours(0, 0, 0, 0);
+	monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+	return monday;
 }
 
-async function publishConfigDraftToLive() {
-	loading.value = 'config-publish';
-	showMessage('');
-	try {
-		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/config/publish-draft', {
-			method: 'POST',
-		});
-		applySettingsToConfigForms(settings);
-		await loadConfig(true);
-		showMessage(msg('draftPublished') || 'Draft published to live.');
-	} catch (e) {
-		showMessage(e instanceof Error ? e.message : msg('draftPublishFailed') || 'Failed to publish draft', true);
-	} finally {
-		loading.value = '';
+function applyPublishPreset(preset: PublishRangePreset) {
+	publishPreset.value = preset;
+	if (preset === 'custom') return;
+	const now = new Date();
+	const thisMon = startOfIsoWeek(now);
+	if (preset === 'lastMonToThisMon') {
+		const lastMon = new Date(thisMon);
+		lastMon.setDate(lastMon.getDate() - 7);
+		publishFrom.value = toDateInputValue(lastMon);
+		publishTo.value = toDateInputValue(thisMon);
+	} else if (preset === 'thisWeek') {
+		const sunday = new Date(thisMon);
+		sunday.setDate(sunday.getDate() + 6);
+		publishFrom.value = toDateInputValue(thisMon);
+		publishTo.value = toDateInputValue(sunday);
+	} else if (preset === 'lastWeek') {
+		const lastMon = new Date(thisMon);
+		lastMon.setDate(lastMon.getDate() - 7);
+		const lastSun = new Date(lastMon);
+		lastSun.setDate(lastSun.getDate() + 6);
+		publishFrom.value = toDateInputValue(lastMon);
+		publishTo.value = toDateInputValue(lastSun);
+	} else if (preset === 'last7') {
+		const today = new Date(now);
+		today.setHours(0, 0, 0, 0);
+		const from = new Date(today);
+		from.setDate(from.getDate() - 6);
+		publishFrom.value = toDateInputValue(from);
+		publishTo.value = toDateInputValue(today);
 	}
 }
 
-async function discardDraft() {
-	if (!confirm(confirmMsg('discardDraft') || 'Discard the staged draft? This cannot be undone.')) return;
-	loading.value = 'config-discard';
-	showMessage('');
-	try {
-		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/config/discard-draft', {
-			method: 'POST',
-		});
-		applySettingsToConfigForms(settings);
-		showMessage(msg('draftDiscarded') || 'Draft discarded.');
-	} catch (e) {
-		showMessage(e instanceof Error ? e.message : 'Failed to discard draft', true);
-	} finally {
-		loading.value = '';
-	}
-}
-
-async function clearLiveOverrides() {
-	if (!confirm(confirmMsg('clearOverrides') || 'Clear live copy overrides? The site will revert to the static copy.')) return;
-	loading.value = 'config-clear';
-	showMessage('');
-	try {
-		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/config/clear-overrides', {
-			method: 'POST',
-		});
-		applySettingsToConfigForms(settings);
-		await loadConfig(true);
-		showMessage(msg('overridesCleared') || 'Live overrides cleared.');
-	} catch (e) {
-		showMessage(e instanceof Error ? e.message : 'Failed to clear overrides', true);
-	} finally {
-		loading.value = '';
-	}
-}
-
-async function saveSeasonArchive(clear = false) {
-	loading.value = clear ? 'archive-clear' : 'archive-save';
-	showMessage('');
-	try {
-		const seasonArchive = clear
-			? null
-			: {
-					slug: archiveSlug.value.trim(),
-					title: archiveTitle.value.trim(),
-					from: archiveFrom.value.trim(),
-					to: archiveTo.value.trim(),
-					message: archiveMessage.value.trim(),
-					publishedStandingsIds: seasonArchiveActive.value?.publishedStandingsIds ?? [],
-				};
-		if (!clear && !seasonArchive?.slug) {
-			showMessage('Season archive needs a slug.', true);
-			loading.value = '';
-			return;
-		}
-		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings', {
-			method: 'PATCH',
-			body: JSON.stringify({ seasonArchive }),
-		});
-		applySettingsToConfigForms(settings);
-		await loadConfig(true);
-		showMessage(clear ? 'Season archive cleared.' : 'Season archive saved.');
-	} catch (e) {
-		showMessage(e instanceof Error ? e.message : 'Failed to save season archive', true);
-	} finally {
-		loading.value = '';
-	}
+/** Date inputs are edited directly by the admin, so any manual change means "custom". */
+function onPublishDateInput() {
+	publishPreset.value = 'custom';
 }
 
 async function ensureTabData(tab: typeof activeTab.value) {
@@ -616,13 +527,8 @@ async function ensureTabData(tab: typeof activeTab.value) {
 	else if (tab === 'submissions')
 		await Promise.all([loadSubmissions(), loadUsers()]);
 	else if (tab === 'standings')
-		await Promise.all([
-			loadStandings(true),
-			loadAdminSettings(),
-			loadDigestDraft(true),
-		]);
+		await Promise.all([loadStandings(true), loadAdminSettings()]);
 	else if (tab === 'audit') await loadAuditLog();
-	else if (tab === 'config') await loadAdminSettings();
 	// prompts: AdminPromptsPanel loads itself when mounted (v-if)
 }
 
@@ -930,6 +836,29 @@ async function testDiscordWebhook() {
 	}
 }
 
+async function testDiscordRolePing() {
+	loading.value = 'discord-role-test';
+	showMessage('');
+	try {
+		const result = await api<{ ok: boolean; roleId?: string }>(
+			'/admin/discord/test-role-ping',
+			{ method: 'POST' },
+		);
+		showMessage(
+			result.roleId
+				? `Role ping test sent for role ${result.roleId}.`
+				: 'Role ping test sent.',
+		);
+	} catch (e) {
+		showMessage(
+			e instanceof Error ? e.message : 'Failed to send role ping test',
+			true,
+		);
+	} finally {
+		loading.value = '';
+	}
+}
+
 function clearDiscordRoleId() {
 	discordRoleIdDraft.value = '';
 	void saveDiscordWebhook();
@@ -1138,22 +1067,12 @@ async function loadStandings(force = false) {
 	}
 }
 
-async function loadDigestDraft(force = false) {
-	if (digestDraft.value && !force) return;
-	digestDraftLoading.value = true;
-	try {
-		digestDraft.value = await api<StandingsDigestDraft>(
-			'/admin/standings/digest-draft',
-		);
-		customDigestNote.value = digestDraft.value.draftText;
-	} catch (e) {
-		showMessage(
-			e instanceof Error ? e.message : 'Failed to load digest draft',
-			true,
-		);
-	} finally {
-		digestDraftLoading.value = false;
-	}
+function publishRangeQuery(): string {
+	const qs = new URLSearchParams();
+	qs.set('preset', publishPreset.value);
+	if (publishFrom.value) qs.set('from', publishFrom.value);
+	if (publishTo.value) qs.set('to', publishTo.value);
+	return qs.toString();
 }
 
 async function openPublishPreview() {
@@ -1161,7 +1080,7 @@ async function openPublishPreview() {
 	showMessage('');
 	try {
 		previewData.value = await api<PublishPreview>(
-			'/admin/standings/publish-preview',
+			`/admin/standings/publish-preview?${publishRangeQuery()}`,
 		);
 		previewOpen.value = true;
 	} catch (e) {
@@ -1188,7 +1107,14 @@ async function publishThisWeek() {
 			weekLabel: string;
 			emailsSent?: number;
 			discordSent?: boolean;
-		}>('/admin/standings/publish', { method: 'POST' });
+		}>('/admin/standings/publish', {
+			method: 'POST',
+			body: JSON.stringify({
+				preset: publishPreset.value,
+				from: publishFrom.value,
+				to: publishTo.value,
+			}),
+		});
 		const emailNote = result.emailsSent
 			? msg('emailNote', { count: result.emailsSent })
 			: '';
@@ -1196,7 +1122,7 @@ async function publishThisWeek() {
 		showMessage(
 			msg('published', { weekLabel: result.weekLabel, emailNote, discordNote }),
 		);
-		await Promise.all([loadStandings(true), loadDigestDraft(true)]);
+		await loadStandings(true);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('publishFailed'), true);
 	} finally {
@@ -1342,13 +1268,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						@click="setTab('audit')"
 					>
 						{{ section('tabs').audit ?? 'Audit' }}
-					</button>
-					<button
-						type="button"
-						:class="{ active: activeTab === 'config' }"
-						@click="setTab('config')"
-					>
-						{{ section('tabs').config ?? 'Config' }}
 					</button>
 				</nav>
 			</aside>
@@ -1554,6 +1473,9 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								<h2 id="publish-preview-title">
 									Publish preview — {{ previewData.weekLabel }}
 								</h2>
+								<p v-if="previewData.digest.range" class="section-desc">
+									{{ previewData.digest.range.label }}
+								</p>
 							</header>
 							<div class="modal-body">
 								<img
@@ -1561,16 +1483,25 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 									alt="Standings preview"
 									class="preview-image"
 								/>
-								<h3>This week's vibes</h3>
-								<pre class="preview-draft-text">{{
-									previewData.digest.draftText
-								}}</pre>
+								<img
+									:src="apiUrl(previewData.breakdownSvgUrl)"
+									alt="Score breakdown preview"
+									class="preview-image"
+								/>
+								<img
+									:src="apiUrl(previewData.vibesSvgUrl)"
+									alt="Vibes preview"
+									class="preview-image"
+								/>
 								<p class="webhook-status">
 									Notifies: {{ previewData.whoGetsNotified.emails }} email{{
 										previewData.whoGetsNotified.emails === 1 ? '' : 's'
 									}}
 									<span v-if="previewData.whoGetsNotified.discord">
 										+ Discord</span
+									>
+									<span v-if="previewData.whoGetsNotified.discordRoleId">
+										(role {{ previewData.whoGetsNotified.discordRoleId }})</span
 									>
 								</p>
 								<div class="modal-actions">
@@ -1668,38 +1599,47 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
 				<!-- Standings -->
 				<section v-if="activeTab === 'standings'" class="admin-section">
-					<section
-						v-if="digestDraft"
-						class="card admin-section digest-draft-section"
-					>
-						<h2>This week's digest draft — {{ digestDraft.weekLabel }}</h2>
+					<section class="card admin-section publish-range-section">
+						<h2>Publish range</h2>
 						<p class="section-desc">
-							Auto-generated from the live (unpublished) standings snapshot.
-							Editing below is just for your own reference — publishing always
-							uses the live data at that moment, not this text.
+							Choose which days count toward the vibes image in this publish.
+							Both “from” and “to” dates are included.
 						</p>
-						<div v-if="digestDraft.leaderGap" class="digest-leader-gap">
-							🏆 <strong>{{ digestDraft.leaderGap.leaderTeamName }}</strong>
-							leads by
-							<strong>{{ digestDraft.leaderGap.gapXp }} XP</strong>
-							over {{ digestDraft.leaderGap.secondTeamName }}
+						<div class="btn-row publish-range-presets">
+							<button
+								v-for="preset in PUBLISH_PRESETS"
+								:key="preset.value"
+								type="button"
+								class="btn btn-sm"
+								:class="
+									publishPreset === preset.value
+										? 'btn-primary'
+										: 'btn-secondary'
+								"
+								@click="applyPublishPreset(preset.value)"
+							>
+								{{ preset.label }}
+							</button>
 						</div>
-						<textarea
-							v-model="customDigestNote"
-							rows="7"
-							class="digest-textarea"
-						/>
-						<p class="webhook-status">
-							Publishing will notify:
-							{{ digestDraft.notify.emailCount }} email{{
-								digestDraft.notify.emailCount === 1 ? '' : 's'
-							}}
-							<span v-if="digestDraft.notify.discordConfigured"> + Discord</span>
-						</p>
+						<div class="publish-range-dates">
+							<label>
+								From
+								<input
+									v-model="publishFrom"
+									type="date"
+									@change="onPublishDateInput"
+								/>
+							</label>
+							<label>
+								To
+								<input
+									v-model="publishTo"
+									type="date"
+									@change="onPublishDateInput"
+								/>
+							</label>
+						</div>
 					</section>
-					<div v-else-if="digestDraftLoading" class="alert alert-info">
-						Loading digest draft…
-					</div>
 
 					<div class="card standings-actions">
 						<div class="standings-actions-top">
@@ -1838,26 +1778,42 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 										loading === 'discord-test' ||
 										!discordWebhookUrl
 									"
-									@click="testDiscordWebhook"
-								>
-									{{
-										loading === 'discord-test'
-											? section('standings').testingWebhook
-											: section('standings').testWebhook
-									}}
-								</button>
-							</div>
-							<p v-if="discordWebhookUrl" class="webhook-status">
-								{{ section('standings').webhookConfigured }}
-							</p>
-							<p v-if="discordRoleId" class="webhook-status">
-								Ping role configured.
-							</p>
-							<p class="webhook-status">
-								{{ section('standings').testWebhookHint }}
-							</p>
-						</form>
-					</section>
+								@click="testDiscordWebhook"
+							>
+								{{
+									loading === 'discord-test'
+										? section('standings').testingWebhook
+										: section('standings').testWebhook
+								}}
+							</button>
+							<button
+								type="button"
+								class="btn btn-secondary"
+								:disabled="
+									loading === 'discord-webhook' ||
+									loading === 'discord-role-test' ||
+									!discordRoleId
+								"
+								@click="testDiscordRolePing"
+							>
+								{{
+									loading === 'discord-role-test'
+										? 'Sending…'
+										: 'Test role ping'
+								}}
+							</button>
+						</div>
+						<p v-if="discordWebhookUrl" class="webhook-status">
+							{{ section('standings').webhookConfigured }}
+						</p>
+						<p v-if="discordRoleId" class="webhook-status">
+							Ping role configured (ID: {{ discordRoleId }}).
+						</p>
+						<p class="webhook-status">
+							{{ section('standings').testWebhookHint }}
+						</p>
+					</form>
+				</section>
 
 					<section class="card admin-section scheduled-publish-section">
 						<h2>Scheduled publish</h2>
@@ -2712,123 +2668,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							</button>
 						</nav>
 					</template>
-				</section>
-
-				<!-- Config draft/live + season archive -->
-				<section v-if="activeTab === 'config'" class="admin-grid">
-					<section class="card admin-section config-draft-section">
-						<h2>{{ section('config').draftTitle ?? 'Copy draft → live' }}</h2>
-						<p class="section-desc">
-							{{ section('config').draftLead ?? configDraftLeadFallback }}
-						</p>
-						<label class="field">
-							<span class="sr-only">Draft JSON</span>
-							<textarea
-								v-model="configDraftText"
-								rows="10"
-								spellcheck="false"
-								class="config-json-editor"
-								placeholder='{"copy": {"faqPageTitle": "New title"}}'
-							/>
-						</label>
-						<p v-if="configError" class="alert alert-error">{{ configError }}</p>
-						<div class="btn-row">
-							<button
-								type="button"
-								class="btn btn-primary"
-								:disabled="loading === 'config-draft'"
-								@click="saveConfigDraft"
-							>
-								{{ loading === 'config-draft' ? 'Saving…' : 'Save draft' }}
-							</button>
-							<button
-								type="button"
-								class="btn btn-secondary"
-								:disabled="loading === 'config-publish'"
-								@click="publishConfigDraftToLive"
-							>
-								{{ loading === 'config-publish' ? 'Publishing…' : 'Publish draft to live' }}
-							</button>
-							<button
-								type="button"
-								class="btn btn-ghost"
-								:disabled="loading === 'config-discard' || !configDraftText"
-								@click="discardDraft"
-							>
-								Discard draft
-							</button>
-							<button
-								type="button"
-								class="btn btn-ghost"
-								:disabled="loading === 'config-clear' || !configOverridesPreview"
-								@click="clearLiveOverrides"
-							>
-								Clear live overrides
-							</button>
-						</div>
-						<p v-if="configOverridesPreview" class="hint">
-							Currently live: <code>{{ configOverridesPreview }}</code>
-						</p>
-					</section>
-
-					<section class="card admin-section season-archive-section">
-						<h2>{{ section('config').archiveTitle ?? 'Season archive' }}</h2>
-						<p class="section-desc">
-							{{
-								section('config').archiveLead ??
-								'When set, /archive/:slug shows a frozen, read-only page for readers once the season wraps.'
-							}}
-						</p>
-						<form class="add-user-form" @submit.prevent="saveSeasonArchive(false)">
-							<label>
-								Slug
-								<input v-model="archiveSlug" type="text" placeholder="realmathon-2026" />
-							</label>
-							<label>
-								Title
-								<input v-model="archiveTitle" type="text" placeholder="Realmathon 2026" />
-							</label>
-							<label>
-								From (date)
-								<input v-model="archiveFrom" type="date" />
-							</label>
-							<label>
-								To (date)
-								<input v-model="archiveTo" type="date" />
-							</label>
-							<label>
-								Message
-								<textarea
-									v-model="archiveMessage"
-									rows="3"
-									placeholder="This season is closed. Thanks for reading with us!"
-								/>
-							</label>
-							<div class="modal-actions">
-								<button
-									type="button"
-									class="btn btn-ghost"
-									:disabled="loading === 'archive-clear' || !seasonArchiveActive"
-									@click="saveSeasonArchive(true)"
-								>
-									Clear archive
-								</button>
-								<button
-									type="submit"
-									class="btn btn-primary"
-									:disabled="loading === 'archive-save'"
-								>
-									{{ loading === 'archive-save' ? 'Saving…' : 'Save archive' }}
-								</button>
-							</div>
-						</form>
-						<p v-if="seasonArchiveActive" class="hint">
-							Live at
-							<RouterLink :to="`/archive/${seasonArchiveActive.slug}`">/archive/{{
-								seasonArchiveActive.slug
-							}}</RouterLink>
-						</p>
-					</section>
 				</section>
 			</div>
 		</div>
@@ -3829,32 +3668,27 @@ small {
 	color: var(--realm-text-muted);
 }
 
-.digest-draft-section {
+.publish-range-section {
 	margin-bottom: 1.25rem;
 }
 
-.digest-leader-gap {
-	margin: 0 0 0.85rem;
-	font-size: 0.92rem;
-	color: var(--realm-text-muted);
+.publish-range-presets {
+	margin: 0.5rem 0 0.85rem;
+	flex-wrap: wrap;
 }
 
-.digest-leader-gap strong {
-	color: var(--realm-text);
+.publish-range-dates {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.85rem;
 }
 
-.digest-textarea {
-	width: 100%;
-	resize: vertical;
-	font-family: var(--font-body);
+.publish-range-dates label {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
 	font-size: 0.88rem;
-	line-height: 1.55;
-	color: var(--realm-text);
-	background: var(--realm-bg);
-	border: 1px solid var(--realm-border);
-	border-radius: var(--radius);
-	padding: 0.75rem;
-	margin-bottom: 0.75rem;
+	color: var(--realm-text-muted);
 }
 
 .scheduled-publish-section,
@@ -3898,19 +3732,6 @@ small {
 	margin-bottom: 1rem;
 }
 
-.preview-draft-text {
-	white-space: pre-wrap;
-	font-family: var(--font-body);
-	font-size: 0.88rem;
-	line-height: 1.55;
-	color: var(--realm-text);
-	background: var(--realm-bg);
-	border: 1px solid var(--realm-border);
-	border-radius: var(--radius);
-	padding: 0.85rem;
-	margin: 0 0 0.85rem;
-}
-
 .show-deleted-toggle {
 	margin: 0.25rem 0 1rem;
 }
@@ -3937,22 +3758,4 @@ small {
 	word-break: break-word;
 }
 
-.config-json-editor {
-	font-family: ui-monospace, monospace;
-	font-size: 0.85rem;
-	min-height: 14rem;
-}
-
-.config-draft-section code,
-.season-archive-section code {
-	display: block;
-	margin-top: 0.35rem;
-	padding: 0.5rem 0.65rem;
-	background: var(--realm-bg);
-	border: 1px solid var(--realm-border);
-	border-radius: 8px;
-	font-size: 0.78rem;
-	white-space: pre-wrap;
-	word-break: break-word;
-}
 </style>

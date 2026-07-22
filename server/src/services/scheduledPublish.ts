@@ -84,7 +84,9 @@ async function maybePublish(now = new Date()): Promise<void> {
 
   console.log(`[scheduler] Publishing standings for ${weekKey}`)
   try {
-    const result = await publishStandings(SCHEDULER_ACTOR)
+    const result = await publishStandings(SCHEDULER_ACTOR, {
+      preset: 'lastMonToThisMon',
+    })
     console.log(
       `[scheduler] Published ${result.weekLabel}: ${result.emailsSent} emails, discord=${result.discordSent}`,
     )

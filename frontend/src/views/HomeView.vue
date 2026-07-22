@@ -19,7 +19,6 @@ const publishedAt = ref<string | null>(null)
 const standingsOpen = ref(false)
 
 const canSubmit = computed(() => user.value?.status === 'assigned')
-const seasonArchive = computed(() => config.value?.site?.seasonArchive ?? null)
 
 const submitBannerTitle = computed(
   () =>
@@ -70,15 +69,6 @@ onMounted(async () => {
 
 <template>
   <main v-if="config" class="page">
-    <RouterLink
-      v-if="seasonArchive"
-      :to="`/archive/${seasonArchive.slug}`"
-      class="alert alert-warning archive-banner"
-    >
-      <strong>This season is archived.</strong>
-      {{ seasonArchive.title }} - view the frozen final standings →
-    </RouterLink>
-
     <section class="hero">
       <p class="eyebrow">{{ config.event.subtitle }}</p>
       <h1>{{ config.event.name }}</h1>
