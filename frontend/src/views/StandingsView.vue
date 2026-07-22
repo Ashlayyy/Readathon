@@ -42,7 +42,7 @@ onMounted(async () => {
 		breakdownImageUrl.value = data.breakdownImageUrl
 			? apiUrl(data.breakdownImageUrl)
 			: null;
-		// Only show frozen vibes from the published week — never live-updating
+		// Only show published vibes — never live-updating
 		vibes.value = data.published ? (data.vibes ?? null) : null;
 	} catch {
 		error.value = String(
@@ -82,7 +82,7 @@ onMounted(async () => {
 				:lead="
 					String(
 						config.copy.standingsVibesLead ??
-							'This week’s activity, frozen when standings were published.',
+							'This week’s reading activity from the latest standings publish.',
 					)
 				"
 			/>

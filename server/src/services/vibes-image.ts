@@ -19,8 +19,9 @@ export function generateVibesSvg(vibes: PublicStandingsVibes): string {
 		(a, b) => b.damageTaken - a.damageTaken || b.hitCount - a.hitCount,
 	)
 	const formats = vibes.byFormat.slice(0, 3)
-	const bodyStart = 150
-	const height = bodyStart + Math.max(teams.length, 1) * rowH + 90
+	const sectionHeaderY = 148
+	const bodyStart = 172
+	const height = bodyStart + Math.max(teams.length, formats.length, 1) * rowH + 48
 
 	const o = vibes.overview
 	const formatLines = formats
@@ -42,7 +43,7 @@ export function generateVibesSvg(vibes: PublicStandingsVibes): string {
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="100%" height="100%" fill="#0f0e14"/>
   <text x="400" y="36" text-anchor="middle" fill="#d4634a" font-size="22" font-family="${SVG_FONT_SANS}" font-weight="700">${escapeXml(eventName)} — ${escapeXml(vibes.weekLabel)}</text>
-  <text x="400" y="60" text-anchor="middle" fill="#9a9188" font-size="13" font-family="${SVG_FONT_SANS}">Weekly reading vibes (frozen at publish)</text>
+  <text x="400" y="60" text-anchor="middle" fill="#9a9188" font-size="13" font-family="${SVG_FONT_SANS}">Weekly reading vibes</text>
 
   <text x="40" y="100" fill="#f4efe8" font-size="28" font-family="${SVG_FONT_SANS}" font-weight="700">${o.submissions}</text>
   <text x="40" y="120" fill="#9a9188" font-size="12" font-family="${SVG_FONT_SANS}">books · ${o.totalPages} pages · avg ${o.avgPages}</text>
@@ -56,10 +57,10 @@ export function generateVibesSvg(vibes: PublicStandingsVibes): string {
   <text x="560" y="100" fill="#f4efe8" font-size="28" font-family="${SVG_FONT_SANS}" font-weight="700">${o.activeReaders}</text>
   <text x="560" y="120" fill="#9a9188" font-size="12" font-family="${SVG_FONT_SANS}">active readers</text>
 
-  <text x="40" y="148" fill="#d4634a" font-size="13" font-family="${SVG_FONT_SANS}" font-weight="700">FORMATS</text>
+  <text x="40" y="${sectionHeaderY}" fill="#d4634a" font-size="13" font-family="${SVG_FONT_SANS}" font-weight="700">FORMATS</text>
   ${formatLines || `<text x="40" y="${bodyStart}" fill="#9a9188" font-size="14" font-family="${SVG_FONT_SANS}">No books this week</text>`}
 
-  <text x="420" y="148" fill="#d4634a" font-size="13" font-family="${SVG_FONT_SANS}" font-weight="700">MOST SABOTAGED</text>
+  <text x="420" y="${sectionHeaderY}" fill="#d4634a" font-size="13" font-family="${SVG_FONT_SANS}" font-weight="700">MOST SABOTAGED</text>
   ${teamLines}
 </svg>`
 }

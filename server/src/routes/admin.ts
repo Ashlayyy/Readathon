@@ -31,17 +31,13 @@ import { generateBreakdownSvg } from '../services/standings-breakdown-image.js'
 import { maybeNotifyQuestionAnswered } from '../services/notifications.js'
 import { svgToPng } from '../services/svgToPng.js'
 import {
-  clearConfigOverrides,
-  discardConfigDraft,
   getDiscordRoleId,
   getSiteSettingsAdminSync,
-  publishConfigDraft,
   updateSiteSettings,
-  type SeasonArchive,
 } from '../services/siteSettings.js'
 import { publishStandings } from '../services/standingsPublish.js'
 import { buildStandingsDigestDraft } from '../services/standingsDigest.js'
-import { sendDiscordWebhookTest } from '../services/discord.js'
+import { sendDiscordRolePingTest, sendDiscordWebhookTest } from '../services/discord.js'
 import { submissionsCreatedTotal } from '../services/metrics.js'
 import {
   createPrompt,
@@ -136,9 +132,6 @@ adminRoutes.patch('/settings', async (c) => {
     scheduledPublishDay?: number
     scheduledPublishHour?: number
     scheduledPublishTimezone?: string
-    configDraft?: unknown
-    configOverrides?: unknown
-    seasonArchive?: SeasonArchive
   }>()
   try {
     const before = getSiteSettingsAdminSync()
@@ -185,38 +178,17 @@ adminRoutes.post('/discord/test-webhook', async (c) => {
   return c.json({ ok: true })
 })
 
-adminRoutes.post('/config/publish-draft', async (c) => {
-  const admin = requireAdmin(await getSessionUser(c))
-  const settings = await publishConfigDraft()
-  await logAudit({
-    actor: admin,
-    action: 'config.draft_published',
-    entityType: 'SiteSettings',
-    detail: { configOverrides: settings.configOverrides },
-  })
-  return c.json({ settings })
-})
-
-adminRoutes.post('/config/discard-draft', async (c) => {
-  const admin = requireAdmin(await getSessionUser(c))
-  const settings = await discardConfigDraft()
-  await logAudit({
-    actor: admin,
-    action: 'config.draft_discarded',
-    entityType: 'SiteSettings',
-  })
-  return c.json({ settings })
-})
-
-adminRoutes.post('/config/clear-overrides', async (c) => {
-  const admin = requireAdmin(await getSessionUser(c))
-  const settings = await clearConfigOverrides()
-  await logAudit({
-    actor: admin,
-    action: 'config.overrides_cleared',
-    entityType: 'SiteSettings',
-  })
-  return c.json({ settings })
+/** Test that the configured role ID resolves in the webhook's guild. */
+adminRoutes.post('/discord/test-role-ping', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const result = await sendDiscordRolePingTest()
+  if (!result.sent) {
+    return c.json(
+      { error: result.error ?? 'Failed to send role ping test', roleId: result.roleId },
+      400,
+    )
+  }
+  return c.json({ ok: true, roleId: result.roleId })
 })
 
 adminRoutes.post('/assign-teams', async (c) => {
@@ -548,17 +520,27 @@ adminRoutes.get('/standings/current.svg', async (c) => {
 
 adminRoutes.get('/standings/preview.svg', async (c) => {
   const kind = c.req.query('kind') ?? 'standings'
-  const { weekKey, weekLabel } = getWeekInfo()
+  const { resolvePublishRange } = await import('../utils/week.js')
+  const range = resolvePublishRange({
+    preset: c.req.query('preset'),
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+  })
+  const { weekKey, weekLabel } = range
 
   let svg: string
   if (kind === 'breakdown') {
     const breakdown = await calculateStandingsBreakdown()
     svg = generateBreakdownSvg(breakdown, weekLabel)
   } else if (kind === 'vibes') {
-    // Live (unpublished) vibes for this week - not persisted, just rendered on the fly.
     const { buildPublicStandingsVibes } = await import('../services/adminAnalytics.js')
     const { generateVibesSvg } = await import('../services/vibes-image.js')
-    const vibes = await buildPublicStandingsVibes({ weekKey, weekLabel, to: new Date() })
+    const vibes = await buildPublicStandingsVibes({
+      weekKey,
+      weekLabel,
+      from: range.from,
+      toExclusive: range.toExclusive,
+    })
     svg = generateVibesSvg(vibes)
   } else {
     const standings = await calculateStandings()
@@ -568,22 +550,27 @@ adminRoutes.get('/standings/preview.svg', async (c) => {
   return svgInline(c, svg)
 })
 
-adminRoutes.get('/standings/digest-draft', async (c) => {
-  const draft = await buildStandingsDigestDraft()
-  return c.json(draft)
-})
-
 adminRoutes.get('/standings/publish-preview', async (c) => {
-  const digest = await buildStandingsDigestDraft()
+  const digest = await buildStandingsDigestDraft({
+    preset: c.req.query('preset'),
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+  })
   const discordRoleId = getDiscordRoleId()
+  const qs = new URLSearchParams()
+  if (digest.range.preset) qs.set('preset', digest.range.preset)
+  qs.set('from', digest.range.from)
+  qs.set('to', digest.range.to)
+  const rangeQs = qs.toString()
 
   return c.json({
     weekKey: digest.weekKey,
     weekLabel: digest.weekLabel,
+    range: digest.range,
     // Dry-run only: these render the current unpublished snapshot live, nothing is written to the DB.
-    standingsSvgUrl: '/admin/standings/preview.svg?kind=standings',
-    breakdownSvgUrl: '/admin/standings/preview.svg?kind=breakdown',
-    vibesSvgUrl: '/admin/standings/preview.svg?kind=vibes',
+    standingsSvgUrl: `/admin/standings/preview.svg?kind=standings&${rangeQs}`,
+    breakdownSvgUrl: `/admin/standings/preview.svg?kind=breakdown&${rangeQs}`,
+    vibesSvgUrl: `/admin/standings/preview.svg?kind=vibes&${rangeQs}`,
     digest,
     whoGetsNotified: {
       emails: digest.notify.emailCount,
@@ -625,7 +612,17 @@ adminRoutes.get('/standings/history/:id.svg', async (c) => {
 
 adminRoutes.post('/standings/publish', async (c) => {
   const admin = requireAdmin(await getSessionUser(c))
-  const result = await publishStandings(admin)
+  let body: { preset?: string; from?: string; to?: string } = {}
+  try {
+    body = await c.req.json()
+  } catch {
+    body = {}
+  }
+  const result = await publishStandings(admin, {
+    preset: body.preset,
+    from: body.from,
+    to: body.to,
+  })
   return c.json(result)
 })
 

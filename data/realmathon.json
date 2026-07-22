@@ -69,7 +69,7 @@
 		"standingsUnpublished": "Standings haven't been published yet. Check back once the hosts release them!",
 		"standingsLoadError": "Couldn't load standings. Please try again in a moment.",
 		"standingsVibesTitle": "Reading vibes",
-		"standingsVibesLead": "This week’s activity, frozen when standings were published.",
+		"standingsVibesLead": "This week’s reading activity from the latest standings publish.",
 		"standingsVibesMissing": "Weekly vibes will appear after the next standings publish.",
 		"faqPageTitle": "FAQ",
 		"howItWorksPageTitle": "How It Works",

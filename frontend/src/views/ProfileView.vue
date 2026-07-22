@@ -198,7 +198,8 @@ async function clearCurrentlyReading() {
             :class="{ earned: a.earned }"
             :title="a.earned ? `${a.label} - ${a.description}` : `Locked - ${a.description}`"
           >
-            {{ a.label }}
+            <span class="achievement-icon" aria-hidden="true">{{ a.icon ?? '✦' }}</span>
+            <span class="achievement-label">{{ a.label }}</span>
           </span>
         </div>
       </div>
@@ -564,6 +565,9 @@ async function clearCurrentlyReading() {
 }
 
 .achievement-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.3rem 0.7rem;
   border-radius: 999px;
   font-size: 0.75rem;
@@ -574,6 +578,11 @@ async function clearCurrentlyReading() {
   opacity: 0.55;
   cursor: default;
   white-space: nowrap;
+}
+
+.achievement-icon {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .achievement-badge.earned {

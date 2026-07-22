@@ -34,14 +34,25 @@ type WebhookPayload = {
   content: string
   embeds: Array<{ image: { url: string } }>
   attachments: Array<{ id: number; filename: string }>
+  allowed_mentions?: { parse?: string[]; roles?: string[] }
 }
 
-function buildPayload(content: string, filename: string): WebhookPayload {
-  return {
+function buildPayload(
+  content: string,
+  filename: string,
+  roleId?: string,
+): WebhookPayload {
+  const payload: WebhookPayload = {
     content,
     embeds: [{ image: { url: `attachment://${filename}` } }],
     attachments: [{ id: 0, filename }],
   }
+  if (roleId) {
+    payload.allowed_mentions = { roles: [roleId] }
+  } else {
+    payload.allowed_mentions = { parse: [] }
+  }
+  return payload
 }
 
 async function postWebhookImage(
@@ -50,6 +61,7 @@ async function postWebhookImage(
   png: Buffer,
   filename: string,
   content: string,
+  roleId?: string,
 ): Promise<boolean> {
   assertDiscordPng(png, filename)
 
@@ -58,7 +70,7 @@ async function postWebhookImage(
     throw new Error(`[discord] ${label}: refusing to post ${filename} with empty message content`)
   }
 
-  const payload = buildPayload(message, filename)
+  const payload = buildPayload(message, filename, roleId)
   const payloadJson = JSON.stringify(payload)
 
   console.log(`[discord] ${label}: preparing webhook post`, {
@@ -173,6 +185,58 @@ export async function sendDiscordWebhookTest(): Promise<{ sent: boolean; error?:
   }
 }
 
+/** Posts a real role mention so you can verify the configured role ID in-guild. */
+export async function sendDiscordRolePingTest(): Promise<{
+  sent: boolean
+  error?: string
+  roleId?: string
+}> {
+  const webhookUrl = getDiscordWebhookUrl()
+  if (!webhookUrl) {
+    return { sent: false, error: 'No Discord webhook URL configured' }
+  }
+  const roleId = getDiscordRoleId()
+  if (!roleId) {
+    return { sent: false, error: 'No Discord role ID configured' }
+  }
+
+  try {
+    const res = await fetch(webhookUrlWithWait(webhookUrl), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: `<@&${roleId}> Role ping test — if you see @unknown-role, this ID is not a role in this server.`,
+        allowed_mentions: { roles: [roleId] },
+      }),
+    })
+    const bodyText = await res.text()
+    if (!res.ok) {
+      console.error('[discord] role ping test failed', {
+        status: res.status,
+        body: bodyText.slice(0, 300),
+        roleId,
+      })
+      discordWebhookTotal.labels('role_ping_test', 'fail').inc()
+      return {
+        sent: false,
+        error: `Discord returned ${res.status}`,
+        roleId,
+      }
+    }
+    console.log('[discord] role ping test sent OK', { roleId })
+    discordWebhookTotal.labels('role_ping_test', 'ok').inc()
+    return { sent: true, roleId }
+  } catch (e) {
+    console.error('[discord] role ping test error:', e)
+    discordWebhookTotal.labels('role_ping_test', 'fail').inc()
+    return {
+      sent: false,
+      error: e instanceof Error ? e.message : 'Failed to send role ping test',
+      roleId,
+    }
+  }
+}
+
 export async function notifyDiscordStandingsPublished(
   weekKey: string,
   standingsSvg: string,
@@ -215,6 +279,7 @@ export async function notifyDiscordStandingsPublished(
       standingsPng,
       standingsFilename,
       standingsContent,
+      roleId || undefined,
     )
     if (!standingsSent) return { sent: false }
 
@@ -240,7 +305,7 @@ export async function notifyDiscordStandingsPublished(
     if (hasVibes && vibesSvg) {
       console.log('[discord] vibes: rasterizing SVG to PNG…')
       const vibesPng = svgToPng(vibesSvg)
-      const vibesContent = `**${weekLabel} reading vibes** (this week only — frozen at publish)`
+      const vibesContent = `**${weekLabel} reading vibes**`
       const vibesSent = await postWebhookImage(
         'vibes',
         webhookUrl,

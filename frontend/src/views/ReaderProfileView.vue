@@ -151,7 +151,8 @@ watch(() => route.params.id, () => {
 						:class="{ earned: a.earned }"
 						:title="a.description"
 					>
-						{{ a.label }}
+						<span class="badge-icon" aria-hidden="true">{{ a.icon ?? '✦' }}</span>
+						<span>{{ a.label }}</span>
 					</li>
 				</ul>
 			</section>
@@ -307,12 +308,19 @@ watch(() => route.params.id, () => {
 }
 
 .badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.3rem;
 	padding: 0.25rem 0.55rem;
 	border-radius: 999px;
 	font-size: 0.75rem;
 	border: 1px solid var(--realm-border);
 	color: var(--realm-text-muted);
 	opacity: 0.55;
+}
+
+.badge-icon {
+	line-height: 1;
 }
 
 .badge.earned {

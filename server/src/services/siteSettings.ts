@@ -94,6 +94,14 @@ function isValidDiscordRoleId(roleId: string): boolean {
   return /^[0-9]{5,30}$/.test(roleId)
 }
 
+/** Accept bare snowflakes or pasted Discord mention forms like <@&123>. */
+export function normalizeDiscordRoleId(raw: string): string {
+  const trimmed = raw.trim()
+  const mention = trimmed.match(/^<@&(\d{5,30})>$/)
+  if (mention) return mention[1]!
+  return trimmed
+}
+
 function toDocFromCache(doc: {
   showTeamRosters: boolean
   downtimeMode?: boolean | null
@@ -161,7 +169,7 @@ export async function updateSiteSettings(
     doc.discordWebhookUrl = trimmed
   }
   if (typeof patch.discordRoleId === 'string') {
-    const trimmed = patch.discordRoleId.trim()
+    const trimmed = normalizeDiscordRoleId(patch.discordRoleId)
     if (!isValidDiscordRoleId(trimmed)) {
       throw new Error('Invalid Discord role ID')
     }

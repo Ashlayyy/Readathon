@@ -1,6 +1,8 @@
 import { User } from '../db/models/User.js'
 import { sendEmail } from './email.js'
 import { answerNotificationEmail, standingsNotificationEmail } from './notificationTemplates.js'
+import type { PublicStandingsVibes } from './adminAnalytics.js'
+import type { TeamStanding } from './scoring.js'
 
 export async function notifyQuestionAnswered(opts: {
   userId: string
@@ -23,10 +25,19 @@ export async function notifyQuestionAnswered(opts: {
   await sendEmail({ to: opts.email, subject, html, text })
 }
 
-export async function notifyStandingsPublished(weekLabel: string): Promise<{ sent: number; skipped: number }> {
+export async function notifyStandingsPublished(opts: {
+  weekLabel: string
+  vibes?: PublicStandingsVibes | null
+  standings?: TeamStanding[] | null
+}): Promise<{ sent: number; skipped: number }> {
   const frontend = process.env.FRONTEND_URL ?? 'http://localhost:5173'
   const standingsUrl = `${frontend}/standings`
-  const { subject, html, text } = standingsNotificationEmail({ weekLabel, standingsUrl })
+  const { subject, html, text } = standingsNotificationEmail({
+    weekLabel: opts.weekLabel,
+    standingsUrl,
+    vibes: opts.vibes,
+    standings: opts.standings,
+  })
 
   const users = await User.find({
     notifyStandings: true,

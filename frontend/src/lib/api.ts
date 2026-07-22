@@ -246,6 +246,7 @@ export type Achievement = {
   id: string
   label: string
   description: string
+  icon?: string
   earned: boolean
   earnedAt?: string | null
 }
@@ -381,6 +382,8 @@ export type StandingsPreviewRow = {
   memberCount: number
 }
 
+export type PublishRangePreset = 'lastMonToThisMon' | 'thisWeek' | 'lastWeek' | 'last7' | 'custom'
+
 export type StandingsDigestDraft = {
   weekKey: string
   weekLabel: string
@@ -389,11 +392,13 @@ export type StandingsDigestDraft = {
   standingsPreview: StandingsPreviewRow[]
   notify: { emailCount: number; discordConfigured: boolean }
   draftText: string
+  range: { from: string; to: string; preset: string; label: string }
 }
 
 export type PublishPreview = {
   weekKey: string
   weekLabel: string
+  range?: { from: string; to: string; preset: string; label: string }
   standingsSvgUrl: string
   breakdownSvgUrl: string
   vibesSvgUrl: string

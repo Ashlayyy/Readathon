@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { api } from './lib/api';
 import { useAuth } from './composables/useAuth';
@@ -67,6 +67,21 @@ watch(menuOpen, (open) => {
 	document.body.classList.toggle('modal-open', open);
 });
 
+function onViewportResize() {
+	if (window.matchMedia('(min-width: 769px)').matches) {
+		menuOpen.value = false;
+	}
+}
+
+onMounted(() => {
+	window.addEventListener('resize', onViewportResize);
+});
+
+onBeforeUnmount(() => {
+	window.removeEventListener('resize', onViewportResize);
+	document.body.classList.remove('modal-open');
+});
+
 watch(config, (c) => {
 	if (c) document.title = `${c.event.name} - ${c.event.subtitle}`;
 });
@@ -106,7 +121,11 @@ function closeMenu() {
 	<div class="app-shell">
 		<a href="#main-content" class="skip-link">Skip to content</a>
 
-		<header v-if="!isMaintenancePage" class="site-header">
+		<header
+			v-if="!isMaintenancePage"
+			class="site-header"
+			:class="{ 'nav-menu-open': menuOpen }"
+		>
 			<div class="header-inner">
 				<div class="header-top">
 					<RouterLink to="/" class="brand" @click="closeMenu">
@@ -121,7 +140,7 @@ function closeMenu() {
 						type="button"
 						class="menu-toggle"
 						:aria-expanded="menuOpen"
-						aria-controls="main-navigation"
+						aria-controls="mobile-navigation"
 						@click="menuOpen = !menuOpen"
 					>
 						<span class="sr-only">{{
@@ -131,12 +150,7 @@ function closeMenu() {
 					</button>
 				</div>
 
-				<nav
-					id="main-navigation"
-					class="main-nav"
-					:class="{ open: menuOpen }"
-					aria-label="Main"
-				>
+				<nav class="main-nav" aria-label="Main">
 					<RouterLink to="/" class="nav-home" @click="closeMenu">{{
 						nav.home ?? 'Home'
 					}}</RouterLink>
@@ -155,26 +169,9 @@ function closeMenu() {
 							@navigate="closeMenu"
 						/>
 					</div>
-
-					<div class="nav-mobile-groups">
-						<SiteNavDropdown
-							id="nav-play-mobile"
-							mobile
-							:label="nav.playGroup ?? 'Play'"
-							:items="playNavItems"
-							@navigate="closeMenu"
-						/>
-						<SiteNavDropdown
-							id="nav-about-mobile"
-							mobile
-							:label="nav.aboutGroup ?? 'About'"
-							:items="aboutNavItems"
-							@navigate="closeMenu"
-						/>
-					</div>
 				</nav>
 
-				<div class="header-actions" :class="{ open: menuOpen }">
+				<div class="header-actions">
 					<ThemeSwitcher compact class="nav-theme-switcher" />
 
 					<div v-if="user?.isAdmin" class="action-buttons">
@@ -233,7 +230,98 @@ function closeMenu() {
 			</div>
 		</header>
 
-		<div v-if="menuOpen" class="menu-backdrop" @click="closeMenu" />
+		<!-- Mobile drawer is teleported so header backdrop-filter can't trap position:fixed -->
+		<Teleport to="body">
+			<div
+				v-if="menuOpen && !isMaintenancePage"
+				class="menu-backdrop"
+				@click="closeMenu"
+			/>
+			<aside
+				v-if="!isMaintenancePage"
+				id="mobile-navigation"
+				class="mobile-drawer"
+				:class="{ open: menuOpen }"
+				:aria-hidden="!menuOpen"
+			>
+				<nav class="mobile-drawer-nav" aria-label="Main">
+					<RouterLink to="/" class="nav-home" @click="closeMenu">{{
+						nav.home ?? 'Home'
+					}}</RouterLink>
+					<SiteNavDropdown
+						id="nav-play-mobile"
+						mobile
+						:label="nav.playGroup ?? 'Play'"
+						:items="playNavItems"
+						@navigate="closeMenu"
+					/>
+					<SiteNavDropdown
+						id="nav-about-mobile"
+						mobile
+						:label="nav.aboutGroup ?? 'About'"
+						:items="aboutNavItems"
+						@navigate="closeMenu"
+					/>
+				</nav>
+
+				<div class="mobile-drawer-actions">
+					<ThemeSwitcher compact class="nav-theme-switcher" />
+
+					<div v-if="user?.isAdmin" class="action-buttons">
+						<RouterLink
+							to="/admin"
+							class="btn btn-secondary btn-sm action-btn"
+							@click="closeMenu"
+						>
+							{{ (admin?.nav as string) ?? 'Admin' }}
+							<span v-if="unreadQuestions > 0" class="inbox-badge">{{
+								unreadQuestions
+							}}</span>
+						</RouterLink>
+					</div>
+
+					<template v-if="user">
+						<RouterLink
+							to="/profile"
+							class="btn btn-secondary btn-sm profile-btn profile-btn-compact"
+							:title="user.displayName"
+							@click="closeMenu"
+						>
+							<span class="profile-avatar">
+								{{ user.displayName.charAt(0).toUpperCase() }}
+								<span v-if="user.unreadAnswers" class="avatar-badge">{{
+									user.unreadAnswers
+								}}</span>
+							</span>
+							<span class="profile-text profile-text-menu">
+								<span class="profile-name">
+									{{ user.displayName }}
+									<span v-if="user.unreadAnswers" class="profile-badge">{{
+										user.unreadAnswers
+									}}</span>
+								</span>
+								<span class="profile-email">{{ user.email }}</span>
+							</span>
+						</RouterLink>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm logout-btn"
+							@click="handleLogout"
+						>
+							{{ config?.copy.logoutCta ?? 'Log out' }}
+						</button>
+					</template>
+					<RouterLink
+						v-else
+						to="/login"
+						class="btn btn-primary btn-sm join-btn"
+						@click="closeMenu"
+					>
+						{{ config?.copy.joinCta ?? 'Join' }}
+					</RouterLink>
+				</div>
+			</aside>
+		</Teleport>
 
 		<div id="main-content" class="app-content" tabindex="-1">
 			<div
@@ -335,6 +423,19 @@ function closeMenu() {
 	margin-right: calc(-1 * var(--page-gutter) - var(--safe-right));
 	padding: var(--safe-top) calc(var(--page-gutter) + var(--safe-right)) 0
 		calc(var(--page-gutter) + var(--safe-left));
+}
+
+.site-header.nav-menu-open {
+	z-index: 320;
+}
+
+/* Mobile drawer lives on body via Teleport (not inside the sticky header). */
+.menu-backdrop {
+	display: none;
+}
+
+.mobile-drawer {
+	display: none;
 }
 
 .header-inner {
@@ -466,10 +567,6 @@ function closeMenu() {
 	gap: 0.15rem 1rem;
 	position: relative;
 	z-index: 1;
-}
-
-.nav-mobile-groups {
-	display: none;
 }
 
 .main-nav :deep(.nav-home),
@@ -843,21 +940,15 @@ function closeMenu() {
 		justify-self: unset;
 	}
 
-	.main-nav {
-		grid-column: unset;
-		grid-row: unset;
-		justify-self: unset;
-	}
-
-	.header-actions {
-		grid-column: unset;
-		grid-row: unset;
-		justify-self: unset;
-		justify-content: stretch;
-	}
-
 	.menu-toggle {
 		display: flex;
+		position: relative;
+		z-index: 320;
+	}
+
+	.main-nav,
+	.header-actions {
+		display: none !important;
 	}
 
 	.menu-backdrop {
@@ -865,112 +956,109 @@ function closeMenu() {
 		position: fixed;
 		inset: 0;
 		background: var(--realm-overlay, rgba(0, 0, 0, 0.55));
-		z-index: 180;
+		z-index: 300;
 	}
 
-	.main-nav {
-		display: none;
+	.mobile-drawer {
+		display: flex;
+		flex-direction: column;
 		position: fixed;
 		top: 0;
 		right: 0;
 		bottom: 0;
 		width: min(20rem, 86vw);
-		flex-direction: column;
-		gap: 0;
-		padding: calc(4.5rem + var(--safe-top)) 1.25rem 11rem;
+		max-width: 100%;
 		margin: 0;
+		padding: 0;
 		border: none;
 		border-left: 1px solid var(--realm-border);
-		background: var(--realm-panel-bg, color-mix(in srgb, var(--realm-bg) 96%, transparent));
-		backdrop-filter: blur(12px);
-		z-index: 190;
-		overflow-y: auto;
+		background: var(--realm-surface);
+		box-shadow: -12px 0 40px rgba(0, 0, 0, 0.35);
+		z-index: 310;
 		transform: translateX(100%);
 		transition: transform 0.25s ease;
+		pointer-events: none;
+		visibility: hidden;
 	}
 
-	.main-nav.open {
-		display: flex;
+	.mobile-drawer.open {
 		transform: translateX(0);
+		pointer-events: auto;
+		visibility: visible;
 	}
 
-	.header-actions {
-		display: none;
-		position: fixed;
-		right: 0;
-		bottom: 0;
-		width: min(20rem, 86vw);
+	.mobile-drawer-nav {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+		padding: calc(4.5rem + var(--safe-top)) 1.25rem 1rem;
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.mobile-drawer-nav .nav-home {
+		color: var(--realm-text-muted);
+		font-size: 1rem;
+		font-weight: 500;
+		padding: 0.85rem 0.5rem;
+		border-bottom: 1px solid var(--realm-border);
+		width: 100%;
+		text-decoration: none;
+		display: flex;
+		align-items: center;
+	}
+
+	.mobile-drawer-nav .nav-home:hover,
+	.mobile-drawer-nav .nav-home.router-link-active,
+	.mobile-drawer-nav .nav-home.router-link-exact-active {
+		color: var(--realm-accent-glow);
+	}
+
+	.mobile-drawer-actions {
+		display: flex;
 		flex-direction: column;
 		align-items: stretch;
 		gap: 0.65rem;
 		padding: 1rem 1.25rem calc(1.25rem + var(--safe-bottom));
-		border-left: 1px solid var(--realm-border);
-		background: var(--realm-panel-bg, color-mix(in srgb, var(--realm-bg) 96%, transparent));
-		z-index: 191;
-	}
-
-	.header-actions.open {
-		display: flex;
-	}
-
-	.nav-desktop-groups {
-		display: none;
-	}
-
-	.nav-mobile-groups {
-		display: flex;
-		flex-direction: column;
-		width: 100%;
-	}
-
-	.main-nav :deep(.nav-home) {
-		padding: 0.85rem 0.5rem;
-		border-bottom: 1px solid var(--realm-border);
-		width: 100%;
-		font-size: 1rem;
-		min-height: unset;
-	}
-
-	.header-actions {
-		padding-bottom: calc(1.25rem + var(--safe-bottom));
 		border-top: 1px solid var(--realm-border);
+		background: var(--realm-surface);
+		flex-shrink: 0;
 	}
 
-	.action-buttons {
+	.mobile-drawer-actions .action-buttons {
 		border-right: none;
 		padding-right: 0;
 		width: 100%;
 		flex-wrap: wrap;
 	}
 
-	.action-buttons :deep(a.action-btn) {
+	.mobile-drawer-actions .action-buttons :deep(a.action-btn) {
 		flex: 1;
 		justify-content: center;
 	}
 
-	.profile-btn {
+	.mobile-drawer-actions .profile-btn {
 		max-width: 100%;
 		width: 100%;
 		padding: 0.4rem 0.85rem 0.4rem 0.45rem;
 	}
 
-	.profile-text-menu {
+	.mobile-drawer-actions .profile-text-menu {
 		display: flex;
 	}
 
-	.logout-btn {
+	.mobile-drawer-actions .logout-btn {
 		display: inline-flex !important;
 	}
 
-	.logout-btn,
-	.join-btn {
+	.mobile-drawer-actions .logout-btn,
+	.mobile-drawer-actions .join-btn {
 		width: 100%;
 		justify-content: center;
 	}
-}
 
-@media (max-width: 768px) {
-	.profile-email {
+	.mobile-drawer-actions .profile-email {
 		display: none;
 	}
 }

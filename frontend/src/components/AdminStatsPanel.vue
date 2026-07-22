@@ -248,9 +248,11 @@ function useSortable<T extends Record<string, unknown>>(
 	initialKey: string,
 	initialDir: SortDir = 'desc',
 	valueFns?: Record<string, (row: T) => number | string>,
+	pageSize = 0,
 ) {
 	const key = ref(initialKey);
 	const dir = ref<SortDir>(initialDir);
+	const page = ref(0);
 
 	function toggle(k: string, defaultDir: SortDir = 'desc') {
 		if (key.value === k) {
@@ -259,9 +261,10 @@ function useSortable<T extends Record<string, unknown>>(
 			key.value = k;
 			dir.value = defaultDir;
 		}
+		page.value = 0;
 	}
 
-	const rows = computed(() => {
+	const sorted = computed(() => {
 		const mul = dir.value === 'asc' ? 1 : -1;
 		const fn = valueFns?.[key.value];
 		return [...source()].sort((a, b) => {
@@ -270,6 +273,35 @@ function useSortable<T extends Record<string, unknown>>(
 			return cmpVal(av, bv) * mul;
 		});
 	});
+
+	const total = computed(() => sorted.value.length);
+	const totalPages = computed(() =>
+		pageSize > 0 ? Math.max(1, Math.ceil(total.value / pageSize)) : 1,
+	);
+
+	watch(sorted, () => {
+		if (page.value > totalPages.value - 1) {
+			page.value = Math.max(0, totalPages.value - 1);
+		}
+	});
+
+	const rows = computed(() => {
+		if (pageSize <= 0) return sorted.value;
+		const start = page.value * pageSize;
+		return sorted.value.slice(start, start + pageSize);
+	});
+
+	const rangeLabel = computed(() => {
+		if (total.value === 0) return '0 of 0';
+		if (pageSize <= 0) return `1–${total.value} of ${total.value}`;
+		const start = page.value * pageSize + 1;
+		const end = Math.min((page.value + 1) * pageSize, total.value);
+		return `${start}–${end} of ${total.value}`;
+	});
+
+	function goPage(p: number) {
+		page.value = Math.max(0, Math.min(totalPages.value - 1, p));
+	}
 
 	function aria(k: string): 'ascending' | 'descending' | 'none' {
 		if (key.value !== k) return 'none';
@@ -281,8 +313,24 @@ function useSortable<T extends Record<string, unknown>>(
 		return dir.value === 'asc' ? '↑' : '↓';
 	}
 
-	return { key, dir, rows, toggle, aria, mark };
+	return {
+		key,
+		dir,
+		rows,
+		toggle,
+		aria,
+		mark,
+		page,
+		pageSize,
+		total,
+		totalPages,
+		rangeLabel,
+		goPage,
+		paged: pageSize > 0,
+	};
 }
+
+const TABLE_PAGE_SIZE = 10;
 
 const teamTable = useSortable<DogpileRow>(
 	() => analytics.value?.byTeam ?? [],
@@ -314,56 +362,42 @@ const booksTable = useSortable<ReaderRow>(
 	'books',
 	'desc',
 );
-const promptTable = useSortable<PromptRow>(() => analytics.value?.prompts ?? [], 'count', 'desc');
-const authorTable = useSortable<AuthorRow>(() => analytics.value?.authors ?? [], 'books', 'desc');
+const promptTable = useSortable<PromptRow>(
+	() => analytics.value?.prompts ?? [],
+	'count',
+	'desc',
+	undefined,
+	TABLE_PAGE_SIZE,
+);
+const authorTable = useSortable<AuthorRow>(
+	() => analytics.value?.authors ?? [],
+	'books',
+	'desc',
+	undefined,
+	TABLE_PAGE_SIZE,
+);
 const longestTable = useSortable<BookRow>(
 	() => analytics.value?.longestBooks ?? [],
 	'pageCount',
 	'desc',
+	undefined,
+	TABLE_PAGE_SIZE,
 );
 const recentTable = useSortable<BookRow>(
 	() => analytics.value?.recentBooks ?? [],
 	'createdAt',
 	'desc',
+	undefined,
+	TABLE_PAGE_SIZE,
 );
 const speedTable = useSortable<SpeedRow & Record<string, unknown>>(
 	() => (analytics.value?.speedDemons ?? []) as (SpeedRow & Record<string, unknown>)[],
 	'pagesPerDay',
 	'desc',
 	{ pagesPerDay: (row) => pagesPerDay(row as unknown as SpeedRow) },
+	TABLE_PAGE_SIZE,
 );
 const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date', 'desc');
-
-/** NxN matrix of realms × realms, cell = hits/damage dealt from row realm onto column realm. */
-const rivalryMatrix = computed(() => {
-	const teams = config.value?.teams ?? [];
-	const rivalry = analytics.value?.rivalry ?? [];
-	const lookup = new Map(
-		rivalry.map((r) => [`${r.fromTeamId}→${r.toTeamId}`, r]),
-	);
-	const maxHits = Math.max(1, ...rivalry.map((r) => r.hits));
-	return {
-		teams,
-		maxHits,
-		rows: teams.map((fromTeam) => ({
-			team: fromTeam,
-			cells: teams.map((toTeam) => {
-				if (fromTeam.id === toTeam.id) return null;
-				const cell = lookup.get(`${fromTeam.id}→${toTeam.id}`);
-				return {
-					toTeam,
-					hits: cell?.hits ?? 0,
-					damage: cell?.damage ?? 0,
-				};
-			}),
-		})),
-	};
-});
-
-function heatOpacity(hits: number, maxHits: number) {
-	if (hits <= 0) return 0;
-	return 0.12 + (hits / maxHits) * 0.78;
-}
 </script>
 
 <template>
@@ -715,62 +749,6 @@ function heatOpacity(hits: number, maxHits: number) {
 				</div>
 			</article>
 
-			<!-- Rivalry heat map -->
-			<article class="card table-card">
-				<h3>Rivalry heat map</h3>
-				<p class="chart-lead">
-					Rows attack columns. Darker cells mean more sabotage hits from that realm onto that
-					target.
-				</p>
-				<div v-if="rivalryMatrix.teams.length === 0" class="empty-note">No realms configured.</div>
-				<div v-else class="table-wrap">
-					<table class="data-table heatmap-table" aria-label="Rivalry heat map, attacker by target">
-						<caption class="sr-only">
-							Rivalry heat map: each cell shows sabotage hits and damage from the row realm
-							(attacker) onto the column realm (target). Darker cells mean more hits.
-						</caption>
-						<thead>
-							<tr>
-								<th scope="col">
-									<span class="sr-only">Attacker</span>
-								</th>
-								<th v-for="toTeam in rivalryMatrix.teams" :key="toTeam.id" scope="col">
-									{{ toTeam.icon }} {{ toTeam.name }}
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr v-for="row in rivalryMatrix.rows" :key="row.team.id">
-								<th scope="row">{{ row.team.icon }} {{ row.team.name }}</th>
-								<td
-									v-for="cell in row.cells"
-									:key="cell ? cell.toTeam.id : 'self'"
-									class="heat-cell"
-									tabindex="0"
-									:aria-label="
-										cell
-											? `${row.team.name} attacked ${cell.toTeam.name}: ${cell.hits} hits, ${cell.damage} damage`
-											: 'Same realm'
-									"
-								>
-									<span
-										v-if="cell"
-										class="heat-fill"
-										:style="{
-											background: `rgba(212, 99, 74, ${heatOpacity(cell.hits, rivalryMatrix.maxHits)})`,
-										}"
-									>
-										<strong v-if="cell.hits > 0">{{ cell.hits }}</strong>
-										<span v-else class="heat-zero">–</span>
-									</span>
-									<span v-else class="heat-self" aria-hidden="true">·</span>
-								</td>
-							</tr>
-						</tbody>
-					</table>
-				</div>
-			</article>
-
 			<!-- Rivalry -->
 			<article class="card table-card">
 				<h3>Team rivalries</h3>
@@ -965,248 +943,347 @@ function heatOpacity(hits: number, maxHits: number) {
 			<article class="card table-card">
 				<h3>Prompt usage</h3>
 				<p class="chart-lead">Add prompts, sabotage prompts, and team bonuses.</p>
-				<div v-if="promptTable.rows.value.length === 0" class="empty-note">
+				<div v-if="promptTable.total.value === 0" class="empty-note">
 					No prompts claimed yet.
 				</div>
-				<div v-else class="table-wrap">
-					<table class="data-table" aria-label="Prompt usage">
-						<thead>
-							<tr>
-								<th scope="col" :aria-sort="promptTable.aria('label')">
-									<button type="button" class="sort-th" @click="promptTable.toggle('label', 'asc')">
-										Prompt <span class="sort-mark">{{ promptTable.mark('label') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="promptTable.aria('kind')">
-									<button type="button" class="sort-th" @click="promptTable.toggle('kind', 'asc')">
-										Kind <span class="sort-mark">{{ promptTable.mark('kind') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="promptTable.aria('count')">
-									<button type="button" class="sort-th" @click="promptTable.toggle('count')">
-										Times used <span class="sort-mark">{{ promptTable.mark('count') }}</span>
-									</button>
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr v-for="row in promptTable.rows.value" :key="row.promptId">
-								<td>{{ row.label }}</td>
-								<td>{{ row.kind }}</td>
-								<td>{{ row.count }}</td>
-							</tr>
-						</tbody>
-					</table>
-				</div>
+				<template v-else>
+					<div class="table-wrap">
+						<table class="data-table" aria-label="Prompt usage">
+							<thead>
+								<tr>
+									<th scope="col" :aria-sort="promptTable.aria('label')">
+										<button type="button" class="sort-th" @click="promptTable.toggle('label', 'asc')">
+											Prompt <span class="sort-mark">{{ promptTable.mark('label') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="promptTable.aria('count')">
+										<button type="button" class="sort-th" @click="promptTable.toggle('count')">
+											Times used <span class="sort-mark">{{ promptTable.mark('count') }}</span>
+										</button>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="row in promptTable.rows.value" :key="row.promptId">
+									<td>{{ row.label }}</td>
+									<td>{{ row.count }}</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<nav v-if="promptTable.totalPages.value > 1" class="table-pager" aria-label="Prompt usage pages">
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="promptTable.page.value === 0"
+							@click="promptTable.goPage(promptTable.page.value - 1)"
+						>
+							Prev
+						</button>
+						<p class="hint">{{ promptTable.rangeLabel.value }}</p>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="promptTable.page.value >= promptTable.totalPages.value - 1"
+							@click="promptTable.goPage(promptTable.page.value + 1)"
+						>
+							Next
+						</button>
+					</nav>
+				</template>
 			</article>
 
 			<!-- Authors -->
 			<article class="card table-card">
 				<h3>Top authors</h3>
 				<p class="chart-lead">Most-read authors across all logged books.</p>
-				<div v-if="authorTable.rows.value.length === 0" class="empty-note">Nothing logged yet.</div>
-				<div v-else class="table-wrap">
-					<table class="data-table" aria-label="Top authors">
-						<thead>
-							<tr>
-								<th scope="col" :aria-sort="authorTable.aria('author')">
-									<button type="button" class="sort-th" @click="authorTable.toggle('author', 'asc')">
-										Author <span class="sort-mark">{{ authorTable.mark('author') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="authorTable.aria('books')">
-									<button type="button" class="sort-th" @click="authorTable.toggle('books')">
-										Books <span class="sort-mark">{{ authorTable.mark('books') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="authorTable.aria('pages')">
-									<button type="button" class="sort-th" @click="authorTable.toggle('pages')">
-										Pages <span class="sort-mark">{{ authorTable.mark('pages') }}</span>
-									</button>
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr v-for="row in authorTable.rows.value" :key="row.author">
-								<td>{{ row.author }}</td>
-								<td>{{ row.books }}</td>
-								<td>{{ row.pages.toLocaleString() }}</td>
-							</tr>
-						</tbody>
-					</table>
-				</div>
+				<div v-if="authorTable.total.value === 0" class="empty-note">Nothing logged yet.</div>
+				<template v-else>
+					<div class="table-wrap">
+						<table class="data-table" aria-label="Top authors">
+							<thead>
+								<tr>
+									<th scope="col" :aria-sort="authorTable.aria('author')">
+										<button type="button" class="sort-th" @click="authorTable.toggle('author', 'asc')">
+											Author <span class="sort-mark">{{ authorTable.mark('author') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="authorTable.aria('books')">
+										<button type="button" class="sort-th" @click="authorTable.toggle('books')">
+											Books <span class="sort-mark">{{ authorTable.mark('books') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="authorTable.aria('pages')">
+										<button type="button" class="sort-th" @click="authorTable.toggle('pages')">
+											Pages <span class="sort-mark">{{ authorTable.mark('pages') }}</span>
+										</button>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="row in authorTable.rows.value" :key="row.author">
+									<td>{{ row.author }}</td>
+									<td>{{ row.books }}</td>
+									<td>{{ row.pages.toLocaleString() }}</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<nav v-if="authorTable.totalPages.value > 1" class="table-pager" aria-label="Top authors pages">
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="authorTable.page.value === 0"
+							@click="authorTable.goPage(authorTable.page.value - 1)"
+						>
+							Prev
+						</button>
+						<p class="hint">{{ authorTable.rangeLabel.value }}</p>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="authorTable.page.value >= authorTable.totalPages.value - 1"
+							@click="authorTable.goPage(authorTable.page.value + 1)"
+						>
+							Next
+						</button>
+					</nav>
+				</template>
 			</article>
 
 			<!-- Longest books -->
 			<article class="card table-card">
 				<h3>Longest books</h3>
 				<p class="chart-lead">The biggest reads logged in this range.</p>
-				<div v-if="longestTable.rows.value.length === 0" class="empty-note">
+				<div v-if="longestTable.total.value === 0" class="empty-note">
 					Nothing logged yet.
 				</div>
-				<div v-else class="table-wrap">
-					<table class="data-table" aria-label="Longest books">
-						<thead>
-							<tr>
-								<th scope="col" :aria-sort="longestTable.aria('bookTitle')">
-									<button type="button" class="sort-th" @click="longestTable.toggle('bookTitle', 'asc')">
-										Book <span class="sort-mark">{{ longestTable.mark('bookTitle') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="longestTable.aria('bookAuthor')">
-									<button type="button" class="sort-th" @click="longestTable.toggle('bookAuthor', 'asc')">
-										Author <span class="sort-mark">{{ longestTable.mark('bookAuthor') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="longestTable.aria('pageCount')">
-									<button type="button" class="sort-th" @click="longestTable.toggle('pageCount')">
-										Pages <span class="sort-mark">{{ longestTable.mark('pageCount') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="longestTable.aria('format')">
-									<button type="button" class="sort-th" @click="longestTable.toggle('format', 'asc')">
-										Format <span class="sort-mark">{{ longestTable.mark('format') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="longestTable.aria('userName')">
-									<button type="button" class="sort-th" @click="longestTable.toggle('userName', 'asc')">
-										Reader <span class="sort-mark">{{ longestTable.mark('userName') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="longestTable.aria('teamName')">
-									<button type="button" class="sort-th" @click="longestTable.toggle('teamName', 'asc')">
-										Realm <span class="sort-mark">{{ longestTable.mark('teamName') }}</span>
-									</button>
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr v-for="row in longestTable.rows.value" :key="row.id">
-								<td>{{ row.bookTitle }}</td>
-								<td>{{ row.bookAuthor }}</td>
-								<td>{{ row.pageCount }}</td>
-								<td>{{ formatLabel(row.format) }}</td>
-								<td>
-									<ReaderLink :id="row.userId" :name="row.userName" />
-								</td>
-								<td>{{ row.teamName }}</td>
-							</tr>
-						</tbody>
-					</table>
-				</div>
+				<template v-else>
+					<div class="table-wrap">
+						<table class="data-table" aria-label="Longest books">
+							<thead>
+								<tr>
+									<th scope="col" :aria-sort="longestTable.aria('bookTitle')">
+										<button type="button" class="sort-th" @click="longestTable.toggle('bookTitle', 'asc')">
+											Book <span class="sort-mark">{{ longestTable.mark('bookTitle') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="longestTable.aria('bookAuthor')">
+										<button type="button" class="sort-th" @click="longestTable.toggle('bookAuthor', 'asc')">
+											Author <span class="sort-mark">{{ longestTable.mark('bookAuthor') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="longestTable.aria('pageCount')">
+										<button type="button" class="sort-th" @click="longestTable.toggle('pageCount')">
+											Pages <span class="sort-mark">{{ longestTable.mark('pageCount') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="longestTable.aria('format')">
+										<button type="button" class="sort-th" @click="longestTable.toggle('format', 'asc')">
+											Format <span class="sort-mark">{{ longestTable.mark('format') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="longestTable.aria('userName')">
+										<button type="button" class="sort-th" @click="longestTable.toggle('userName', 'asc')">
+											Reader <span class="sort-mark">{{ longestTable.mark('userName') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="longestTable.aria('teamName')">
+										<button type="button" class="sort-th" @click="longestTable.toggle('teamName', 'asc')">
+											Realm <span class="sort-mark">{{ longestTable.mark('teamName') }}</span>
+										</button>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="row in longestTable.rows.value" :key="row.id">
+									<td>{{ row.bookTitle }}</td>
+									<td>{{ row.bookAuthor }}</td>
+									<td>{{ row.pageCount }}</td>
+									<td>{{ formatLabel(row.format) }}</td>
+									<td>
+										<ReaderLink :id="row.userId" :name="row.userName" />
+									</td>
+									<td>{{ row.teamName }}</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<nav v-if="longestTable.totalPages.value > 1" class="table-pager" aria-label="Longest books pages">
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="longestTable.page.value === 0"
+							@click="longestTable.goPage(longestTable.page.value - 1)"
+						>
+							Prev
+						</button>
+						<p class="hint">{{ longestTable.rangeLabel.value }}</p>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="longestTable.page.value >= longestTable.totalPages.value - 1"
+							@click="longestTable.goPage(longestTable.page.value + 1)"
+						>
+							Next
+						</button>
+					</nav>
+				</template>
 			</article>
 
 			<!-- Recent books -->
 			<article class="card table-card">
 				<h3>Recently logged</h3>
 				<p class="chart-lead">The latest submissions across every realm.</p>
-				<div v-if="recentTable.rows.value.length === 0" class="empty-note">
+				<div v-if="recentTable.total.value === 0" class="empty-note">
 					Nothing logged yet.
 				</div>
-				<div v-else class="table-wrap">
-					<table class="data-table" aria-label="Recently logged">
-						<thead>
-							<tr>
-								<th scope="col" :aria-sort="recentTable.aria('bookTitle')">
-									<button type="button" class="sort-th" @click="recentTable.toggle('bookTitle', 'asc')">
-										Book <span class="sort-mark">{{ recentTable.mark('bookTitle') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="recentTable.aria('userName')">
-									<button type="button" class="sort-th" @click="recentTable.toggle('userName', 'asc')">
-										Reader <span class="sort-mark">{{ recentTable.mark('userName') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="recentTable.aria('submissionType')">
-									<button type="button" class="sort-th" @click="recentTable.toggle('submissionType', 'asc')">
-										Type <span class="sort-mark">{{ recentTable.mark('submissionType') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="recentTable.aria('pageCount')">
-									<button type="button" class="sort-th" @click="recentTable.toggle('pageCount')">
-										Pages <span class="sort-mark">{{ recentTable.mark('pageCount') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="recentTable.aria('createdAt')">
-									<button type="button" class="sort-th" @click="recentTable.toggle('createdAt')">
-										Logged <span class="sort-mark">{{ recentTable.mark('createdAt') }}</span>
-									</button>
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr v-for="row in recentTable.rows.value" :key="row.id">
-								<td>{{ row.bookTitle }}</td>
-								<td>
-									<ReaderLink :id="row.userId" :name="row.userName" />
-								</td>
-								<td>
-									<span
-										class="badge"
-										:class="row.submissionType === 'add' ? 'badge-positive' : 'badge-negative'"
-									>
-										{{ row.submissionType }}
-									</span>
-								</td>
-								<td>{{ row.pageCount }}</td>
-								<td>{{ formatDate(row.createdAt) }}</td>
-							</tr>
-						</tbody>
-					</table>
-				</div>
+				<template v-else>
+					<div class="table-wrap">
+						<table class="data-table" aria-label="Recently logged">
+							<thead>
+								<tr>
+									<th scope="col" :aria-sort="recentTable.aria('bookTitle')">
+										<button type="button" class="sort-th" @click="recentTable.toggle('bookTitle', 'asc')">
+											Book <span class="sort-mark">{{ recentTable.mark('bookTitle') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="recentTable.aria('userName')">
+										<button type="button" class="sort-th" @click="recentTable.toggle('userName', 'asc')">
+											Reader <span class="sort-mark">{{ recentTable.mark('userName') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="recentTable.aria('submissionType')">
+										<button type="button" class="sort-th" @click="recentTable.toggle('submissionType', 'asc')">
+											Type <span class="sort-mark">{{ recentTable.mark('submissionType') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="recentTable.aria('pageCount')">
+										<button type="button" class="sort-th" @click="recentTable.toggle('pageCount')">
+											Pages <span class="sort-mark">{{ recentTable.mark('pageCount') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="recentTable.aria('createdAt')">
+										<button type="button" class="sort-th" @click="recentTable.toggle('createdAt')">
+											Logged <span class="sort-mark">{{ recentTable.mark('createdAt') }}</span>
+										</button>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="row in recentTable.rows.value" :key="row.id">
+									<td>{{ row.bookTitle }}</td>
+									<td>
+										<ReaderLink :id="row.userId" :name="row.userName" />
+									</td>
+									<td>
+										<span
+											class="badge"
+											:class="row.submissionType === 'add' ? 'badge-positive' : 'badge-negative'"
+										>
+											{{ row.submissionType }}
+										</span>
+									</td>
+									<td>{{ row.pageCount }}</td>
+									<td>{{ formatDate(row.createdAt) }}</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<nav v-if="recentTable.totalPages.value > 1" class="table-pager" aria-label="Recently logged pages">
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="recentTable.page.value === 0"
+							@click="recentTable.goPage(recentTable.page.value - 1)"
+						>
+							Prev
+						</button>
+						<p class="hint">{{ recentTable.rangeLabel.value }}</p>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="recentTable.page.value >= recentTable.totalPages.value - 1"
+							@click="recentTable.goPage(recentTable.page.value + 1)"
+						>
+							Next
+						</button>
+					</nav>
+				</template>
 			</article>
 
 			<!-- Speed demons -->
 			<article class="card table-card">
 				<h3>Fastest finishes</h3>
 				<p class="chart-lead">Pages per day, when start and finish dates were logged.</p>
-				<div v-if="speedTable.rows.value.length === 0" class="empty-note">
+				<div v-if="speedTable.total.value === 0" class="empty-note">
 					No start/finish dates logged yet.
 				</div>
-				<div v-else class="table-wrap">
-					<table class="data-table" aria-label="Fastest finishes">
-						<thead>
-							<tr>
-								<th scope="col" :aria-sort="speedTable.aria('displayName')">
-									<button type="button" class="sort-th" @click="speedTable.toggle('displayName', 'asc')">
-										Reader <span class="sort-mark">{{ speedTable.mark('displayName') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="speedTable.aria('bookTitle')">
-									<button type="button" class="sort-th" @click="speedTable.toggle('bookTitle', 'asc')">
-										Book <span class="sort-mark">{{ speedTable.mark('bookTitle') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="speedTable.aria('pages')">
-									<button type="button" class="sort-th" @click="speedTable.toggle('pages')">
-										Pages <span class="sort-mark">{{ speedTable.mark('pages') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="speedTable.aria('days')">
-									<button type="button" class="sort-th" @click="speedTable.toggle('days')">
-										Days <span class="sort-mark">{{ speedTable.mark('days') }}</span>
-									</button>
-								</th>
-								<th scope="col" :aria-sort="speedTable.aria('pagesPerDay')">
-									<button type="button" class="sort-th" @click="speedTable.toggle('pagesPerDay')">
-										Pages/day <span class="sort-mark">{{ speedTable.mark('pagesPerDay') }}</span>
-									</button>
-								</th>
-							</tr>
-						</thead>
-						<tbody>
-							<tr v-for="(row, i) in speedTable.rows.value" :key="`${row.userId}-${row.bookTitle}-${i}`">
-								<td>
-									<ReaderLink :id="row.userId" :name="row.displayName" />
-								</td>
-								<td>{{ row.bookTitle }}</td>
-								<td>{{ row.pages }}</td>
-								<td>{{ row.days }}</td>
-								<td class="gain">{{ pagesPerDay(row) }}</td>
-							</tr>
-						</tbody>
-					</table>
-				</div>
+				<template v-else>
+					<div class="table-wrap">
+						<table class="data-table" aria-label="Fastest finishes">
+							<thead>
+								<tr>
+									<th scope="col" :aria-sort="speedTable.aria('displayName')">
+										<button type="button" class="sort-th" @click="speedTable.toggle('displayName', 'asc')">
+											Reader <span class="sort-mark">{{ speedTable.mark('displayName') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="speedTable.aria('bookTitle')">
+										<button type="button" class="sort-th" @click="speedTable.toggle('bookTitle', 'asc')">
+											Book <span class="sort-mark">{{ speedTable.mark('bookTitle') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="speedTable.aria('pages')">
+										<button type="button" class="sort-th" @click="speedTable.toggle('pages')">
+											Pages <span class="sort-mark">{{ speedTable.mark('pages') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="speedTable.aria('days')">
+										<button type="button" class="sort-th" @click="speedTable.toggle('days')">
+											Days <span class="sort-mark">{{ speedTable.mark('days') }}</span>
+										</button>
+									</th>
+									<th scope="col" :aria-sort="speedTable.aria('pagesPerDay')">
+										<button type="button" class="sort-th" @click="speedTable.toggle('pagesPerDay')">
+											Pages/day <span class="sort-mark">{{ speedTable.mark('pagesPerDay') }}</span>
+										</button>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="(row, i) in speedTable.rows.value" :key="`${row.userId}-${row.bookTitle}-${i}`">
+									<td>
+										<ReaderLink :id="row.userId" :name="row.displayName" />
+									</td>
+									<td>{{ row.bookTitle }}</td>
+									<td>{{ row.pages }}</td>
+									<td>{{ row.days }}</td>
+									<td class="gain">{{ pagesPerDay(row) }}</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+					<nav v-if="speedTable.totalPages.value > 1" class="table-pager" aria-label="Fastest finishes pages">
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="speedTable.page.value === 0"
+							@click="speedTable.goPage(speedTable.page.value - 1)"
+						>
+							Prev
+						</button>
+						<p class="hint">{{ speedTable.rangeLabel.value }}</p>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="speedTable.page.value >= speedTable.totalPages.value - 1"
+							@click="speedTable.goPage(speedTable.page.value + 1)"
+						>
+							Next
+						</button>
+					</nav>
+				</template>
 			</article>
 
 			<!-- By day -->
@@ -1628,6 +1705,20 @@ function heatOpacity(hits: number, maxHits: number) {
 .table-wrap {
 	overflow-x: auto;
 	-webkit-overflow-scrolling: touch;
+}
+
+.table-pager {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	margin-top: 0.85rem;
+}
+
+.table-pager .hint {
+	margin: 0;
+	font-size: 0.85rem;
+	color: var(--realm-text-muted);
 }
 
 .sort-th {

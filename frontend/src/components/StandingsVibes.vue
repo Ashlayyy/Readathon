@@ -82,7 +82,7 @@ const hasData = computed(() => props.vibes.overview.submissions > 0)
 
 const subtitle = computed(() => {
 	if (props.vibes.weekLabel) {
-		return `${props.vibes.weekLabel} only — frozen when standings were published.`
+		return `${props.vibes.weekLabel} reading activity.`
 	}
 	return (
 		props.lead ??

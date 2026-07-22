@@ -656,7 +656,7 @@ export async function buildAdminAnalytics(
 	}
 }
 
-/** Public-safe slice stored on publish (week-scoped, frozen). */
+/** Public-safe slice stored on publish (week-scoped). */
 export type PublicStandingsVibes = {
 	weekKey: string
 	weekLabel: string
@@ -682,13 +682,20 @@ export type PublicStandingsVibes = {
 export async function buildPublicStandingsVibes(opts: {
 	weekKey: string
 	weekLabel: string
-	/** Exclusive upper bound, usually publish time or week end */
+	/** Inclusive range start (defaults to ISO week of weekKey). */
+	from?: Date
+	/** Exclusive upper bound (defaults to week end or opts.to legacy). */
+	toExclusive?: Date
+	/** @deprecated Prefer toExclusive. Exclusive upper bound, usually publish time or week end */
 	to?: Date
 }): Promise<PublicStandingsVibes> {
 	const bounds = getWeekBoundsFromKey(opts.weekKey)
-	const to = opts.to && opts.to < bounds.to ? opts.to : bounds.to
+	const from = opts.from ?? bounds.from
+	const to =
+		opts.toExclusive ??
+		(opts.to && opts.to < bounds.to ? opts.to : bounds.to)
 	const full = await buildAdminAnalytics({
-		from: toDateInputValue(bounds.from),
+		from: toDateInputValue(from),
 		to: toDateInputValue(new Date(to.getTime() - 1)),
 		preset: 'custom',
 	})

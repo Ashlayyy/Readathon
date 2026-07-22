@@ -2,7 +2,7 @@ import { User } from '../db/models/User.js'
 import { calculateStandings } from './scoring.js'
 import { buildPublicStandingsVibes, type PublicStandingsVibes } from './adminAnalytics.js'
 import { getDiscordWebhookUrl } from './siteSettings.js'
-import { getWeekInfo } from '../utils/week.js'
+import { resolvePublishRange } from '../utils/week.js'
 
 export type LeaderGap = {
   leaderTeamName: string
@@ -31,6 +31,12 @@ export type StandingsDigestDraft = {
   standingsPreview: StandingsPreviewRow[]
   notify: StandingsDigestNotify
   draftText: string
+  range: {
+    from: string
+    to: string
+    preset: string
+    label: string
+  }
 }
 
 async function countEmailNotifyRecipients(): Promise<number> {
@@ -76,13 +82,22 @@ export function buildDraftText(opts: {
   return lines.join('\n')
 }
 
-/** Live (unpublished) preview of what this week's publish would look like. */
-export async function buildStandingsDigestDraft(): Promise<StandingsDigestDraft> {
-  const { weekKey, weekLabel } = getWeekInfo()
+/** Live (unpublished) preview of what a publish for the chosen range would look like. */
+export async function buildStandingsDigestDraft(opts: {
+  preset?: string | null
+  from?: string | null
+  to?: string | null
+} = {}): Promise<StandingsDigestDraft> {
+  const range = resolvePublishRange(opts)
 
   const [standings, vibes, emailCount] = await Promise.all([
     calculateStandings(),
-    buildPublicStandingsVibes({ weekKey, weekLabel, to: new Date() }),
+    buildPublicStandingsVibes({
+      weekKey: range.weekKey,
+      weekLabel: range.weekLabel,
+      from: range.from,
+      toExclusive: range.toExclusive,
+    }),
     countEmailNotifyRecipients(),
   ])
 
@@ -108,15 +123,26 @@ export async function buildStandingsDigestDraft(): Promise<StandingsDigestDraft>
     discordConfigured: Boolean(getDiscordWebhookUrl()),
   }
 
-  const draftText = buildDraftText({ weekLabel, vibes, leaderGap, notify })
+  const draftText = buildDraftText({
+    weekLabel: range.weekLabel,
+    vibes,
+    leaderGap,
+    notify,
+  })
 
   return {
-    weekKey,
-    weekLabel,
+    weekKey: range.weekKey,
+    weekLabel: range.weekLabel,
     vibes,
     leaderGap,
     standingsPreview,
     notify,
     draftText,
+    range: {
+      from: range.fromInput,
+      to: range.toInput,
+      preset: range.preset,
+      label: range.label,
+    },
   }
 }
