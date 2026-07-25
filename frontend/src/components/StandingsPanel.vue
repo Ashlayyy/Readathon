@@ -99,10 +99,12 @@ h2 {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   max-width: 100%;
+  min-width: 0;
 }
 
 .img-wrap img {
   width: 100%;
+  max-width: 100%;
   height: auto;
   display: block;
   border-radius: 8px;

@@ -131,10 +131,12 @@ header h2 {
 	border-radius: 8px;
 	overflow-x: auto;
 	max-width: 100%;
+	min-width: 0;
 }
 
 .img-wrap img {
 	width: 100%;
+	max-width: 100%;
 	height: auto;
 	display: block;
 	border-radius: 8px;

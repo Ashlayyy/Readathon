@@ -238,11 +238,9 @@ function closeMenu() {
 				@click="closeMenu"
 			/>
 			<aside
-				v-if="!isMaintenancePage"
+				v-if="menuOpen && !isMaintenancePage"
 				id="mobile-navigation"
 				class="mobile-drawer"
-				:class="{ open: menuOpen }"
-				:aria-hidden="!menuOpen"
 			>
 				<nav class="mobile-drawer-nav" aria-label="Main">
 					<RouterLink to="/" class="nav-home" @click="closeMenu">{{
@@ -975,16 +973,6 @@ function closeMenu() {
 		background: var(--realm-surface);
 		box-shadow: -12px 0 40px rgba(0, 0, 0, 0.35);
 		z-index: 310;
-		transform: translateX(100%);
-		transition: transform 0.25s ease;
-		pointer-events: none;
-		visibility: hidden;
-	}
-
-	.mobile-drawer.open {
-		transform: translateX(0);
-		pointer-events: auto;
-		visibility: visible;
 	}
 
 	.mobile-drawer-nav {

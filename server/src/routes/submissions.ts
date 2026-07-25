@@ -13,6 +13,7 @@ import { getSubmitStrategy } from '../services/submit-strategy.js';
 import { getTeamById } from '../services/prompts.js';
 import { captureServerEvent } from '../services/posthog.js';
 import { notifyTeamChatSubmission } from '../services/discord.js';
+import { buildTeamChatMessage } from '../services/teamChatMessage.js';
 import { submissionsCreatedTotal } from '../services/metrics.js';
 
 function optionalDate(value: string | null | undefined): string | null {
@@ -107,9 +108,18 @@ submissionRoutes.post('/', async (c) => {
 	// Fire-and-forget, optional realm chat webhook - never blocks or fails the submission.
 	const teamName = user.teamId ? getTeamById(user.teamId)?.name : null;
 	if (teamName) {
+		const targetTeamName = body.targetTeamId
+			? getTeamById(body.targetTeamId)?.name ?? null
+			: null;
 		notifyTeamChatSubmission(
 			user.teamId,
-			`📖 **${user.displayName}** logged "${submission.bookTitle}" for **${teamName}**!`,
+			buildTeamChatMessage({
+				displayName: user.displayName,
+				bookTitle: submission.bookTitle,
+				teamName,
+				submissionType: body.submissionType,
+				targetTeamName,
+			}),
 		);
 	}
 

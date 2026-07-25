@@ -195,6 +195,7 @@
 				"stats": "Stats",
 				"prompts": "Prompts",
 				"audit": "Audit",
+				"settings": "Settings",
 				"config": "Config"
 			},
 			"audit": {
