@@ -53,6 +53,11 @@ import {
 } from '../services/prompts.js'
 import { Prompt } from '../db/models/Prompt.js'
 import { getWeekInfo } from '../utils/week.js'
+import {
+  applyCoverUpdates,
+  listCoverProposals,
+  streamCoverLookups,
+} from '../services/coverBackfill.js'
 
 export const adminRoutes = new Hono()
 
@@ -302,6 +307,70 @@ adminRoutes.get('/submissions', async (c) => {
     submissions: active,
     deletedSubmissions: includeDeleted ? deleted : [],
   })
+})
+
+adminRoutes.get('/submissions/covers/list', async (c) => {
+  const proposals = await listCoverProposals()
+  const missingCount = proposals.filter((p) => !p.currentCoverUrl).length
+  return c.json({ proposals, total: proposals.length, missingCount })
+})
+
+adminRoutes.get('/submissions/covers/stream', async (c) => {
+  const { streamSSE } = await import('hono/streaming')
+  return streamSSE(c, async (stream) => {
+    const abort = new AbortController()
+    stream.onAbort(() => abort.abort())
+
+    const all = await listCoverProposals()
+    const total = all.length
+
+    await stream.writeSSE({
+      event: 'start',
+      data: JSON.stringify({ total }),
+    })
+
+    let done = 0
+    await streamCoverLookups(async (update) => {
+      done++
+      await stream.writeSSE({
+        event: 'cover',
+        data: JSON.stringify({
+          id: update.id,
+          proposedCoverUrl: update.proposedCoverUrl,
+          done,
+          total,
+        }),
+      })
+    }, abort.signal)
+
+    if (!abort.signal.aborted) {
+      await stream.writeSSE({
+        event: 'done',
+        data: JSON.stringify({ done, total }),
+      })
+    }
+  })
+})
+
+adminRoutes.post('/submissions/covers/apply', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{ updates?: { id: string; coverUrl: string }[] }>()
+  const result = await applyCoverUpdates(body.updates ?? [])
+  if (!result.ok) return c.json({ error: result.error }, 400)
+
+  await logAudit({
+    actor: admin,
+    action: 'submission.covers_bulk_updated',
+    entityType: 'Submission',
+    entityId: null,
+    detail: {
+      updated: result.updated,
+      skipped: result.skipped,
+      requested: (body.updates ?? []).length,
+    },
+  })
+
+  return c.json({ ok: true, updated: result.updated, skipped: result.skipped })
 })
 
 adminRoutes.get('/submissions/:id', async (c) => {

@@ -503,24 +503,6 @@ function clearDiscordRoleId() {
 							chat webhooks. Edit freely — click Save once when you’re done.
 						</p>
 					</div>
-					<div class="btn-row save-row">
-						<button
-							type="button"
-							class="btn btn-ghost"
-							:disabled="!dirty || saving"
-							@click="discardDrafts"
-						>
-							Discard
-						</button>
-						<button
-							type="button"
-							class="btn btn-primary"
-							:disabled="!dirty || saving"
-							@click="saveAllWebhookSettings"
-						>
-							{{ saving ? 'Saving…' : dirty ? 'Save settings' : 'Saved' }}
-						</button>
-					</div>
 				</div>
 
 				<div class="webhook-columns">
@@ -709,7 +691,7 @@ function clearDiscordRoleId() {
 							>
 								<textarea
 									v-model="teamChatAddDrafts[i]"
-									rows="2"
+									rows="4"
 									spellcheck="true"
 									:disabled="saving"
 									placeholder='📖 **{{displayName}}** logged "{{bookTitle}}"…'
@@ -756,7 +738,7 @@ function clearDiscordRoleId() {
 							>
 								<textarea
 									v-model="teamChatSabotageDrafts[i]"
-									rows="2"
+									rows="4"
 									spellcheck="true"
 									:disabled="saving"
 									placeholder='⚔️ **{{displayName}}** sabotaged **{{targetTeamName}}**…'
@@ -782,6 +764,25 @@ function clearDiscordRoleId() {
 				<p v-if="dirty" class="dirty-banner" role="status">
 					You have unsaved webhook / message changes.
 				</p>
+
+				<div class="btn-row save-row">
+					<button
+						type="button"
+						class="btn btn-ghost"
+						:disabled="!dirty || saving"
+						@click="discardDrafts"
+					>
+						Discard
+					</button>
+					<button
+						type="button"
+						class="btn btn-primary"
+						:disabled="!dirty || saving"
+						@click="saveAllWebhookSettings"
+					>
+						{{ saving ? 'Saving…' : dirty ? 'Save settings' : 'Saved' }}
+					</button>
+				</div>
 			</article>
 		</template>
 	</section>
@@ -955,6 +956,8 @@ function clearDiscordRoleId() {
 
 .save-row {
 	flex-shrink: 0;
+	justify-content: flex-end;
+	margin-top: 0.25rem;
 }
 
 .dirty-banner {
@@ -1115,7 +1118,7 @@ function clearDiscordRoleId() {
 	font-family: var(--font-body);
 	font-size: 0.88rem;
 	resize: vertical;
-	min-height: 3.2rem;
+	min-height: 5.5rem;
 }
 
 .icon-remove {

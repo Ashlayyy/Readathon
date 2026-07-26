@@ -60,7 +60,8 @@ export function generateVibesSvg(vibes: PublicStandingsVibes): string {
 
 	const statsY = 78
 	const sectionY = statsY + cardH * 2 + gap + 28
-	const sectionHeaderH = 28
+	/** Room for panel title baseline (~22) + gap before first row baseline. */
+	const sectionHeaderH = 48
 	const bodyStart = sectionY + sectionHeaderH
 	const teamRowH = 40
 	const formatRowH = 26

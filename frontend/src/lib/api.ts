@@ -270,6 +270,7 @@ export type Achievement = {
 export type ShelfBook = {
   title: string
   author: string
+  coverUrl: string | null
   realmName: string | null
   realmColor: string | null
   finishedAt: string

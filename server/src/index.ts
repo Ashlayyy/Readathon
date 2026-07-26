@@ -133,7 +133,7 @@ app.get('/api/roster', async (c) => {
 const SHELF_SIZE = 20;
 
 /**
- * Public book club shelf - last N finished books, title + author + realm only.
+ * Public book club shelf - last N finished books, title + author + cover + realm.
  * No private notes, no reader names, so it's safe to show unauthenticated.
  */
 app.get('/api/shelf', async (c) => {
@@ -163,6 +163,7 @@ app.get('/api/shelf', async (c) => {
 		return {
 			title: sub.bookTitle,
 			author: sub.bookAuthor,
+			coverUrl: sub.coverUrl?.trim() || null,
 			realmName: team?.name ?? null,
 			realmColor: team?.color ?? null,
 			finishedAt: effectiveDate.toISOString(),

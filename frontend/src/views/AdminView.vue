@@ -22,6 +22,7 @@ import AdminPromptsPanel from '../components/AdminPromptsPanel.vue';
 import AdminStatsPanel from '../components/AdminStatsPanel.vue';
 import AdminSettingsPanel from '../components/AdminSettingsPanel.vue';
 import AdminAddSubmissionModal from '../components/AdminAddSubmissionModal.vue';
+import AdminCoverSearchModal from '../components/AdminCoverSearchModal.vue';
 import ReaderLink from '../components/ReaderLink.vue';
 import { useConfig } from '../composables/useConfig';
 import { useCopy } from '../composables/useCopy';
@@ -128,6 +129,7 @@ const activeTab = ref<
 	| 'settings'
 >('inbox');
 const addSubmissionOpen = ref(false);
+const coverSearchOpen = ref(false);
 const navOpen = ref(false);
 
 const anyModalOpen = computed(
@@ -629,6 +631,19 @@ function openAddSubmission() {
 	void loadUsers().then(() => {
 		addSubmissionOpen.value = true;
 	});
+}
+
+function openCoverSearch() {
+	coverSearchOpen.value = true;
+}
+
+async function onCoversApplied(updated: number) {
+	showMessage(
+		updated === 1
+			? 'Applied 1 cover update.'
+			: `Applied ${updated} cover updates.`,
+	);
+	await loadSubmissions(true);
 }
 
 function closeSubmissionModal() {
@@ -1886,6 +1901,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							<button
 								type="button"
 								class="btn btn-secondary btn-sm"
+								@click="openCoverSearch"
+							>
+								Search for covers
+							</button>
+							<button
+								type="button"
+								class="btn btn-secondary btn-sm"
 								@click="downloadSubmissionsCsv"
 							>
 								{{ section('submissions').exportCsv ?? 'Export CSV' }}
@@ -2409,6 +2431,12 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 			@created="onSubmissionCreated"
 			@updated="onSubmissionUpdated"
 			@edit="switchViewToEdit"
+			@error="(m) => showMessage(m, true)"
+		/>
+
+		<AdminCoverSearchModal
+			v-model:open="coverSearchOpen"
+			@applied="onCoversApplied"
 			@error="(m) => showMessage(m, true)"
 		/>
 
