@@ -1,4 +1,9 @@
 import { SiteSettings } from '../db/models/SiteSettings.js'
+import {
+  DEFAULT_TEAM_CHAT_ADD_TEMPLATES,
+  DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES,
+  normalizeTemplateList,
+} from './teamChatMessage.js'
 
 export type SeasonArchive = {
   slug: string
@@ -20,6 +25,8 @@ export type SiteSettingsAdmin = SiteSettingsPublic & {
   discordRoleId: string
   teamChatHooksEnabled: boolean
   teamChatWebhookUrls: Record<string, string>
+  teamChatAddTemplates: string[]
+  teamChatSabotageTemplates: string[]
   scheduledPublishEnabled: boolean
   scheduledPublishDay: number
   scheduledPublishHour: number
@@ -39,6 +46,8 @@ const DEFAULTS: SiteSettingsAdmin = {
   discordRoleId: '',
   teamChatHooksEnabled: false,
   teamChatWebhookUrls: {},
+  teamChatAddTemplates: [...DEFAULT_TEAM_CHAT_ADD_TEMPLATES],
+  teamChatSabotageTemplates: [...DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES],
   scheduledPublishEnabled: false,
   scheduledPublishDay: 1,
   scheduledPublishHour: 9,
@@ -48,7 +57,12 @@ const DEFAULTS: SiteSettingsAdmin = {
   seasonArchive: null,
 }
 
-let cached: SiteSettingsCached = { ...DEFAULTS, teamChatWebhookUrls: {} }
+let cached: SiteSettingsCached = {
+  ...DEFAULTS,
+  teamChatWebhookUrls: {},
+  teamChatAddTemplates: [...DEFAULT_TEAM_CHAT_ADD_TEMPLATES],
+  teamChatSabotageTemplates: [...DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES],
+}
 
 export function getSiteSettingsSync(): SiteSettingsPublic {
   return {
@@ -64,7 +78,12 @@ export function getConfigOverridesSync(): unknown {
 }
 
 export function getSiteSettingsAdminSync(): SiteSettingsAdmin {
-  return { ...cached, teamChatWebhookUrls: { ...cached.teamChatWebhookUrls } }
+  return {
+    ...cached,
+    teamChatWebhookUrls: { ...cached.teamChatWebhookUrls },
+    teamChatAddTemplates: [...cached.teamChatAddTemplates],
+    teamChatSabotageTemplates: [...cached.teamChatSabotageTemplates],
+  }
 }
 
 export function getDiscordWebhookUrl(): string {
@@ -109,6 +128,8 @@ function toDocFromCache(doc: {
   discordRoleId?: string | null
   teamChatHooksEnabled?: boolean | null
   teamChatWebhookUrls?: unknown
+  teamChatAddTemplates?: unknown
+  teamChatSabotageTemplates?: unknown
   scheduledPublishEnabled?: boolean | null
   scheduledPublishDay?: number | null
   scheduledPublishHour?: number | null
@@ -122,6 +143,8 @@ function toDocFromCache(doc: {
     rawUrls && typeof rawUrls === 'object' && !Array.isArray(rawUrls)
       ? { ...(rawUrls as Record<string, string>) }
       : {}
+  const addTemplates = normalizeTemplateList(doc.teamChatAddTemplates)
+  const sabotageTemplates = normalizeTemplateList(doc.teamChatSabotageTemplates)
   return {
     showTeamRosters: doc.showTeamRosters,
     downtimeMode: doc.downtimeMode ?? false,
@@ -129,6 +152,12 @@ function toDocFromCache(doc: {
     discordRoleId: doc.discordRoleId ?? '',
     teamChatHooksEnabled: doc.teamChatHooksEnabled ?? false,
     teamChatWebhookUrls,
+    teamChatAddTemplates:
+      addTemplates.length > 0 ? addTemplates : [...DEFAULT_TEAM_CHAT_ADD_TEMPLATES],
+    teamChatSabotageTemplates:
+      sabotageTemplates.length > 0
+        ? sabotageTemplates
+        : [...DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES],
     scheduledPublishEnabled: doc.scheduledPublishEnabled ?? false,
     scheduledPublishDay: doc.scheduledPublishDay ?? 1,
     scheduledPublishHour: doc.scheduledPublishHour ?? 9,
@@ -139,10 +168,34 @@ function toDocFromCache(doc: {
   }
 }
 
+/**
+ * If a template category has zero entries in Mongo, write the built-in five.
+ * Categories that already have 1+ templates are left alone.
+ */
+async function seedEmptyTeamChatTemplates(doc: InstanceType<typeof SiteSettings>): Promise<boolean> {
+  let changed = false
+  const add = normalizeTemplateList(doc.teamChatAddTemplates)
+  const sabotage = normalizeTemplateList(doc.teamChatSabotageTemplates)
+  if (add.length === 0) {
+    doc.teamChatAddTemplates = [...DEFAULT_TEAM_CHAT_ADD_TEMPLATES]
+    changed = true
+  }
+  if (sabotage.length === 0) {
+    doc.teamChatSabotageTemplates = [...DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES]
+    changed = true
+  }
+  return changed
+}
+
 export async function refreshSiteSettingsCache(): Promise<SiteSettingsAdmin> {
   let doc = await SiteSettings.findOne()
   if (!doc) {
-    doc = await SiteSettings.create({})
+    doc = await SiteSettings.create({
+      teamChatAddTemplates: [...DEFAULT_TEAM_CHAT_ADD_TEMPLATES],
+      teamChatSabotageTemplates: [...DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES],
+    })
+  } else if (await seedEmptyTeamChatTemplates(doc)) {
+    await doc.save()
   }
   cached = toDocFromCache(doc)
   return getSiteSettingsAdminSync()
@@ -185,6 +238,16 @@ export async function updateSiteSettings(
       }
     }
     doc.teamChatWebhookUrls = { ...patch.teamChatWebhookUrls }
+  }
+  if (Array.isArray(patch.teamChatAddTemplates)) {
+    const list = normalizeTemplateList(patch.teamChatAddTemplates)
+    doc.teamChatAddTemplates =
+      list.length > 0 ? list : [...DEFAULT_TEAM_CHAT_ADD_TEMPLATES]
+  }
+  if (Array.isArray(patch.teamChatSabotageTemplates)) {
+    const list = normalizeTemplateList(patch.teamChatSabotageTemplates)
+    doc.teamChatSabotageTemplates =
+      list.length > 0 ? list : [...DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES]
   }
   if (typeof patch.scheduledPublishEnabled === 'boolean') {
     doc.scheduledPublishEnabled = patch.scheduledPublishEnabled

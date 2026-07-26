@@ -8,7 +8,14 @@ import { useAdminCopy } from './composables/useAdminCopy';
 import { closeAllNavDropdowns } from './composables/useNavDropdown';
 import SiteNavDropdown from './components/SiteNavDropdown.vue';
 import ThemeSwitcher from './components/ThemeSwitcher.vue';
+import UserAvatar from './components/UserAvatar.vue';
+import ImageLightbox from './components/ImageLightbox.vue';
+import { useBodyScrollLock } from './composables/useBodyScrollLock';
 import { APP_VERSION } from './lib/version';
+
+function prefetchProfile() {
+	void import('./views/ReaderProfileView.vue');
+}
 
 const { user, logout } = useAuth();
 const { config, configLoading, configError, loadConfig } = useConfig();
@@ -63,9 +70,7 @@ watch(
 	},
 );
 
-watch(menuOpen, (open) => {
-	document.body.classList.toggle('modal-open', open);
-});
+useBodyScrollLock(menuOpen);
 
 function onViewportResize() {
 	if (window.matchMedia('(min-width: 769px)').matches) {
@@ -79,7 +84,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
 	window.removeEventListener('resize', onViewportResize);
-	document.body.classList.remove('modal-open');
 });
 
 watch(config, (c) => {
@@ -189,13 +193,19 @@ function closeMenu() {
 
 					<template v-if="user">
 						<RouterLink
-							to="/profile"
+							:to="`/readers/${user.id}`"
 							class="btn btn-secondary btn-sm profile-btn profile-btn-compact"
 							:title="user.displayName"
+							@mouseenter="prefetchProfile"
+							@focus="prefetchProfile"
 							@click="closeMenu"
 						>
 							<span class="profile-avatar">
-								{{ user.displayName.charAt(0).toUpperCase() }}
+								<UserAvatar
+									:name="user.displayName"
+									:avatar-url="user.avatarUrl"
+									size="sm"
+								/>
 								<span v-if="user.unreadAnswers" class="avatar-badge">{{
 									user.unreadAnswers
 								}}</span>
@@ -238,11 +248,9 @@ function closeMenu() {
 				@click="closeMenu"
 			/>
 			<aside
-				v-if="!isMaintenancePage"
+				v-if="menuOpen && !isMaintenancePage"
 				id="mobile-navigation"
 				class="mobile-drawer"
-				:class="{ open: menuOpen }"
-				:aria-hidden="!menuOpen"
 			>
 				<nav class="mobile-drawer-nav" aria-label="Main">
 					<RouterLink to="/" class="nav-home" @click="closeMenu">{{
@@ -282,13 +290,19 @@ function closeMenu() {
 
 					<template v-if="user">
 						<RouterLink
-							to="/profile"
+							:to="`/readers/${user.id}`"
 							class="btn btn-secondary btn-sm profile-btn profile-btn-compact"
 							:title="user.displayName"
+							@mouseenter="prefetchProfile"
+							@focus="prefetchProfile"
 							@click="closeMenu"
 						>
 							<span class="profile-avatar">
-								{{ user.displayName.charAt(0).toUpperCase() }}
+								<UserAvatar
+									:name="user.displayName"
+									:avatar-url="user.avatarUrl"
+									size="sm"
+								/>
 								<span v-if="user.unreadAnswers" class="avatar-badge">{{
 									user.unreadAnswers
 								}}</span>
@@ -375,10 +389,14 @@ function closeMenu() {
 						nav.standings ?? 'Standings'
 					}}</RouterLink>
 					<RouterLink to="/faq">{{ nav.faq ?? 'FAQ' }}</RouterLink>
+					<RouterLink to="/changelog">Changelog</RouterLink>
 				</nav>
-				<p class="app-version">v{{ APP_VERSION }}</p>
+				<RouterLink to="/changelog" class="app-version" :title="`v${APP_VERSION}`">
+					v{{ APP_VERSION }}
+				</RouterLink>
 			</div>
 		</footer>
+		<ImageLightbox />
 	</div>
 </template>
 
@@ -694,12 +712,8 @@ function closeMenu() {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: linear-gradient(135deg, var(--realm-accent), #a84030);
-	color: white;
-	font-family: var(--font-display);
-	font-size: 0.9rem;
-	font-weight: 700;
 	position: relative;
+	background: transparent;
 }
 
 .avatar-badge {
@@ -852,6 +866,14 @@ function closeMenu() {
 	font-size: 0.75rem;
 	opacity: 0.7;
 	font-family: ui-monospace, monospace;
+	color: var(--realm-text-muted);
+	text-decoration: none;
+}
+
+.app-version:hover {
+	opacity: 1;
+	color: var(--realm-accent-glow);
+	text-decoration: underline;
 }
 
 .page-fade-enter-active,
@@ -975,16 +997,6 @@ function closeMenu() {
 		background: var(--realm-surface);
 		box-shadow: -12px 0 40px rgba(0, 0, 0, 0.35);
 		z-index: 310;
-		transform: translateX(100%);
-		transition: transform 0.25s ease;
-		pointer-events: none;
-		visibility: hidden;
-	}
-
-	.mobile-drawer.open {
-		transform: translateX(0);
-		pointer-events: auto;
-		visibility: visible;
 	}
 
 	.mobile-drawer-nav {

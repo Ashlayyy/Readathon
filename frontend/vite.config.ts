@@ -6,11 +6,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
-const serverPkg = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../server/package.json'), 'utf8'),
+const rootPkg = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8'),
 ) as { version?: string }
 
-const appVersion = process.env.APP_VERSION?.trim() || serverPkg.version || '0.0.0'
+const appVersion = process.env.APP_VERSION?.trim() || rootPkg.version || '0.0.0'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({

@@ -2,14 +2,56 @@ import { Hono } from 'hono'
 import { Question } from '../db/models/Question.js'
 import { Submission } from '../db/models/Submission.js'
 import { withActive } from '../db/activeSubmission.js'
-import { getSessionUser, requireAuth, userToPublic } from '../services/auth.js'
+import { getSessionUser, requireAuth, userToPublic, effectiveAvatarUrl } from '../services/auth.js'
 import { submissionToPublic } from '../services/scoring.js'
 import { computeAchievements } from '../services/achievements.js'
 import { buildProfileDashboard } from '../services/profileDashboard.js'
 import { buildPaceSeries, paceSparklinePath } from '../services/pace.js'
 import { lookupBookCover } from '../services/covers.js'
+import { deleteLocalAvatarFile, saveAvatarDataUrl } from '../services/coverUpload.js'
 
 export const profileRoutes = new Hono()
+
+profileRoutes.post('/avatar', async (c) => {
+  const user = requireAuth(await getSessionUser(c))
+  const body = await c.req.json<{ dataUrl?: string }>()
+  const dataUrl = body.dataUrl?.trim() ?? ''
+  if (!dataUrl) return c.json({ error: 'Image data is required' }, 400)
+
+  const result = await saveAvatarDataUrl(dataUrl)
+  if (!result.ok) return c.json({ error: result.error }, 400)
+
+  const previous = user.avatarUrl
+  user.avatarUrl = result.avatarUrl
+  await user.save()
+  await deleteLocalAvatarFile(previous)
+
+  return c.json({
+    avatarUrl: effectiveAvatarUrl(user),
+    hasCustomAvatar: true,
+    user: userToPublic(user),
+  })
+})
+
+profileRoutes.delete('/avatar', async (c) => {
+  const user = requireAuth(await getSessionUser(c))
+  const previous = user.avatarUrl
+  if (previous) {
+    // Clear custom upload → Google photo (if any) shows again.
+    user.avatarUrl = null
+    await user.save()
+    await deleteLocalAvatarFile(previous)
+  } else {
+    // No custom upload — clear the Google photo too.
+    user.googleAvatarUrl = null
+    await user.save()
+  }
+  return c.json({
+    avatarUrl: effectiveAvatarUrl(user),
+    hasCustomAvatar: false,
+    user: userToPublic(user),
+  })
+})
 
 profileRoutes.get('/', async (c) => {
   const user = requireAuth(await getSessionUser(c))

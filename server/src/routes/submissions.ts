@@ -13,6 +13,8 @@ import { getSubmitStrategy } from '../services/submit-strategy.js';
 import { getTeamById } from '../services/prompts.js';
 import { captureServerEvent } from '../services/posthog.js';
 import { notifyTeamChatSubmission } from '../services/discord.js';
+import { buildTeamChatMessage } from '../services/teamChatMessage.js';
+import { getSiteSettingsAdminSync } from '../services/siteSettings.js';
 import { submissionsCreatedTotal } from '../services/metrics.js';
 
 function optionalDate(value: string | null | undefined): string | null {
@@ -107,9 +109,27 @@ submissionRoutes.post('/', async (c) => {
 	// Fire-and-forget, optional realm chat webhook - never blocks or fails the submission.
 	const teamName = user.teamId ? getTeamById(user.teamId)?.name : null;
 	if (teamName) {
+		const targetTeamName = body.targetTeamId
+			? getTeamById(body.targetTeamId)?.name ?? null
+			: null;
+		const settings = getSiteSettingsAdminSync();
 		notifyTeamChatSubmission(
 			user.teamId,
-			`📖 **${user.displayName}** logged "${submission.bookTitle}" for **${teamName}**!`,
+			buildTeamChatMessage(
+				{
+					displayName: user.displayName,
+					bookTitle: submission.bookTitle,
+					teamName,
+					submissionType: body.submissionType,
+					targetTeamName,
+				},
+				{
+					templates:
+						body.submissionType === 'sabotage'
+							? settings.teamChatSabotageTemplates
+							: settings.teamChatAddTemplates,
+				},
+			),
 		);
 	}
 
@@ -117,4 +137,24 @@ submissionRoutes.post('/', async (c) => {
 		submission: submissionToPublic(submission),
 		breakdown: score,
 	});
+});
+
+/** Owner-only: change cover art on an existing log (upload URL or Open Library). */
+submissionRoutes.patch('/:id/cover', async (c) => {
+	const user = requireAuth(await getSessionUser(c));
+	const submission = await Submission.findOne(
+		withActive({ _id: c.req.param('id'), userId: user._id }),
+	);
+	if (!submission) return c.json({ error: 'Submission not found' }, 404);
+
+	const body = await c.req.json<{ coverUrl?: string | null }>();
+	const raw = body.coverUrl?.trim() || null;
+	const { isAllowedCoverUrl } = await import('../services/covers.js');
+	if (!isAllowedCoverUrl(raw)) {
+		return c.json({ error: 'Invalid cover URL' }, 400);
+	}
+
+	submission.coverUrl = raw;
+	await submission.save();
+	return c.json({ submission: submissionToPublic(submission) });
 });

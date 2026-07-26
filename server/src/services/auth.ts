@@ -51,6 +51,12 @@ export function getGoogleClient() {
 	return new Google(clientId, clientSecret, redirectUri);
 }
 
+export function effectiveAvatarUrl(user: IUser): string | null {
+	const custom = user.avatarUrl?.trim() || null
+	if (custom) return custom
+	return user.googleAvatarUrl?.trim() || null
+}
+
 export function userToPublic(user: IUser) {
 	return {
 		id: user._id.toString(),
@@ -59,6 +65,8 @@ export function userToPublic(user: IUser) {
 		teamId: user.teamId,
 		status: user.status,
 		isAdmin: userIsAdmin(user),
+		avatarUrl: effectiveAvatarUrl(user),
+		hasCustomAvatar: Boolean(user.avatarUrl?.trim()),
 	};
 }
 
@@ -222,16 +230,25 @@ export async function findOrCreateGoogleUser(
 	googleId: string,
 	displayName: string,
 	email: string,
+	pictureUrl?: string | null,
 ): Promise<UserDoc> {
 	const normalizedEmail = email.trim().toLowerCase();
+	const picture = pictureUrl?.trim() || null;
 
 	const byGoogle = await User.findOne({ googleId });
-	if (byGoogle) return byGoogle;
+	if (byGoogle) {
+		if (picture && byGoogle.googleAvatarUrl !== picture) {
+			byGoogle.googleAvatarUrl = picture;
+			await byGoogle.save();
+		}
+		return byGoogle;
+	}
 
 	const byEmail = await User.findOne({ email: normalizedEmail });
 	if (byEmail) {
 		byEmail.googleId = googleId;
 		if (!byEmail.displayName && displayName) byEmail.displayName = displayName;
+		if (picture) byEmail.googleAvatarUrl = picture;
 		await byEmail.save();
 		return byEmail;
 	}
@@ -240,6 +257,7 @@ export async function findOrCreateGoogleUser(
 		displayName: displayName.trim() || normalizedEmail.split('@')[0],
 		email: normalizedEmail,
 		googleId,
+		googleAvatarUrl: picture,
 		isAdmin: false,
 		status: 'pending',
 	});

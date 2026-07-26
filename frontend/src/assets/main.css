@@ -111,6 +111,10 @@ html[data-theme='light'] body {
 
 body.modal-open {
 	overflow: hidden;
+	/* iOS Safari: overflow alone often still scrolls; pin the document */
+	position: fixed;
+	inset: 0;
+	width: 100%;
 }
 
 .sr-only {
@@ -173,6 +177,10 @@ a:hover {
 
 .page {
 	animation: fadeIn 0.35s ease;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+	overflow-x: clip;
 }
 
 .page-state {
@@ -351,6 +359,8 @@ input,
 textarea,
 select {
 	width: 100%;
+	max-width: 100%;
+	min-width: 0;
 	padding: 0.75rem 0.9rem;
 	background: var(--realm-bg);
 	border: 1px solid var(--realm-border);

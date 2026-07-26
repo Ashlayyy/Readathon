@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { api, type ShelfBook } from '../lib/api'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
+import BookCover from '../components/BookCover.vue'
 
 const { config, loadConfig } = useConfig()
 const { t } = useCopy()
@@ -50,12 +51,25 @@ function formatDate(iso: string): string {
     </div>
 
     <ul v-else class="shelf-grid">
-      <li v-for="(book, i) in books" :key="`${book.title}-${i}`" class="shelf-card card" :style="{ '--c': book.realmColor ?? 'var(--realm-border)' }">
-        <h3 class="shelf-title">{{ book.title }}</h3>
-        <p v-if="book.author" class="shelf-author">by {{ book.author }}</p>
-        <div class="shelf-footer">
-          <span class="realm-pill">{{ book.realmName ?? config.copy.shelfUnknownRealm }}</span>
-          <time>{{ formatDate(book.finishedAt) }}</time>
+      <li
+        v-for="(book, i) in books"
+        :key="`${book.title}-${i}`"
+        class="shelf-card card"
+        :style="{ '--c': book.realmColor ?? 'var(--realm-border)' }"
+      >
+        <BookCover
+          :title="book.title"
+          :author="book.author"
+          :cover-url="book.coverUrl"
+          size="md"
+        />
+        <div class="shelf-body">
+          <h3 class="shelf-title">{{ book.title }}</h3>
+          <p v-if="book.author" class="shelf-author">by {{ book.author }}</p>
+          <div class="shelf-footer">
+            <span class="realm-pill">{{ book.realmName ?? config.copy.shelfUnknownRealm }}</span>
+            <time>{{ formatDate(book.finishedAt) }}</time>
+          </div>
         </div>
       </li>
     </ul>
@@ -66,7 +80,7 @@ function formatDate(iso: string): string {
 .shelf-grid {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
   gap: 1rem;
   padding: 0;
   margin: 0;
@@ -74,9 +88,18 @@ function formatDate(iso: string): string {
 
 .shelf-card {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.85rem;
   border-top: 3px solid var(--c);
+}
+
+.shelf-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .shelf-title {

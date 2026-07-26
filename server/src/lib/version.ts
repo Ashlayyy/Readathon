@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-function readPackageVersion(): string {
+/** Root package.json — single source of truth for the app version. */
+function readRootPackageVersion(): string {
   try {
-    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '../../package.json')
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '../../../package.json')
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string }
     return pkg.version ?? '0.0.0'
   } catch {
@@ -13,4 +14,4 @@ function readPackageVersion(): string {
 }
 
 /** App version for health checks and deploy verification. Override with APP_VERSION. */
-export const APP_VERSION = process.env.APP_VERSION?.trim() || readPackageVersion()
+export const APP_VERSION = process.env.APP_VERSION?.trim() || readRootPackageVersion()

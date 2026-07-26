@@ -7,6 +7,7 @@ import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 import StandingsPanel from '../components/StandingsPanel.vue'
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue'
+import ChangelogModal from '../components/ChangelogModal.vue'
 
 const { config, loadConfig } = useConfig()
 const { user, fetchUser } = useAuth()
@@ -17,8 +18,13 @@ const breakdown = ref<StandingsBreakdown | null>(null)
 const breakdownImageUrl = ref<string | null>(null)
 const publishedAt = ref<string | null>(null)
 const standingsOpen = ref(false)
+const changelogOpen = ref(false)
 
 const canSubmit = computed(() => user.value?.status === 'assigned')
+
+const profilePath = computed(() =>
+  user.value ? `/readers/${user.value.id}` : '/login',
+)
 
 const submitBannerTitle = computed(
   () =>
@@ -79,11 +85,16 @@ onMounted(async () => {
           {{ config.copy.submitCta }}
         </RouterLink>
         <template v-else>
-          <RouterLink to="/profile" class="btn btn-primary">{{ config.copy.profileBooksTab }}</RouterLink>
+          <RouterLink :to="profilePath" class="btn btn-primary">{{ config.copy.profileBooksTab }}</RouterLink>
         </template>
         <RouterLink to="/how-it-works" class="btn btn-secondary">{{ config.copy.howItWorksCta }}</RouterLink>
+        <button type="button" class="btn btn-ghost changelog-btn" @click="changelogOpen = true">
+          What’s new
+        </button>
       </div>
     </section>
+
+    <ChangelogModal v-model:open="changelogOpen" />
 
     <section class="lore">
       <h2>{{ config.event.loreTitle }}</h2>
@@ -244,6 +255,10 @@ details[open] > .collapse-summary::after {
   align-items: center;
 }
 
+.changelog-btn {
+  border: 1px solid var(--realm-border);
+}
+
 .submit-banner {
   display: flex;
   flex-wrap: wrap;
@@ -371,6 +386,10 @@ details[open] > .collapse-summary::after {
   }
 
   .hero-actions .btn {
+    width: 100%;
+  }
+
+  .changelog-btn {
     width: 100%;
   }
 

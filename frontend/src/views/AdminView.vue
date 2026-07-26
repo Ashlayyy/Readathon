@@ -5,7 +5,6 @@ import {
 	apiUrl,
 	downloadFile,
 	type AdminQuestion,
-	type AdminSiteSettings,
 	type AdminStandingsData,
 	type AdminSubmission,
 	type AdminUser,
@@ -21,7 +20,9 @@ import StandingsPanel from '../components/StandingsPanel.vue';
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue';
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue';
 import AdminStatsPanel from '../components/AdminStatsPanel.vue';
+import AdminSettingsPanel from '../components/AdminSettingsPanel.vue';
 import AdminAddSubmissionModal from '../components/AdminAddSubmissionModal.vue';
+import AdminCoverSearchModal from '../components/AdminCoverSearchModal.vue';
 import ReaderLink from '../components/ReaderLink.vue';
 import { useConfig } from '../composables/useConfig';
 import { useCopy } from '../composables/useCopy';
@@ -29,11 +30,13 @@ import { useAdminCopy } from '../composables/useAdminCopy';
 import { useAuth } from '../composables/useAuth';
 import { useBodyScrollLock } from '../composables/useBodyScrollLock';
 import { useFocusTrap } from '../composables/useFocusTrap';
+import { useImageLightbox } from '../composables/useImageLightbox';
 
 const { config, loadConfig } = useConfig();
 const { t } = useCopy();
 const { admin, section, msg, confirmMsg } = useAdminCopy();
 const { user: me } = useAuth();
+const { show: showLightbox } = useImageLightbox();
 const users = ref<AdminUser[]>([]);
 const pending = ref(0);
 const stats = ref({
@@ -47,13 +50,6 @@ const usersLoaded = ref(false);
 const submissionsLoaded = ref(false);
 const questionsLoaded = ref(false);
 const standingsLoaded = ref(false);
-const settingsLoaded = ref(false);
-const showTeamRosters = ref(false);
-const downtimeMode = ref(false);
-const discordWebhookUrl = ref('');
-const discordWebhookDraft = ref('');
-const discordRoleId = ref('');
-const discordRoleIdDraft = ref('');
 
 // Publish date range + preview
 const previewOpen = ref(false);
@@ -70,31 +66,12 @@ const PUBLISH_PRESETS: { value: PublishRangePreset; label: string }[] = [
 	{ value: 'custom', label: 'Custom' },
 ];
 
-// Scheduled (Monday) publish settings
-const scheduledPublishEnabled = ref(false);
-const scheduledPublishDay = ref(1);
-const scheduledPublishHour = ref(9);
-const scheduledPublishTimezone = ref('Europe/Amsterdam');
-const SCHEDULED_PUBLISH_DAYS = [
-	{ value: 0, label: 'Sunday' },
-	{ value: 1, label: 'Monday' },
-	{ value: 2, label: 'Tuesday' },
-	{ value: 3, label: 'Wednesday' },
-	{ value: 4, label: 'Thursday' },
-	{ value: 5, label: 'Friday' },
-	{ value: 6, label: 'Saturday' },
-];
-
-// Optional per-realm chat webhooks (separate from the weekly publish above)
-const teamChatHooksEnabled = ref(false);
-const teamChatWebhookDrafts = ref<Record<string, string>>({});
-
 // Audit log
 const auditLoaded = ref(false);
 const auditLog = ref<AuditLogEntry[]>([]);
 const auditTotal = ref(0);
 const auditOffset = ref(0);
-const AUDIT_PAGE_SIZE = 50;
+const AUDIT_PAGE_SIZE = 10;
 
 const addUserOpen = ref(false);
 const newUser = ref({ displayName: '', email: '', teamId: '' });
@@ -120,7 +97,9 @@ const submissionSearch = ref('');
 const submissionTypeFilter = ref<'all' | 'add' | 'sabotage'>('all');
 const submissionTeamFilter = ref('');
 const submissionPage = ref(1);
-const SUBMISSIONS_PER_PAGE = 15;
+const SUBMISSIONS_PER_PAGE = 10;
+const userPage = ref(1);
+const USERS_PER_PAGE = 10;
 type SubmissionSortKey =
 	| 'book'
 	| 'reader'
@@ -149,8 +128,10 @@ const activeTab = ref<
 	| 'prompts'
 	| 'stats'
 	| 'audit'
+	| 'settings'
 >('inbox');
 const addSubmissionOpen = ref(false);
+const coverSearchOpen = ref(false);
 const navOpen = ref(false);
 
 const anyModalOpen = computed(
@@ -312,14 +293,55 @@ function goSubmissionPage(page: number) {
 	submissionPage.value = Math.min(Math.max(1, page), submissionPageCount.value);
 }
 
+const userPageCount = computed(() =>
+	Math.max(1, Math.ceil(users.value.length / USERS_PER_PAGE)),
+);
+
+const pagedUsers = computed(() => {
+	const page = Math.min(userPage.value, userPageCount.value);
+	const start = (page - 1) * USERS_PER_PAGE;
+	return users.value.slice(start, start + USERS_PER_PAGE);
+});
+
+const userRangeLabel = computed(() => {
+	const total = users.value.length;
+	if (total === 0) return '0';
+	const page = Math.min(userPage.value, userPageCount.value);
+	const start = (page - 1) * USERS_PER_PAGE + 1;
+	const end = Math.min(page * USERS_PER_PAGE, total);
+	return `${start}–${end}`;
+});
+
+watch(userPageCount, (count) => {
+	if (userPage.value > count) userPage.value = count;
+});
+
+function goUserPage(page: number) {
+	userPage.value = Math.min(Math.max(1, page), userPageCount.value);
+}
+
 onMounted(async () => {
 	applyPublishPreset('lastMonToThisMon');
 	await loadConfig();
-	showTeamRosters.value = config.value?.site?.showTeamRosters ?? false;
-	downtimeMode.value = config.value?.site?.downtimeMode ?? false;
 	try {
+		const tabParam = new URLSearchParams(window.location.search).get('tab');
+		const allowed = new Set([
+			'inbox',
+			'teams',
+			'standings',
+			'users',
+			'submissions',
+			'prompts',
+			'stats',
+			'audit',
+			'settings',
+		]);
 		await loadStats();
-		if (stats.value.unreadQuestions > 0) activeTab.value = 'inbox';
+		if (tabParam && allowed.has(tabParam)) {
+			activeTab.value = tabParam as typeof activeTab.value;
+		} else if (stats.value.unreadQuestions > 0) {
+			activeTab.value = 'inbox';
+		}
 		await ensureTabData(activeTab.value);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('loadFailed'), true);
@@ -404,6 +426,73 @@ async function goAuditPage(offset: number) {
 	await loadAuditLog(true);
 }
 
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+	'settings.updated': 'Settings updated',
+	'settings.downtime_toggled': 'Downtime toggled',
+	'user.team_assigned': 'Team assigned',
+	'submission.soft_deleted': 'Submission deleted',
+	'submission.restored': 'Submission restored',
+	'standings.published': 'Standings published',
+	'standings.unpublished': 'Standings unpublished',
+};
+
+function auditActionLabel(action: string): string {
+	return AUDIT_ACTION_LABELS[action] ?? action.replace(/\./g, ' · ');
+}
+
+function auditActionTone(action: string): 'neutral' | 'warn' | 'ok' | 'danger' {
+	if (action.includes('delete') || action.includes('unpublish')) return 'danger';
+	if (action.includes('downtime') || action.includes('soft_')) return 'warn';
+	if (action.includes('publish') || action.includes('restored') || action.includes('assigned'))
+		return 'ok';
+	return 'neutral';
+}
+
+function auditEntityLabel(entry: AuditLogEntry): string {
+	if (!entry.entityType) return '—';
+	const short = entry.entityId ? entry.entityId.slice(-6) : '';
+	const pretty =
+		entry.entityType === 'SiteSettings'
+			? 'Site settings'
+			: entry.entityType === 'PublishedStandings'
+				? 'Published standings'
+				: entry.entityType;
+	return short ? `${pretty} · ${short}` : pretty;
+}
+
+type AuditDetailChip = { label: string; value: string };
+
+function auditDetailChips(detail: unknown): AuditDetailChip[] {
+	if (detail == null) return [];
+	if (typeof detail === 'string') {
+		const t = detail.trim();
+		return t ? [{ label: 'Note', value: t }] : [];
+	}
+	if (typeof detail !== 'object' || Array.isArray(detail)) {
+		return [{ label: 'Detail', value: auditDetailText(detail) }];
+	}
+	const obj = detail as Record<string, unknown>;
+	return Object.entries(obj).map(([key, value]) => {
+		const label = key
+			.replace(/([A-Z])/g, ' $1')
+			.replace(/_/g, ' ')
+			.replace(/^\w/, (c) => c.toUpperCase())
+			.trim();
+		let display: string;
+		if (typeof value === 'boolean') display = value ? 'Yes' : 'No';
+		else if (value == null) display = '—';
+		else if (Array.isArray(value)) display = value.map(String).join(', ') || '—';
+		else if (typeof value === 'object') {
+			try {
+				display = JSON.stringify(value);
+			} catch {
+				display = String(value);
+			}
+		} else display = String(value);
+		return { label, value: display };
+	});
+}
+
 function auditDetailText(detail: unknown): string {
 	if (detail == null) return '';
 	if (typeof detail === 'string') return detail;
@@ -412,6 +501,16 @@ function auditDetailText(detail: unknown): string {
 	} catch {
 		return String(detail);
 	}
+}
+
+const auditPage = computed(() => Math.floor(auditOffset.value / AUDIT_PAGE_SIZE) + 1);
+const auditPageCount = computed(() =>
+	Math.max(1, Math.ceil(auditTotal.value / AUDIT_PAGE_SIZE)),
+);
+
+function goAuditPageNum(page: number) {
+	const p = Math.min(Math.max(1, page), auditPageCount.value);
+	void goAuditPage((p - 1) * AUDIT_PAGE_SIZE);
 }
 
 async function downloadSubmissionsCsv() {
@@ -442,31 +541,6 @@ async function loadQuestions(force = false) {
 	questionsLoaded.value = true;
 }
 
-async function loadAdminSettings(force = false) {
-	if (settingsLoaded.value && !force) return;
-	try {
-		const { settings } = await api<{ settings: AdminSiteSettings }>(
-			'/admin/settings',
-		);
-		discordWebhookUrl.value = settings.discordWebhookUrl ?? '';
-		discordWebhookDraft.value = settings.discordWebhookUrl ?? '';
-		discordRoleId.value = settings.discordRoleId ?? '';
-		discordRoleIdDraft.value = settings.discordRoleId ?? '';
-		scheduledPublishEnabled.value = settings.scheduledPublishEnabled ?? false;
-		scheduledPublishDay.value = settings.scheduledPublishDay ?? 1;
-		scheduledPublishHour.value = settings.scheduledPublishHour ?? 9;
-		scheduledPublishTimezone.value =
-			settings.scheduledPublishTimezone ?? 'Europe/Amsterdam';
-		teamChatHooksEnabled.value = settings.teamChatHooksEnabled ?? false;
-		teamChatWebhookDrafts.value = { ...settings.teamChatWebhookUrls };
-		settingsLoaded.value = true;
-	} catch (e) {
-		showMessage(
-			e instanceof Error ? e.message : msg('settingsLoadFailed'),
-			true,
-		);
-	}
-}
 
 function toDateInputValue(d: Date): string {
 	const y = d.getFullYear();
@@ -526,8 +600,7 @@ async function ensureTabData(tab: typeof activeTab.value) {
 	else if (tab === 'users') await loadUsers();
 	else if (tab === 'submissions')
 		await Promise.all([loadSubmissions(), loadUsers()]);
-	else if (tab === 'standings')
-		await Promise.all([loadStandings(true), loadAdminSettings()]);
+	else if (tab === 'standings') await loadStandings(true);
 	else if (tab === 'audit') await loadAuditLog();
 	// prompts: AdminPromptsPanel loads itself when mounted (v-if)
 }
@@ -560,6 +633,19 @@ function openAddSubmission() {
 	void loadUsers().then(() => {
 		addSubmissionOpen.value = true;
 	});
+}
+
+function openCoverSearch() {
+	coverSearchOpen.value = true;
+}
+
+async function onCoversApplied(updated: number) {
+	showMessage(
+		updated === 1
+			? 'Applied 1 cover update.'
+			: `Applied ${updated} cover updates.`,
+	);
+	await loadSubmissions(true);
 }
 
 function closeSubmissionModal() {
@@ -655,6 +741,9 @@ async function onSubmissionUpdated() {
 
 function setTab(tab: typeof activeTab.value) {
 	activeTab.value = tab;
+	const url = new URL(window.location.href);
+	url.searchParams.set('tab', tab);
+	window.history.replaceState({}, '', url);
 }
 
 const sortedQuestions = computed(() =>
@@ -732,196 +821,6 @@ async function setUserAdmin(userId: string, isAdmin: boolean) {
 	}
 }
 
-async function saveRosterSetting() {
-	loading.value = 'roster-setting';
-	showMessage('');
-	try {
-		await api('/admin/settings', {
-			method: 'PATCH',
-			body: JSON.stringify({ showTeamRosters: showTeamRosters.value }),
-		});
-		await loadConfig(true);
-		showMessage(
-			showTeamRosters.value ? msg('rostersPublic') : msg('rostersHidden'),
-		);
-	} catch (e) {
-		showMessage(
-			e instanceof Error ? e.message : msg('rosterSettingFailed'),
-			true,
-		);
-		showTeamRosters.value = config.value?.site?.showTeamRosters ?? false;
-	} finally {
-		loading.value = '';
-	}
-}
-
-async function onDowntimeToggle() {
-	const enabling = downtimeMode.value;
-	const ok = confirm(
-		enabling ? confirmMsg('enableDowntime') : confirmMsg('disableDowntime'),
-	);
-	if (!ok) {
-		downtimeMode.value = !enabling;
-		return;
-	}
-	await saveDowntimeSetting();
-}
-
-async function saveDowntimeSetting() {
-	loading.value = 'downtime-setting';
-	showMessage('');
-	try {
-		await api('/admin/settings', {
-			method: 'PATCH',
-			body: JSON.stringify({ downtimeMode: downtimeMode.value }),
-		});
-		await loadConfig(true);
-		showMessage(downtimeMode.value ? msg('downtimeOn') : msg('downtimeOff'));
-	} catch (e) {
-		showMessage(
-			e instanceof Error ? e.message : msg('downtimeSettingFailed'),
-			true,
-		);
-		downtimeMode.value = config.value?.site?.downtimeMode ?? false;
-	} finally {
-		loading.value = '';
-	}
-}
-
-async function saveDiscordWebhook() {
-	loading.value = 'discord-webhook';
-	showMessage('');
-	try {
-		const { settings } = await api<{ settings: AdminSiteSettings }>(
-			'/admin/settings',
-			{
-				method: 'PATCH',
-				body: JSON.stringify({
-					discordWebhookUrl: discordWebhookDraft.value.trim(),
-					discordRoleId: discordRoleIdDraft.value.trim(),
-				}),
-			},
-		);
-		discordWebhookUrl.value = settings.discordWebhookUrl;
-		discordWebhookDraft.value = settings.discordWebhookUrl;
-		discordRoleId.value = settings.discordRoleId ?? '';
-		discordRoleIdDraft.value = settings.discordRoleId ?? '';
-		showMessage(
-			settings.discordWebhookUrl ? msg('webhookSaved') : msg('webhookRemoved'),
-		);
-	} catch (e) {
-		showMessage(e instanceof Error ? e.message : msg('webhookFailed'), true);
-		discordWebhookDraft.value = discordWebhookUrl.value;
-		discordRoleIdDraft.value = discordRoleId.value;
-	} finally {
-		loading.value = '';
-	}
-}
-
-function clearDiscordWebhook() {
-	discordWebhookDraft.value = '';
-	void saveDiscordWebhook();
-}
-
-async function testDiscordWebhook() {
-	loading.value = 'discord-test';
-	showMessage('');
-	try {
-		await api('/admin/discord/test-webhook', { method: 'POST' });
-		showMessage(msg('webhookTestSent'));
-	} catch (e) {
-		showMessage(e instanceof Error ? e.message : msg('webhookTestFailed'), true);
-	} finally {
-		loading.value = '';
-	}
-}
-
-async function testDiscordRolePing() {
-	loading.value = 'discord-role-test';
-	showMessage('');
-	try {
-		const result = await api<{ ok: boolean; roleId?: string }>(
-			'/admin/discord/test-role-ping',
-			{ method: 'POST' },
-		);
-		showMessage(
-			result.roleId
-				? `Role ping test sent for role ${result.roleId}.`
-				: 'Role ping test sent.',
-		);
-	} catch (e) {
-		showMessage(
-			e instanceof Error ? e.message : 'Failed to send role ping test',
-			true,
-		);
-	} finally {
-		loading.value = '';
-	}
-}
-
-function clearDiscordRoleId() {
-	discordRoleIdDraft.value = '';
-	void saveDiscordWebhook();
-}
-
-async function saveScheduledPublishSettings() {
-	loading.value = 'scheduled-publish';
-	showMessage('');
-	try {
-		const { settings } = await api<{ settings: AdminSiteSettings }>(
-			'/admin/settings',
-			{
-				method: 'PATCH',
-				body: JSON.stringify({
-					scheduledPublishEnabled: scheduledPublishEnabled.value,
-					scheduledPublishDay: scheduledPublishDay.value,
-					scheduledPublishHour: scheduledPublishHour.value,
-					scheduledPublishTimezone:
-						scheduledPublishTimezone.value.trim() || 'Europe/Amsterdam',
-				}),
-			},
-		);
-		scheduledPublishEnabled.value = settings.scheduledPublishEnabled;
-		scheduledPublishDay.value = settings.scheduledPublishDay;
-		scheduledPublishHour.value = settings.scheduledPublishHour;
-		scheduledPublishTimezone.value = settings.scheduledPublishTimezone;
-		showMessage('Scheduled publish settings saved.');
-	} catch (e) {
-		showMessage(
-			e instanceof Error ? e.message : 'Failed to save scheduled publish settings',
-			true,
-		);
-	} finally {
-		loading.value = '';
-	}
-}
-
-async function saveTeamChatSettings() {
-	loading.value = 'team-chat';
-	showMessage('');
-	try {
-		const { settings } = await api<{ settings: AdminSiteSettings }>(
-			'/admin/settings',
-			{
-				method: 'PATCH',
-				body: JSON.stringify({
-					teamChatHooksEnabled: teamChatHooksEnabled.value,
-					teamChatWebhookUrls: { ...teamChatWebhookDrafts.value },
-				}),
-			},
-		);
-		teamChatHooksEnabled.value = settings.teamChatHooksEnabled;
-		teamChatWebhookDrafts.value = { ...settings.teamChatWebhookUrls };
-		showMessage('Realm chat webhook settings saved.');
-	} catch (e) {
-		showMessage(
-			e instanceof Error ? e.message : 'Failed to save realm chat settings',
-			true,
-		);
-	} finally {
-		loading.value = '';
-	}
-}
 
 function openAddUser() {
 	newUser.value = { displayName: '', email: '', teamId: '' };
@@ -1269,6 +1168,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					>
 						{{ section('tabs').audit ?? 'Audit' }}
 					</button>
+					<button
+						type="button"
+						:class="{ active: activeTab === 'settings' }"
+						@click="setTab('settings')"
+					>
+						{{ section('tabs').settings ?? 'Settings' }}
+					</button>
 				</nav>
 			</aside>
 
@@ -1478,21 +1384,57 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								</p>
 							</header>
 							<div class="modal-body">
-								<img
-									:src="apiUrl(previewData.standingsSvgUrl)"
-									alt="Standings preview"
-									class="preview-image"
-								/>
-								<img
-									:src="apiUrl(previewData.breakdownSvgUrl)"
-									alt="Score breakdown preview"
-									class="preview-image"
-								/>
-								<img
-									:src="apiUrl(previewData.vibesSvgUrl)"
-									alt="Vibes preview"
-									class="preview-image"
-								/>
+								<button
+									type="button"
+									class="preview-image-btn"
+									aria-label="View standings preview larger"
+									@click="
+										showLightbox(
+											apiUrl(previewData.standingsSvgUrl),
+											'Standings preview',
+										)
+									"
+								>
+									<img
+										:src="apiUrl(previewData.standingsSvgUrl)"
+										alt="Standings preview"
+										class="preview-image"
+									/>
+								</button>
+								<button
+									type="button"
+									class="preview-image-btn"
+									aria-label="View score breakdown preview larger"
+									@click="
+										showLightbox(
+											apiUrl(previewData.breakdownSvgUrl),
+											'Score breakdown preview',
+										)
+									"
+								>
+									<img
+										:src="apiUrl(previewData.breakdownSvgUrl)"
+										alt="Score breakdown preview"
+										class="preview-image"
+									/>
+								</button>
+								<button
+									type="button"
+									class="preview-image-btn"
+									aria-label="View vibes preview larger"
+									@click="
+										showLightbox(
+											apiUrl(previewData.vibesSvgUrl),
+											'Vibes preview',
+										)
+									"
+								>
+									<img
+										:src="apiUrl(previewData.vibesSvgUrl)"
+										alt="Vibes preview"
+										class="preview-image"
+									/>
+								</button>
 								<p class="webhook-status">
 									Notifies: {{ previewData.whoGetsNotified.emails }} email{{
 										previewData.whoGetsNotified.emails === 1 ? '' : 's'
@@ -1566,34 +1508,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								{{ section('teams').statUnread }}
 							</li>
 						</ul>
-					</section>
-
-					<section class="card admin-section">
-						<h2>{{ section('teams').downtimeLabel }}</h2>
-						<p class="section-desc">{{ section('teams').downtimeHint }}</p>
-						<label class="setting-toggle">
-							<input
-								v-model="downtimeMode"
-								type="checkbox"
-								:disabled="loading === 'downtime-setting'"
-								@change="onDowntimeToggle"
-							/>
-							<span>{{ section('teams').downtimeToggle }}</span>
-						</label>
-					</section>
-
-					<section class="card admin-section">
-						<h2>{{ section('teams').rostersLabel }}</h2>
-						<p class="section-desc">{{ section('teams').rostersHint }}</p>
-						<label class="setting-toggle">
-							<input
-								v-model="showTeamRosters"
-								type="checkbox"
-								:disabled="loading === 'roster-setting'"
-								@change="saveRosterSetting"
-							/>
-							<span>{{ section('teams').rostersToggle }}</span>
-						</label>
 					</section>
 				</section>
 
@@ -1705,216 +1619,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							</ul>
 						</div>
 					</div>
-
-					<section class="card admin-section discord-webhook-section">
-						<h2>{{ section('standings').discordTitle }}</h2>
-						<p class="section-desc">{{ section('standings').discordLead }}</p>
-						<form
-							class="discord-webhook-form"
-							@submit.prevent="saveDiscordWebhook"
-						>
-							<label>
-								{{ section('standings').webhookLabel }}
-								<input
-									v-model="discordWebhookDraft"
-									type="url"
-									:placeholder="section('standings').webhookPlaceholder"
-									autocomplete="off"
-									spellcheck="false"
-									:disabled="loading === 'discord-webhook'"
-								/>
-							</label>
-							<label>
-								Discord role to ping (optional)
-								<input
-									v-model="discordRoleIdDraft"
-									type="text"
-									placeholder="123456789012345678"
-									autocomplete="off"
-									spellcheck="false"
-									inputmode="numeric"
-									:disabled="loading === 'discord-webhook'"
-								/>
-							</label>
-							<div class="btn-row">
-								<button
-									type="submit"
-									class="btn btn-primary"
-									:disabled="
-										loading === 'discord-webhook' ||
-										(discordWebhookDraft === discordWebhookUrl &&
-											discordRoleIdDraft === discordRoleId)
-									"
-								>
-									{{
-										loading === 'discord-webhook'
-											? section('standings').saving
-											: section('standings').saveWebhook
-									}}
-								</button>
-								<button
-									type="button"
-									class="btn btn-ghost"
-									:disabled="
-										loading === 'discord-webhook' || !discordWebhookUrl
-									"
-									@click="clearDiscordWebhook"
-								>
-									{{ section('standings').remove }}
-								</button>
-								<button
-									type="button"
-									class="btn btn-ghost"
-									:disabled="loading === 'discord-webhook' || !discordRoleId"
-									@click="clearDiscordRoleId"
-								>
-									Remove ping role
-								</button>
-								<button
-									type="button"
-									class="btn btn-secondary"
-									:disabled="
-										loading === 'discord-webhook' ||
-										loading === 'discord-test' ||
-										!discordWebhookUrl
-									"
-								@click="testDiscordWebhook"
-							>
-								{{
-									loading === 'discord-test'
-										? section('standings').testingWebhook
-										: section('standings').testWebhook
-								}}
-							</button>
-							<button
-								type="button"
-								class="btn btn-secondary"
-								:disabled="
-									loading === 'discord-webhook' ||
-									loading === 'discord-role-test' ||
-									!discordRoleId
-								"
-								@click="testDiscordRolePing"
-							>
-								{{
-									loading === 'discord-role-test'
-										? 'Sending…'
-										: 'Test role ping'
-								}}
-							</button>
-						</div>
-						<p v-if="discordWebhookUrl" class="webhook-status">
-							{{ section('standings').webhookConfigured }}
-						</p>
-						<p v-if="discordRoleId" class="webhook-status">
-							Ping role configured (ID: {{ discordRoleId }}).
-						</p>
-						<p class="webhook-status">
-							{{ section('standings').testWebhookHint }}
-						</p>
-					</form>
-				</section>
-
-					<section class="card admin-section scheduled-publish-section">
-						<h2>Scheduled publish</h2>
-						<p class="section-desc">
-							Automatically publish standings weekly - the server checks every
-							minute for the day/hour/timezone configured below.
-						</p>
-						<label class="setting-toggle">
-							<input
-								v-model="scheduledPublishEnabled"
-								type="checkbox"
-								:disabled="loading === 'scheduled-publish'"
-								@change="saveScheduledPublishSettings"
-							/>
-							<span>Enable weekly scheduled publish</span>
-						</label>
-						<div class="scheduled-publish-fields">
-							<label>
-								Day
-								<select
-									v-model.number="scheduledPublishDay"
-									:disabled="loading === 'scheduled-publish'"
-									@change="saveScheduledPublishSettings"
-								>
-									<option
-										v-for="day in SCHEDULED_PUBLISH_DAYS"
-										:key="day.value"
-										:value="day.value"
-									>
-										{{ day.label }}
-									</option>
-								</select>
-							</label>
-							<label>
-								Hour (0–23, local to timezone)
-								<input
-									v-model.number="scheduledPublishHour"
-									type="number"
-									min="0"
-									max="23"
-									:disabled="loading === 'scheduled-publish'"
-									@change="saveScheduledPublishSettings"
-								/>
-							</label>
-							<label>
-								Timezone
-								<input
-									v-model="scheduledPublishTimezone"
-									type="text"
-									placeholder="Europe/Amsterdam"
-									autocomplete="off"
-									spellcheck="false"
-									:disabled="loading === 'scheduled-publish'"
-									@change="saveScheduledPublishSettings"
-								/>
-							</label>
-						</div>
-					</section>
-
-					<section class="card admin-section team-chat-section">
-						<h2>Realm chat webhooks (optional)</h2>
-						<p class="section-desc">
-							Separate from the weekly publish above - posts a short note to
-							each realm's own Discord channel whenever a member logs a book.
-							Optional; feel free to leave this off and revisit later.
-						</p>
-						<label class="setting-toggle">
-							<input
-								v-model="teamChatHooksEnabled"
-								type="checkbox"
-								:disabled="loading === 'team-chat'"
-								@change="saveTeamChatSettings"
-							/>
-							<span>Enable realm Discord threads/webhooks</span>
-						</label>
-						<div v-if="config" class="team-chat-urls">
-							<label v-for="team in config.teams" :key="team.id">
-								{{ team.icon }} {{ team.name }}
-								<input
-									v-model="teamChatWebhookDrafts[team.id]"
-									type="url"
-									placeholder="https://discord.com/api/webhooks/..."
-									autocomplete="off"
-									spellcheck="false"
-									:disabled="loading === 'team-chat'"
-								/>
-							</label>
-							<button
-								type="button"
-								class="btn btn-primary btn-sm"
-								:disabled="loading === 'team-chat'"
-								@click="saveTeamChatSettings"
-							>
-								{{
-									loading === 'team-chat'
-										? 'Saving…'
-										: 'Save realm webhooks'
-								}}
-							</button>
-						</div>
-					</section>
 
 					<div v-if="loading === 'standings'" class="alert alert-info">
 						{{ section('standings').loading }}
@@ -2041,7 +1745,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								</tr>
 							</thead>
 							<tbody>
-								<tr v-for="u in users" :key="u.id">
+								<tr v-for="u in pagedUsers" :key="u.id">
 									<td>
 										<ReaderLink :id="u.id" :name="u.displayName" />
 									</td>
@@ -2113,6 +1817,44 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							</tbody>
 						</table>
 					</div>
+
+					<nav
+						v-if="users.length > USERS_PER_PAGE"
+						class="submissions-pagination"
+						aria-label="Users pages"
+					>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="userPage <= 1"
+							@click="goUserPage(userPage - 1)"
+						>
+							Previous
+						</button>
+						<div class="page-numbers">
+							<button
+								v-for="page in userPageCount"
+								:key="page"
+								type="button"
+								class="page-num"
+								:class="{ active: page === userPage }"
+								:aria-current="page === userPage ? 'page' : undefined"
+								@click="goUserPage(page)"
+							>
+								{{ page }}
+							</button>
+						</div>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="userPage >= userPageCount"
+							@click="goUserPage(userPage + 1)"
+						>
+							Next
+						</button>
+					</nav>
+
+					<p class="hint">Showing {{ userRangeLabel }} of {{ users.length }}.</p>
 				</section>
 
 				<!-- Add user modal -->
@@ -2194,6 +1936,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							<p class="section-desc">{{ section('submissions').addLead }}</p>
 						</div>
 						<div class="btn-row">
+							<button
+								type="button"
+								class="btn btn-secondary btn-sm"
+								@click="openCoverSearch"
+							>
+								Search for covers
+							</button>
 							<button
 								type="button"
 								class="btn btn-secondary btn-sm"
@@ -2589,14 +2338,21 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 				/>
 
 				<!-- Audit log -->
-				<section v-if="activeTab === 'audit'" class="card admin-section">
-					<h2>{{ section('tabs').audit ?? 'Audit log' }}</h2>
-					<p class="section-desc">
-						{{
-							section('audit').lead ??
-							'Every admin action that changes data, newest first. Click a row and use arrow keys / Tab to review.'
-						}}
-					</p>
+				<section v-if="activeTab === 'audit'" class="card admin-section audit-section">
+					<header class="audit-header">
+						<div>
+							<h2>{{ section('tabs').audit ?? 'Audit log' }}</h2>
+							<p class="section-desc">
+								{{
+									section('audit').lead ??
+									'Admin actions that changed data, newest first.'
+								}}
+							</p>
+						</div>
+						<p v-if="auditLoaded && auditTotal > 0" class="audit-count">
+							{{ auditTotal }} {{ auditTotal === 1 ? 'entry' : 'entries' }}
+						</p>
+					</header>
 
 					<div v-if="!auditLoaded" class="page-state" style="min-height: 10rem">
 						<div class="page-spinner" role="status" aria-label="Loading" />
@@ -2607,39 +2363,44 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						<div v-if="auditLog.length === 0" class="empty-inbox">
 							<p>{{ section('audit').empty ?? 'No audit entries yet.' }}</p>
 						</div>
-						<div v-else class="table-wrap">
-							<table class="data-table" aria-label="Audit log">
-								<caption class="sr-only">
-									Admin actions log, newest first
-								</caption>
-								<thead>
-									<tr>
-										<th scope="col">{{ section('audit').colWhen ?? 'When' }}</th>
-										<th scope="col">{{ section('audit').colWho ?? 'Who' }}</th>
-										<th scope="col">{{ section('audit').colAction ?? 'Action' }}</th>
-										<th scope="col">{{ section('audit').colEntity ?? 'Entity' }}</th>
-										<th scope="col">{{ section('audit').colDetail ?? 'Detail' }}</th>
-									</tr>
-								</thead>
-								<tbody>
-									<tr v-for="entry in auditLog" :key="entry.id" tabindex="0">
-										<td>{{ new Date(entry.createdAt).toLocaleString() }}</td>
-										<td>{{ entry.actorName }}</td>
-										<td>
-											<span class="badge badge-negative">{{ entry.action }}</span>
-										</td>
-										<td>
-											<template v-if="entry.entityType">
-												{{ entry.entityType }}
-												<small v-if="entry.entityId">#{{ entry.entityId.slice(-6) }}</small>
-											</template>
-											<span v-else>-</span>
-										</td>
-										<td class="audit-detail">{{ auditDetailText(entry.detail) }}</td>
-									</tr>
-								</tbody>
-							</table>
-						</div>
+
+						<ol v-else class="audit-feed" aria-label="Audit log">
+							<li
+								v-for="entry in auditLog"
+								:key="entry.id"
+								class="audit-entry"
+								tabindex="0"
+							>
+								<div class="audit-entry-top">
+									<span
+										class="audit-action"
+										:class="`tone-${auditActionTone(entry.action)}`"
+									>
+										{{ auditActionLabel(entry.action) }}
+									</span>
+									<time class="audit-when" :datetime="entry.createdAt">
+										{{ new Date(entry.createdAt).toLocaleString() }}
+									</time>
+								</div>
+								<div class="audit-entry-meta">
+									<span class="audit-who">{{ entry.actorName }}</span>
+									<span class="audit-dot" aria-hidden="true">·</span>
+									<span class="audit-entity">{{ auditEntityLabel(entry) }}</span>
+								</div>
+								<ul
+									v-if="auditDetailChips(entry.detail).length"
+									class="audit-chips"
+								>
+									<li
+										v-for="(chip, i) in auditDetailChips(entry.detail)"
+										:key="`${entry.id}-${i}`"
+									>
+										<span class="chip-label">{{ chip.label }}</span>
+										<span class="chip-value">{{ chip.value }}</span>
+									</li>
+								</ul>
+							</li>
+						</ol>
 
 						<nav
 							v-if="auditTotal > AUDIT_PAGE_SIZE"
@@ -2654,10 +2415,19 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							>
 								Previous
 							</button>
-							<p class="hint">
-								{{ auditOffset + 1 }}–{{ Math.min(auditOffset + AUDIT_PAGE_SIZE, auditTotal) }}
-								of {{ auditTotal }}
-							</p>
+							<div class="page-numbers">
+								<button
+									v-for="page in auditPageCount"
+									:key="page"
+									type="button"
+									class="page-num"
+									:class="{ active: page === auditPage }"
+									:aria-current="page === auditPage ? 'page' : undefined"
+									@click="goAuditPageNum(page)"
+								>
+									{{ page }}
+								</button>
+							</div>
 							<button
 								type="button"
 								class="btn btn-ghost btn-sm"
@@ -2667,8 +2437,21 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								Next
 							</button>
 						</nav>
+
+						<p v-if="auditTotal > 0" class="hint">
+							Showing {{ auditOffset + 1 }}–{{
+								Math.min(auditOffset + AUDIT_PAGE_SIZE, auditTotal)
+							}}
+							of {{ auditTotal }}.
+						</p>
 					</template>
 				</section>
+				<!-- Settings -->
+				<section v-if="activeTab === 'settings'" class="admin-section">
+					<AdminSettingsPanel @message="showMessage" />
+				</section>
+
+
 			</div>
 		</div>
 
@@ -2686,6 +2469,12 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 			@created="onSubmissionCreated"
 			@updated="onSubmissionUpdated"
 			@edit="switchViewToEdit"
+			@error="(m) => showMessage(m, true)"
+		/>
+
+		<AdminCoverSearchModal
+			v-model:open="coverSearchOpen"
+			@applied="onCoversApplied"
 			@error="(m) => showMessage(m, true)"
 		/>
 
@@ -2735,6 +2524,17 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 <style scoped>
 .admin-page .page-lead {
 	margin-bottom: 0;
+}
+
+.admin-page,
+.admin-layout,
+.admin-main,
+.admin-section,
+.discord-webhook-form,
+.team-chat-urls,
+.publish-range-section {
+	min-width: 0;
+	max-width: 100%;
 }
 
 .admin-topbar {
@@ -3184,6 +2984,9 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
 .table-wrap {
 	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	max-width: 100%;
+	min-width: 0;
 }
 
 .empty-inbox {
@@ -3652,6 +3455,7 @@ small {
 	display: flex;
 	flex-direction: column;
 	gap: 0.85rem;
+	min-width: 0;
 }
 
 .discord-webhook-form label {
@@ -3660,6 +3464,12 @@ small {
 	gap: 0.35rem;
 	font-size: 0.88rem;
 	color: var(--realm-text-muted);
+	min-width: 0;
+}
+
+.discord-webhook-form input {
+	min-width: 0;
+	max-width: 100%;
 }
 
 .webhook-status {
@@ -3718,10 +3528,32 @@ small {
 	flex-direction: column;
 	gap: 0.75rem;
 	margin-top: 0.5rem;
+	min-width: 0;
+}
+
+.team-chat-urls input {
+	min-width: 0;
+	max-width: 100%;
 }
 
 .publish-preview-modal {
 	max-width: 40rem;
+}
+
+.preview-image-btn {
+	display: block;
+	width: 100%;
+	padding: 0;
+	margin: 0 0 1rem;
+	border: none;
+	background: transparent;
+	cursor: zoom-in;
+	border-radius: var(--radius);
+}
+
+.preview-image-btn:focus-visible {
+	outline: 2px solid var(--realm-accent);
+	outline-offset: 2px;
 }
 
 .preview-image {
@@ -3729,7 +3561,9 @@ small {
 	border-radius: var(--radius);
 	border: 1px solid var(--realm-border);
 	background: var(--realm-bg);
-	margin-bottom: 1rem;
+	margin-bottom: 0;
+	pointer-events: none;
+	display: block;
 }
 
 .show-deleted-toggle {
@@ -3749,13 +3583,172 @@ small {
 	margin-bottom: 0.75rem;
 }
 
-.audit-detail {
-	max-width: 26rem;
-	font-size: 0.82rem;
-	font-family: ui-monospace, monospace;
+.audit-section {
+	padding: 1.15rem 1.25rem 1.35rem;
+}
+
+.audit-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 1rem;
+	margin-bottom: 1rem;
+}
+
+.audit-header h2 {
+	margin: 0 0 0.3rem;
+}
+
+.audit-count {
+	margin: 0;
+	padding: 0.3rem 0.65rem;
+	border-radius: 999px;
+	border: 1px solid var(--realm-border);
+	font-size: 0.78rem;
 	color: var(--realm-text-muted);
-	white-space: pre-wrap;
-	word-break: break-word;
+	white-space: nowrap;
+}
+
+.audit-feed {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.65rem;
+}
+
+.audit-entry {
+	padding: 0.85rem 1rem;
+	border-radius: var(--radius);
+	border: 1px solid var(--realm-border);
+	background: color-mix(in srgb, var(--realm-bg) 70%, transparent);
+	outline: none;
+}
+
+.audit-entry:focus-visible {
+	border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--realm-accent) 22%, transparent);
+}
+
+.audit-entry-top {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.45rem 0.85rem;
+	margin-bottom: 0.4rem;
+}
+
+.audit-action {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.22rem 0.6rem;
+	border-radius: 999px;
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	border: 1px solid var(--realm-border);
+	background: var(--realm-surface);
+	color: var(--realm-text);
+}
+
+.audit-action.tone-ok {
+	border-color: color-mix(in srgb, var(--realm-success) 45%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-success) 14%, transparent);
+	color: var(--realm-success);
+}
+
+.audit-action.tone-warn {
+	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-accent) 14%, transparent);
+	color: var(--realm-accent-glow);
+}
+
+.audit-action.tone-danger {
+	border-color: color-mix(in srgb, #e07070 45%, var(--realm-border));
+	background: color-mix(in srgb, #e07070 12%, transparent);
+	color: #f0a0a0;
+}
+
+.audit-action.tone-neutral {
+	color: var(--realm-accent-glow);
+	border-color: color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-accent) 10%, transparent);
+}
+
+.audit-when {
+	font-size: 0.8rem;
+	color: var(--realm-text-muted);
+}
+
+.audit-entry-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.35rem;
+	font-size: 0.88rem;
+	color: var(--realm-text-muted);
+	margin-bottom: 0.55rem;
+}
+
+.audit-who {
+	color: var(--realm-text);
+	font-weight: 600;
+}
+
+.audit-dot {
+	opacity: 0.55;
+}
+
+.audit-entity {
+	font-size: 0.84rem;
+}
+
+.audit-chips {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+}
+
+.audit-chips li {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.3rem 0.45rem;
+	max-width: 100%;
+	padding: 0.28rem 0.55rem;
+	border-radius: 8px;
+	background: var(--realm-surface);
+	border: 1px solid var(--realm-border);
+	font-size: 0.78rem;
+}
+
+.chip-label {
+	color: var(--realm-text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-size: 0.68rem;
+	font-weight: 700;
+}
+
+.chip-value {
+	color: var(--realm-text);
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+	.audit-header {
+		flex-direction: column;
+	}
+
+	.audit-entry-top {
+		flex-direction: column;
+		align-items: flex-start;
+	}
 }
 
 </style>

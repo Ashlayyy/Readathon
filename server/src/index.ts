@@ -40,6 +40,7 @@ import { questionRoutes } from './routes/questions.js';
 import { submissionRoutes } from './routes/submissions.js';
 import { readerRoutes } from './routes/readers.js';
 import { coverRoutes } from './routes/covers.js';
+import { avatarRoutes } from './routes/avatars.js';
 import { APP_VERSION } from './lib/version.js';
 import { getSvgFontStatus } from './lib/svgFonts.js';
 import { getSvgTextPathStatus } from './lib/svgTextPaths.js';
@@ -132,7 +133,7 @@ app.get('/api/roster', async (c) => {
 const SHELF_SIZE = 20;
 
 /**
- * Public book club shelf - last N finished books, title + author + realm only.
+ * Public book club shelf - last N finished books, title + author + cover + realm.
  * No private notes, no reader names, so it's safe to show unauthenticated.
  */
 app.get('/api/shelf', async (c) => {
@@ -162,6 +163,7 @@ app.get('/api/shelf', async (c) => {
 		return {
 			title: sub.bookTitle,
 			author: sub.bookAuthor,
+			coverUrl: sub.coverUrl?.trim() || null,
 			realmName: team?.name ?? null,
 			realmColor: team?.color ?? null,
 			finishedAt: effectiveDate.toISOString(),
@@ -279,10 +281,12 @@ app.use('/api/submissions/*', writeLimiter);
 app.route('/api/submissions', submissionRoutes);
 app.use('/api/questions/*', writeLimiter);
 app.route('/api/questions', questionRoutes);
+app.use('/api/profile/avatar', writeLimiter);
 app.route('/api/profile', profileRoutes);
 app.route('/api/readers', readerRoutes);
 app.use('/api/covers/upload', writeLimiter);
 app.route('/api/covers', coverRoutes);
+app.route('/api/avatars', avatarRoutes);
 app.use('/api/admin/*', adminLimiter);
 app.route('/api/admin', adminRoutes);
 

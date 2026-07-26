@@ -15,6 +15,10 @@ const userSchema = new Schema(
     currentlyReadingAuthor: { type: String, default: null, trim: true },
     currentlyReadingCoverUrl: { type: String, default: null, trim: true },
     currentlyReadingUpdatedAt: { type: Date, default: null },
+    /** Custom upload — local path /avatars/files/... (overrides Google photo). */
+    avatarUrl: { type: String, default: null, trim: true },
+    /** Google profile photo URL, refreshed on Google login. */
+    googleAvatarUrl: { type: String, default: null, trim: true },
   },
   { timestamps: true },
 )

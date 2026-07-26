@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { api, type PromptXpTier, type SubmitStrategy } from '../lib/api'
+import { api, type PromptXpTier } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
@@ -68,34 +68,8 @@ const targetTeamId = ref('')
 const selectedPromptIds = ref<string[]>([])
 const bonusCompetition = ref(false)
 const bonusTeamPromptIds = ref<string[]>([])
-const strategy = ref<SubmitStrategy | null>(null)
 
 onMounted(loadConfig)
-
-async function loadStrategy() {
-  if (user.value?.status !== 'assigned') {
-    strategy.value = null
-    return
-  }
-  try {
-    strategy.value = await api<SubmitStrategy>('/submissions/strategy')
-  } catch {
-    strategy.value = null
-  }
-}
-
-function applyStrategySuggestion() {
-  if (!strategy.value?.suggestion) return
-  submissionType.value = strategy.value.suggestion
-  if (strategy.value.suggestion === 'sabotage' && strategy.value.targetTeamId) {
-    targetTeamId.value = strategy.value.targetTeamId
-  }
-}
-
-function applyRivalSabotage(rivalTeamId: string) {
-  submissionType.value = 'sabotage'
-  targetTeamId.value = rivalTeamId
-}
 
 const maxPrompts = computed(() => config.value?.scoringRules.maxPromptsPerBook ?? 5)
 
@@ -270,10 +244,6 @@ watch(submissionType, () => {
   selectedPromptIds.value = []
   targetTeamId.value = ''
   promptSearch.value = ''
-})
-
-watch(step, (s) => {
-  if (s === 2) void loadStrategy()
 })
 
 async function checkDuplicate(title: string, author: string) {
@@ -648,45 +618,6 @@ function reset() {
         <h2>{{ config.copy.submitTypeTitle }}</h2>
         <p class="step-hint">{{ config.copy.submitTypeHint }}</p>
 
-        <div v-if="strategy?.suggestion && strategy.reason" class="strategy-hint card">
-          <p class="strategy-label">{{ config.copy.submitStrategyLabel }}</p>
-          <p class="strategy-reason">{{ strategy.reason }}</p>
-          <button type="button" class="btn btn-secondary btn-sm" @click="applyStrategySuggestion">
-            {{
-              strategy.suggestion === 'add'
-                ? config.copy.submitStrategyUseAdd
-                : t(String(config.copy.submitStrategyUseAttack), {
-                    team: strategy.targetTeamName ?? 'rival',
-                  })
-            }}
-          </button>
-
-          <div v-if="strategy.rivals?.length" class="strategy-rivals">
-            <p class="strategy-rivals-label">{{ config.copy.submitStrategyRivalsLabel }}</p>
-            <div class="strategy-rival-chips">
-              <button
-                v-for="r in strategy.rivals"
-                :key="r.teamId"
-                type="button"
-                class="strategy-rival-chip"
-                :style="{ '--team-color': getTeam(r.teamId)?.color ?? '#888' }"
-                :class="{ selected: submissionType === 'sabotage' && targetTeamId === r.teamId }"
-                @click="applyRivalSabotage(r.teamId)"
-              >
-                <span class="strategy-rival-icon" aria-hidden="true">{{ getTeam(r.teamId)?.icon }}</span>
-                <span class="strategy-rival-name">{{ r.teamName }}</span>
-                <span class="strategy-rival-gap" :class="{ trailing: r.xpGap <= 0 }">
-                  {{
-                    r.xpGap > 0
-                      ? t(String(config.copy.submitStrategyCloseGapBy), { points: r.ifSabotageCloseBy })
-                      : t(String(config.copy.submitStrategyAheadBy), { points: Math.abs(r.xpGap) })
-                  }}
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-
         <div class="choice-row">
           <button
             type="button"
@@ -1004,7 +935,7 @@ function reset() {
 
           <div class="success-actions">
             <button type="button" class="btn btn-primary" @click="reset">{{ config.copy.submitAnother }}</button>
-            <button type="button" class="btn btn-secondary" @click="router.push('/profile?tab=books')">
+            <button type="button" class="btn btn-secondary" @click="router.push({ name: 'profile', query: { tab: 'books' } })">
               {{ config.copy.submitViewBooks }}
             </button>
           </div>
@@ -1480,98 +1411,6 @@ function reset() {
 .toggle-body span {
   font-size: 0.82rem;
   line-height: 1.45;
-}
-
-/* Strategy hint */
-.strategy-hint {
-  margin-bottom: 0.85rem;
-  padding: 0.7rem 0.85rem;
-  border-color: color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
-  background: linear-gradient(
-    135deg,
-    var(--realm-surface) 0%,
-    color-mix(in srgb, var(--realm-accent) 8%, var(--realm-surface)) 100%
-  );
-}
-
-.strategy-label {
-  margin: 0 0 0.25rem;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--realm-accent-glow);
-}
-
-.strategy-reason {
-  margin: 0 0 0.6rem;
-  color: var(--realm-text-muted);
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-
-.strategy-rivals {
-  margin-top: 0.75rem;
-  padding-top: 0.65rem;
-  border-top: 1px solid var(--realm-border);
-}
-
-.strategy-rivals-label {
-  margin: 0 0 0.5rem;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--realm-text-muted);
-}
-
-.strategy-rival-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.strategy-rival-chip {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.65rem;
-  border-radius: 999px;
-  border: 1.5px solid color-mix(in srgb, var(--team-color) 40%, var(--realm-border));
-  background: color-mix(in srgb, var(--team-color) 8%, var(--realm-bg));
-  color: var(--realm-text);
-  font-family: var(--font-body);
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: border-color 0.2s, background 0.2s, transform 0.15s;
-}
-
-.strategy-rival-chip:hover {
-  border-color: var(--team-color);
-  transform: translateY(-1px);
-}
-
-.strategy-rival-chip.selected {
-  border-color: var(--team-color);
-  background: color-mix(in srgb, var(--team-color) 18%, var(--realm-bg));
-}
-
-.strategy-rival-icon {
-  color: var(--team-color);
-  line-height: 1;
-}
-
-.strategy-rival-name {
-  font-weight: 600;
-}
-
-.strategy-rival-gap {
-  font-weight: 700;
-  color: var(--realm-accent-glow);
-}
-
-.strategy-rival-gap.trailing {
-  color: var(--realm-success);
 }
 
 /* Add / sabotage */

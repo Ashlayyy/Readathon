@@ -100,7 +100,7 @@ const subtitle = computed(() => {
 
 		<div class="stat-row">
 			<div class="stat">
-				<span class="kicker">Books this week</span>
+				<span class="kicker">Books</span>
 				<strong>{{ vibes.overview.submissions }}</strong>
 				<small
 					>{{ vibes.overview.totalPages.toLocaleString() }} pages · avg
@@ -108,11 +108,11 @@ const subtitle = computed(() => {
 				>
 			</div>
 			<div class="stat">
-				<span class="kicker">Sabotage share</span>
-				<strong>{{ vibes.overview.chaosRatio }}%</strong>
+				<span class="kicker">Sabotage</span>
+				<strong class="accent">{{ vibes.overview.chaosRatio }}%</strong>
 				<small
-					>{{ vibes.overview.sabotageCount }} sabotage ·
-					{{ vibes.overview.addCount }} add</small
+					>{{ vibes.overview.sabotageCount }} attacks ·
+					{{ vibes.overview.addCount }} adds</small
 				>
 			</div>
 			<div class="stat">
@@ -212,16 +212,20 @@ const subtitle = computed(() => {
 
 .stat-row {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-	gap: 0.85rem;
-	margin-bottom: 1.15rem;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.75rem;
+	margin-bottom: 1.25rem;
 }
 
 .stat {
 	display: flex;
 	flex-direction: column;
-	gap: 0.15rem;
-	padding: 0.85rem 0;
+	gap: 0.2rem;
+	padding: 0.95rem 1rem;
+	border-radius: var(--radius);
+	border: 1px solid var(--realm-border);
+	background: color-mix(in srgb, var(--realm-surface) 88%, transparent);
+	min-width: 0;
 }
 
 .kicker {
@@ -238,9 +242,21 @@ const subtitle = computed(() => {
 	line-height: 1.1;
 }
 
+.stat strong.accent {
+	color: var(--realm-accent-glow);
+}
+
 .stat small {
 	font-size: 0.8rem;
 	color: var(--realm-text-muted);
+	line-height: 1.35;
+	overflow-wrap: anywhere;
+}
+
+@media (min-width: 720px) {
+	.stat-row {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
 }
 
 .charts {
