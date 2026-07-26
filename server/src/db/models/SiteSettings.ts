@@ -9,6 +9,10 @@ const siteSettingsSchema = new Schema(
     teamChatHooksEnabled: { type: Boolean, default: false },
     /** teamId -> webhook URL */
     teamChatWebhookUrls: { type: Schema.Types.Mixed, default: {} },
+    /** Discord message templates for realm chat (add logs). Empty → seeded with defaults. */
+    teamChatAddTemplates: { type: [String], default: undefined },
+    /** Discord message templates for realm chat (sabotage logs). Empty → seeded with defaults. */
+    teamChatSabotageTemplates: { type: [String], default: undefined },
     scheduledPublishEnabled: { type: Boolean, default: false },
     /** 0 = Sunday .. 6 = Saturday (matches JS Date#getDay); default Monday */
     scheduledPublishDay: { type: Number, default: 1 },

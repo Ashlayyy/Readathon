@@ -1,9 +1,29 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { buildTeamChatMessage } from './teamChatMessage.js'
+import {
+	buildTeamChatMessage,
+	DEFAULT_TEAM_CHAT_ADD_TEMPLATES,
+	renderTeamChatTemplate,
+} from './teamChatMessage.js'
+
+describe('renderTeamChatTemplate', () => {
+	it('replaces {{variables}}', () => {
+		assert.equal(
+			renderTeamChatTemplate('Hi {{displayName}} — {{bookTitle}}', {
+				displayName: 'Ash',
+				bookTitle: 'Dune',
+			}),
+			'Hi Ash — Dune',
+		)
+	})
+
+	it('replaces missing vars with empty string', () => {
+		assert.equal(renderTeamChatTemplate('x{{missing}}y', {}), 'xy')
+	})
+})
 
 describe('buildTeamChatMessage', () => {
-	it('returns an add template containing name, title, and team', () => {
+	it('uses the first add default when rng is 0', () => {
 		const msg = buildTeamChatMessage(
 			{
 				displayName: 'Ash',
@@ -11,27 +31,37 @@ describe('buildTeamChatMessage', () => {
 				teamName: 'Wielders',
 				submissionType: 'add',
 			},
-			() => 0,
+			{ rng: () => 0 },
 		)
-		assert.match(msg, /\*\*Ash\*\*/)
-		assert.match(msg, /The Name of the Wind/)
-		assert.match(msg, /\*\*Wielders\*\*/)
-		assert.ok(!msg.includes('sabotage') || true)
+		assert.equal(
+			msg,
+			renderTeamChatTemplate(DEFAULT_TEAM_CHAT_ADD_TEMPLATES[0]!, {
+				displayName: 'Ash',
+				bookTitle: 'The Name of the Wind',
+				teamName: 'Wielders',
+				targetTeamName: 'a rival',
+				submissionType: 'add',
+			}),
+		)
 	})
 
-	it('picks different add templates based on rng', () => {
-		const input = {
-			displayName: 'Ash',
-			bookTitle: 'Dune',
-			teamName: 'Riders',
-			submissionType: 'add' as const,
-		}
-		const a = buildTeamChatMessage(input, () => 0)
-		const b = buildTeamChatMessage(input, () => 0.99)
-		assert.notEqual(a, b)
+	it('uses custom templates from settings when provided', () => {
+		const msg = buildTeamChatMessage(
+			{
+				displayName: 'Ash',
+				bookTitle: 'Dune',
+				teamName: 'Riders',
+				submissionType: 'add',
+			},
+			{
+				templates: ['{{displayName}} read {{bookTitle}}'],
+				rng: () => 0,
+			},
+		)
+		assert.equal(msg, 'Ash read Dune')
 	})
 
-	it('mentions the target realm on sabotage when provided', () => {
+	it('fills targetTeamName on sabotage', () => {
 		const msg = buildTeamChatMessage(
 			{
 				displayName: 'Ash',
@@ -40,14 +70,15 @@ describe('buildTeamChatMessage', () => {
 				submissionType: 'sabotage',
 				targetTeamName: 'Riders',
 			},
-			() => 0,
+			{
+				templates: ['{{displayName}} → {{targetTeamName}}: {{bookTitle}}'],
+				rng: () => 0,
+			},
 		)
-		assert.match(msg, /\*\*Ash\*\*/)
-		assert.match(msg, /Dune/)
-		assert.match(msg, /\*\*Riders\*\*/)
+		assert.equal(msg, 'Ash → Riders: Dune')
 	})
 
-	it('still works for sabotage without a target team name', () => {
+	it('falls back to "a rival" when sabotage has no target', () => {
 		const msg = buildTeamChatMessage(
 			{
 				displayName: 'Ash',
@@ -55,9 +86,11 @@ describe('buildTeamChatMessage', () => {
 				teamName: 'Wielders',
 				submissionType: 'sabotage',
 			},
-			() => 0.5,
+			{
+				templates: ['hit {{targetTeamName}}'],
+				rng: () => 0,
+			},
 		)
-		assert.match(msg, /\*\*Ash\*\*/)
-		assert.match(msg, /Dune/)
+		assert.equal(msg, 'hit a rival')
 	})
 })

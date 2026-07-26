@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { api, type AdminSiteSettings } from '../lib/api';
+import { api, TEAM_CHAT_TEMPLATE_VARS, type AdminSiteSettings } from '../lib/api';
 import { useConfig } from '../composables/useConfig';
 import { useAdminCopy } from '../composables/useAdminCopy';
 
@@ -29,6 +29,10 @@ const scheduledPublishTimezone = ref('Europe/Amsterdam');
 const teamChatHooksEnabled = ref(false);
 const teamChatWebhookUrls = ref<Record<string, string>>({});
 const teamChatWebhookDrafts = ref<Record<string, string>>({});
+const teamChatAddTemplates = ref<string[]>([]);
+const teamChatAddDrafts = ref<string[]>([]);
+const teamChatSabotageTemplates = ref<string[]>([]);
+const teamChatSabotageDrafts = ref<string[]>([]);
 
 const SCHEDULED_PUBLISH_DAYS = [
 	{ value: 0, label: 'Sunday' },
@@ -40,6 +44,11 @@ const SCHEDULED_PUBLISH_DAYS = [
 	{ value: 6, label: 'Saturday' },
 ];
 
+function listsEqual(a: string[], b: string[]) {
+	if (a.length !== b.length) return false;
+	return a.every((v, i) => v === b[i]);
+}
+
 const dirty = computed(() => {
 	if (discordWebhookDraft.value.trim() !== discordWebhookUrl.value) return true;
 	if (discordRoleIdDraft.value.trim() !== discordRoleId.value) return true;
@@ -49,6 +58,8 @@ const dirty = computed(() => {
 		const saved = (teamChatWebhookUrls.value[team.id] ?? '').trim();
 		if (draft !== saved) return true;
 	}
+	if (!listsEqual(teamChatAddDrafts.value, teamChatAddTemplates.value)) return true;
+	if (!listsEqual(teamChatSabotageDrafts.value, teamChatSabotageTemplates.value)) return true;
 	return false;
 });
 
@@ -90,6 +101,10 @@ function applySettings(settings: AdminSiteSettings) {
 	teamChatHooksEnabled.value = settings.teamChatHooksEnabled ?? false;
 	teamChatWebhookUrls.value = { ...(settings.teamChatWebhookUrls ?? {}) };
 	teamChatWebhookDrafts.value = { ...(settings.teamChatWebhookUrls ?? {}) };
+	teamChatAddTemplates.value = [...(settings.teamChatAddTemplates ?? [])];
+	teamChatAddDrafts.value = [...(settings.teamChatAddTemplates ?? [])];
+	teamChatSabotageTemplates.value = [...(settings.teamChatSabotageTemplates ?? [])];
+	teamChatSabotageDrafts.value = [...(settings.teamChatSabotageTemplates ?? [])];
 }
 
 async function loadSettings() {
@@ -135,6 +150,12 @@ async function saveAllWebhookSettings() {
 				discordWebhookUrl: discordWebhookDraft.value.trim(),
 				discordRoleId: discordRoleIdDraft.value.trim(),
 				teamChatWebhookUrls: drafts,
+				teamChatAddTemplates: teamChatAddDrafts.value
+					.map((s) => s.trim())
+					.filter(Boolean),
+				teamChatSabotageTemplates: teamChatSabotageDrafts.value
+					.map((s) => s.trim())
+					.filter(Boolean),
 			},
 			'save',
 		);
@@ -144,6 +165,8 @@ async function saveAllWebhookSettings() {
 		discordWebhookDraft.value = discordWebhookUrl.value;
 		discordRoleIdDraft.value = discordRoleId.value;
 		teamChatWebhookDrafts.value = { ...teamChatWebhookUrls.value };
+		teamChatAddDrafts.value = [...teamChatAddTemplates.value];
+		teamChatSabotageDrafts.value = [...teamChatSabotageTemplates.value];
 	} finally {
 		saving.value = false;
 	}
@@ -153,7 +176,87 @@ function discardDrafts() {
 	discordWebhookDraft.value = discordWebhookUrl.value;
 	discordRoleIdDraft.value = discordRoleId.value;
 	teamChatWebhookDrafts.value = { ...teamChatWebhookUrls.value };
+	teamChatAddDrafts.value = [...teamChatAddTemplates.value];
+	teamChatSabotageDrafts.value = [...teamChatSabotageTemplates.value];
 }
+
+function addTemplate(kind: 'add' | 'sabotage') {
+	const list = kind === 'add' ? teamChatAddDrafts : teamChatSabotageDrafts;
+	list.value = [
+		...list.value,
+		kind === 'add'
+			? '📖 **{{displayName}}** logged **"{{bookTitle}}"** for **{{teamName}}**.'
+			: '⚔️ **{{displayName}}** sabotaged **{{targetTeamName}}** with **"{{bookTitle}}"**!',
+	];
+}
+
+function removeTemplate(kind: 'add' | 'sabotage', index: number) {
+	const list = kind === 'add' ? teamChatAddDrafts : teamChatSabotageDrafts;
+	list.value = list.value.filter((_, i) => i !== index);
+}
+
+type TemplateFocus = { kind: 'add' | 'sabotage'; index: number } | null;
+const focusedTemplate = ref<TemplateFocus>(null);
+const previewKind = ref<'add' | 'sabotage'>('add');
+
+const SAMPLE_VARS: Record<string, string> = {
+	displayName: 'Ashlay',
+	bookTitle: 'Disgrace',
+	teamName: '† Wielders',
+	targetTeamName: 'The Rivals',
+	submissionType: 'add',
+};
+
+function onTemplateFocus(kind: 'add' | 'sabotage', index: number) {
+	focusedTemplate.value = { kind, index };
+	previewKind.value = kind;
+}
+
+function insertVariable(example: string) {
+	const focus = focusedTemplate.value;
+	if (!focus) {
+		const list = previewKind.value === 'add' ? teamChatAddDrafts : teamChatSabotageDrafts;
+		if (!list.value.length) addTemplate(previewKind.value);
+		const index = Math.max(0, list.value.length - 1);
+		list.value[index] = `${list.value[index] ?? ''}${example}`;
+		focusedTemplate.value = { kind: previewKind.value, index };
+		return;
+	}
+	const list = focus.kind === 'add' ? teamChatAddDrafts : teamChatSabotageDrafts;
+	const current = list.value[focus.index] ?? '';
+	list.value[focus.index] = `${current}${example}`;
+}
+
+function fillPreview(template: string): string {
+	return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, key: string) => {
+		return SAMPLE_VARS[key] ?? '';
+	});
+}
+
+/** Light Discord-style markdown: **bold** only. */
+function previewHtml(template: string): string {
+	const filled = fillPreview(template)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
+	return filled.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+}
+
+const previewTemplate = computed(() => {
+	const list =
+		previewKind.value === 'add' ? teamChatAddDrafts.value : teamChatSabotageDrafts.value;
+	const focus = focusedTemplate.value;
+	if (focus && focus.kind === previewKind.value && list[focus.index]) {
+		return list[focus.index]!;
+	}
+	return list[0] ?? '';
+});
+
+const previewHtmlComputed = computed(() =>
+	previewTemplate.value
+		? previewHtml(previewTemplate.value)
+		: '<span class="preview-empty">Add a line to preview it.</span>',
+);
 
 async function onDowntimeToggle() {
 	const enabling = downtimeMode.value;
@@ -533,8 +636,151 @@ function clearDiscordRoleId() {
 					</div>
 				</div>
 
+				<section class="template-editor">
+					<div class="template-editor-head">
+						<div>
+							<h4>Realm chat messages</h4>
+							<p class="section-desc">
+								One line is picked at random when someone logs a book. Click a variable to
+								insert it into the focused line. Empty categories re-seed five defaults on
+								save / load.
+							</p>
+						</div>
+					</div>
+
+					<div class="var-toolbar" role="toolbar" aria-label="Template variables">
+						<button
+							v-for="v in TEAM_CHAT_TEMPLATE_VARS"
+							:key="v.key"
+							type="button"
+							class="var-chip-btn"
+							:disabled="saving"
+							:title="`Insert ${v.example}`"
+							@click="insertVariable(v.example)"
+						>
+							{{ v.example }}
+						</button>
+					</div>
+
+					<div class="template-preview card">
+						<div class="preview-tabs">
+							<button
+								type="button"
+								:class="{ active: previewKind === 'add' }"
+								@click="previewKind = 'add'"
+							>
+								Add preview
+							</button>
+							<button
+								type="button"
+								:class="{ active: previewKind === 'sabotage' }"
+								@click="previewKind = 'sabotage'"
+							>
+								Sabotage preview
+							</button>
+						</div>
+						<div class="discord-preview" v-html="previewHtmlComputed" />
+					</div>
+
+					<div class="template-columns">
+						<div class="template-column card">
+							<div class="template-column-head">
+								<div>
+									<strong>Add</strong>
+									<span class="col-count">{{ teamChatAddDrafts.length }} lines</span>
+								</div>
+								<button
+									type="button"
+									class="btn btn-secondary btn-sm"
+									:disabled="saving"
+									@click="addTemplate('add')"
+								>
+									+ Add line
+								</button>
+							</div>
+							<div
+								v-for="(line, i) in teamChatAddDrafts"
+								:key="`add-${i}`"
+								class="template-row"
+								:class="{
+									focused:
+										focusedTemplate?.kind === 'add' && focusedTemplate.index === i,
+								}"
+							>
+								<textarea
+									v-model="teamChatAddDrafts[i]"
+									rows="2"
+									spellcheck="true"
+									:disabled="saving"
+									placeholder='📖 **{{displayName}}** logged "{{bookTitle}}"…'
+									@focus="onTemplateFocus('add', i)"
+								/>
+								<button
+									type="button"
+									class="icon-remove"
+									:disabled="saving"
+									aria-label="Remove line"
+									title="Remove"
+									@click="removeTemplate('add', i)"
+								>
+									×
+								</button>
+								<p v-if="line.trim()" class="row-preview" v-html="previewHtml(line)" />
+							</div>
+							<p v-if="!teamChatAddDrafts.length" class="empty-col">No add lines yet.</p>
+						</div>
+
+						<div class="template-column card">
+							<div class="template-column-head">
+								<div>
+									<strong>Sabotage</strong>
+									<span class="col-count">{{ teamChatSabotageDrafts.length }} lines</span>
+								</div>
+								<button
+									type="button"
+									class="btn btn-secondary btn-sm"
+									:disabled="saving"
+									@click="addTemplate('sabotage')"
+								>
+									+ Add line
+								</button>
+							</div>
+							<div
+								v-for="(line, i) in teamChatSabotageDrafts"
+								:key="`sab-${i}`"
+								class="template-row"
+								:class="{
+									focused:
+										focusedTemplate?.kind === 'sabotage' && focusedTemplate.index === i,
+								}"
+							>
+								<textarea
+									v-model="teamChatSabotageDrafts[i]"
+									rows="2"
+									spellcheck="true"
+									:disabled="saving"
+									placeholder='⚔️ **{{displayName}}** sabotaged **{{targetTeamName}}**…'
+									@focus="onTemplateFocus('sabotage', i)"
+								/>
+								<button
+									type="button"
+									class="icon-remove"
+									:disabled="saving"
+									aria-label="Remove line"
+									title="Remove"
+									@click="removeTemplate('sabotage', i)"
+								>
+									×
+								</button>
+								<p v-if="line.trim()" class="row-preview" v-html="previewHtml(line)" />
+							</div>
+							<p v-if="!teamChatSabotageDrafts.length" class="empty-col">No sabotage lines yet.</p>
+						</div>
+					</div>
+				</section>
+
 				<p v-if="dirty" class="dirty-banner" role="status">
-					You have unsaved webhook changes.
+					You have unsaved webhook / message changes.
 				</p>
 			</article>
 		</template>
@@ -721,10 +967,203 @@ function clearDiscordRoleId() {
 	font-size: 0.88rem;
 }
 
+.template-editor {
+	margin-top: 0.35rem;
+	padding-top: 1rem;
+	border-top: 1px solid var(--realm-border);
+	display: flex;
+	flex-direction: column;
+	gap: 0.9rem;
+}
+
+.template-editor h4 {
+	margin: 0 0 0.35rem;
+	font-size: 0.92rem;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--realm-accent-glow);
+}
+
+.var-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+}
+
+.var-chip-btn {
+	appearance: none;
+	cursor: pointer;
+	padding: 0.28rem 0.55rem;
+	border-radius: 999px;
+	border: 1px solid color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-accent) 12%, var(--realm-bg));
+	color: var(--realm-accent-glow);
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.72rem;
+	transition:
+		background 0.15s ease,
+		transform 0.15s ease;
+}
+
+.var-chip-btn:hover:not(:disabled) {
+	background: color-mix(in srgb, var(--realm-accent) 22%, var(--realm-bg));
+	transform: translateY(-1px);
+}
+
+.var-chip-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.template-preview {
+	padding: 0.85rem 1rem;
+	background: color-mix(in srgb, #1e1f22 70%, var(--realm-surface));
+	border: 1px solid var(--realm-border);
+}
+
+.preview-tabs {
+	display: flex;
+	gap: 0.35rem;
+	margin-bottom: 0.65rem;
+}
+
+.preview-tabs button {
+	appearance: none;
+	border: 1px solid var(--realm-border);
+	background: transparent;
+	color: var(--realm-text-muted);
+	padding: 0.25rem 0.65rem;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	cursor: pointer;
+}
+
+.preview-tabs button.active {
+	color: var(--realm-text);
+	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-accent) 14%, transparent);
+}
+
+.discord-preview {
+	font-size: 0.95rem;
+	line-height: 1.45;
+	color: #dbdee1;
+	min-height: 1.5rem;
+}
+
+.discord-preview :deep(strong) {
+	font-weight: 700;
+	color: #f2f3f5;
+}
+
+.template-columns {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 1rem;
+}
+
+.template-column {
+	display: flex;
+	flex-direction: column;
+	gap: 0.65rem;
+	padding: 0.9rem;
+	background: var(--realm-bg);
+}
+
+.template-column-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+}
+
+.template-column-head strong {
+	display: block;
+	font-size: 0.95rem;
+}
+
+.col-count {
+	display: block;
+	font-size: 0.72rem;
+	color: var(--realm-text-muted);
+}
+
+.template-row {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 0.4rem;
+	padding: 0.65rem;
+	border-radius: var(--radius);
+	border: 1px solid var(--realm-border);
+	background: var(--realm-surface);
+	transition: border-color 0.15s ease;
+}
+
+.template-row.focused {
+	border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--realm-accent) 25%, transparent);
+}
+
+.template-row textarea {
+	width: 100%;
+	padding: 0.55rem 2rem 0.55rem 0.65rem;
+	border-radius: calc(var(--radius) - 2px);
+	border: 1px solid var(--realm-border);
+	background: var(--realm-bg);
+	color: var(--realm-text);
+	font-family: var(--font-body);
+	font-size: 0.88rem;
+	resize: vertical;
+	min-height: 3.2rem;
+}
+
+.icon-remove {
+	position: absolute;
+	top: 0.55rem;
+	right: 0.55rem;
+	width: 1.6rem;
+	height: 1.6rem;
+	border-radius: 999px;
+	border: 1px solid var(--realm-border);
+	background: var(--realm-bg);
+	color: var(--realm-text-muted);
+	cursor: pointer;
+	font-size: 1.1rem;
+	line-height: 1;
+	display: grid;
+	place-items: center;
+}
+
+.icon-remove:hover:not(:disabled) {
+	color: var(--realm-accent);
+	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+}
+
+.row-preview {
+	margin: 0;
+	padding: 0.35rem 0.45rem;
+	font-size: 0.8rem;
+	color: var(--realm-text-muted);
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--realm-bg) 80%, transparent);
+}
+
+.row-preview :deep(strong) {
+	color: var(--realm-text);
+}
+
+.empty-col {
+	margin: 0;
+	font-size: 0.85rem;
+	color: var(--realm-text-muted);
+}
+
 @media (max-width: 900px) {
 	.settings-grid,
 	.webhook-columns,
-	.field-row {
+	.field-row,
+	.template-columns {
 		grid-template-columns: 1fr;
 	}
 }

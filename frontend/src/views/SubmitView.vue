@@ -935,7 +935,7 @@ function reset() {
 
           <div class="success-actions">
             <button type="button" class="btn btn-primary" @click="reset">{{ config.copy.submitAnother }}</button>
-            <button type="button" class="btn btn-secondary" @click="router.push('/profile?tab=books')">
+            <button type="button" class="btn btn-secondary" @click="router.push({ name: 'profile', query: { tab: 'books' } })">
               {{ config.copy.submitViewBooks }}
             </button>
           </div>

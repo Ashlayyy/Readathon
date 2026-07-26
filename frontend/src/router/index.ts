@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '../composables/useAuth'
+import { useConfig } from '../composables/useConfig'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -13,21 +15,38 @@ const router = createRouter({
     },
     { path: '/prompts', name: 'prompts', component: () => import('../views/PromptsView.vue') },
     { path: '/faq', name: 'faq', component: () => import('../views/FaqView.vue') },
+    { path: '/changelog', name: 'changelog', component: () => import('../views/ChangelogView.vue') },
     { path: '/standings', name: 'standings', component: () => import('../views/StandingsView.vue') },
     { path: '/shelf', name: 'shelf', component: () => import('../views/ShelfView.vue') },
     { path: '/login', name: 'login', component: () => import('../views/LoginView.vue') },
     { path: '/maintenance', name: 'maintenance', component: () => import('../views/MaintenanceView.vue') },
     { path: '/submit', name: 'submit', component: () => import('../views/SubmitView.vue'), meta: { requiresAssigned: true } },
-    { path: '/profile', name: 'profile', component: () => import('../views/ProfileView.vue'), meta: { requiresAuth: true } },
+    { path: '/profile', name: 'profile', meta: { requiresAuth: true }, component: () => import('../views/ReaderProfileView.vue') },
     { path: '/readers/:id', name: 'reader', component: () => import('../views/ReaderProfileView.vue') },
     { path: '/my-reads', redirect: (to) => ({ name: 'profile', query: { ...to.query, tab: 'books' } }) },
     { path: '/admin', name: 'admin', component: () => import('../views/AdminView.vue'), meta: { requiresAdmin: true } },
   ],
 })
 
+/** Warm common route chunks after first paint so nav feels instant. */
+export function prefetchAppRoutes() {
+  const warm = () => {
+    void import('../views/ReaderProfileView.vue')
+    void import('../views/StandingsView.vue')
+    void import('../views/SubmitView.vue')
+    void import('../views/TeamsView.vue')
+    void import('../views/PromptsView.vue')
+    void import('../views/FaqView.vue')
+  }
+  if (typeof window === 'undefined') return
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(warm, { timeout: 2500 })
+  } else {
+    setTimeout(warm, 800)
+  }
+}
+
 router.beforeEach(async (to) => {
-  const { useAuth } = await import('../composables/useAuth')
-  const { useConfig } = await import('../composables/useConfig')
   const { user, fetchUser } = useAuth()
   const { config, loadConfig } = useConfig()
 
@@ -46,6 +65,11 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === 'login' && user.value) return '/'
+  if (to.name === 'profile') {
+    if (!user.value) return '/login'
+    const query = { ...to.query }
+    return { name: 'reader', params: { id: user.value.id }, query }
+  }
   if (
     to.name === 'teams' &&
     to.query.tab === 'rosters' &&

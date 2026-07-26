@@ -68,7 +68,7 @@ const auditLoaded = ref(false);
 const auditLog = ref<AuditLogEntry[]>([]);
 const auditTotal = ref(0);
 const auditOffset = ref(0);
-const AUDIT_PAGE_SIZE = 50;
+const AUDIT_PAGE_SIZE = 10;
 
 const addUserOpen = ref(false);
 const newUser = ref({ displayName: '', email: '', teamId: '' });
@@ -94,7 +94,9 @@ const submissionSearch = ref('');
 const submissionTypeFilter = ref<'all' | 'add' | 'sabotage'>('all');
 const submissionTeamFilter = ref('');
 const submissionPage = ref(1);
-const SUBMISSIONS_PER_PAGE = 15;
+const SUBMISSIONS_PER_PAGE = 10;
+const userPage = ref(1);
+const USERS_PER_PAGE = 10;
 type SubmissionSortKey =
 	| 'book'
 	| 'reader'
@@ -287,6 +289,33 @@ function goSubmissionPage(page: number) {
 	submissionPage.value = Math.min(Math.max(1, page), submissionPageCount.value);
 }
 
+const userPageCount = computed(() =>
+	Math.max(1, Math.ceil(users.value.length / USERS_PER_PAGE)),
+);
+
+const pagedUsers = computed(() => {
+	const page = Math.min(userPage.value, userPageCount.value);
+	const start = (page - 1) * USERS_PER_PAGE;
+	return users.value.slice(start, start + USERS_PER_PAGE);
+});
+
+const userRangeLabel = computed(() => {
+	const total = users.value.length;
+	if (total === 0) return '0';
+	const page = Math.min(userPage.value, userPageCount.value);
+	const start = (page - 1) * USERS_PER_PAGE + 1;
+	const end = Math.min(page * USERS_PER_PAGE, total);
+	return `${start}–${end}`;
+});
+
+watch(userPageCount, (count) => {
+	if (userPage.value > count) userPage.value = count;
+});
+
+function goUserPage(page: number) {
+	userPage.value = Math.min(Math.max(1, page), userPageCount.value);
+}
+
 onMounted(async () => {
 	applyPublishPreset('lastMonToThisMon');
 	await loadConfig();
@@ -393,6 +422,73 @@ async function goAuditPage(offset: number) {
 	await loadAuditLog(true);
 }
 
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+	'settings.updated': 'Settings updated',
+	'settings.downtime_toggled': 'Downtime toggled',
+	'user.team_assigned': 'Team assigned',
+	'submission.soft_deleted': 'Submission deleted',
+	'submission.restored': 'Submission restored',
+	'standings.published': 'Standings published',
+	'standings.unpublished': 'Standings unpublished',
+};
+
+function auditActionLabel(action: string): string {
+	return AUDIT_ACTION_LABELS[action] ?? action.replace(/\./g, ' · ');
+}
+
+function auditActionTone(action: string): 'neutral' | 'warn' | 'ok' | 'danger' {
+	if (action.includes('delete') || action.includes('unpublish')) return 'danger';
+	if (action.includes('downtime') || action.includes('soft_')) return 'warn';
+	if (action.includes('publish') || action.includes('restored') || action.includes('assigned'))
+		return 'ok';
+	return 'neutral';
+}
+
+function auditEntityLabel(entry: AuditLogEntry): string {
+	if (!entry.entityType) return '—';
+	const short = entry.entityId ? entry.entityId.slice(-6) : '';
+	const pretty =
+		entry.entityType === 'SiteSettings'
+			? 'Site settings'
+			: entry.entityType === 'PublishedStandings'
+				? 'Published standings'
+				: entry.entityType;
+	return short ? `${pretty} · ${short}` : pretty;
+}
+
+type AuditDetailChip = { label: string; value: string };
+
+function auditDetailChips(detail: unknown): AuditDetailChip[] {
+	if (detail == null) return [];
+	if (typeof detail === 'string') {
+		const t = detail.trim();
+		return t ? [{ label: 'Note', value: t }] : [];
+	}
+	if (typeof detail !== 'object' || Array.isArray(detail)) {
+		return [{ label: 'Detail', value: auditDetailText(detail) }];
+	}
+	const obj = detail as Record<string, unknown>;
+	return Object.entries(obj).map(([key, value]) => {
+		const label = key
+			.replace(/([A-Z])/g, ' $1')
+			.replace(/_/g, ' ')
+			.replace(/^\w/, (c) => c.toUpperCase())
+			.trim();
+		let display: string;
+		if (typeof value === 'boolean') display = value ? 'Yes' : 'No';
+		else if (value == null) display = '—';
+		else if (Array.isArray(value)) display = value.map(String).join(', ') || '—';
+		else if (typeof value === 'object') {
+			try {
+				display = JSON.stringify(value);
+			} catch {
+				display = String(value);
+			}
+		} else display = String(value);
+		return { label, value: display };
+	});
+}
+
 function auditDetailText(detail: unknown): string {
 	if (detail == null) return '';
 	if (typeof detail === 'string') return detail;
@@ -401,6 +497,16 @@ function auditDetailText(detail: unknown): string {
 	} catch {
 		return String(detail);
 	}
+}
+
+const auditPage = computed(() => Math.floor(auditOffset.value / AUDIT_PAGE_SIZE) + 1);
+const auditPageCount = computed(() =>
+	Math.max(1, Math.ceil(auditTotal.value / AUDIT_PAGE_SIZE)),
+);
+
+function goAuditPageNum(page: number) {
+	const p = Math.min(Math.max(1, page), auditPageCount.value);
+	void goAuditPage((p - 1) * AUDIT_PAGE_SIZE);
 }
 
 async function downloadSubmissionsCsv() {
@@ -1349,12 +1455,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								{{ section('teams').statUnread }}
 							</li>
 						</ul>
-						<p class="section-desc" style="margin-top: 0.85rem">
-							Site mode, Discord, and schedule live under
-							<button type="button" class="linkish" @click="setTab('settings')">
-								Settings
-							</button>.
-						</p>
 					</section>
 				</section>
 
@@ -1466,17 +1566,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							</ul>
 						</div>
 					</div>
-
-					<section class="card admin-section settings-tip-card">
-						<h2>Discord & schedule</h2>
-						<p class="section-desc">
-							Webhook, role ping, auto-publish schedule, and realm chat webhooks
-							live in Settings — one place, one Save for URL fields.
-						</p>
-						<button type="button" class="btn btn-secondary btn-sm" @click="setTab('settings')">
-							Open Settings
-						</button>
-					</section>
 
 					<div v-if="loading === 'standings'" class="alert alert-info">
 						{{ section('standings').loading }}
@@ -1603,7 +1692,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								</tr>
 							</thead>
 							<tbody>
-								<tr v-for="u in users" :key="u.id">
+								<tr v-for="u in pagedUsers" :key="u.id">
 									<td>
 										<ReaderLink :id="u.id" :name="u.displayName" />
 									</td>
@@ -1675,6 +1764,44 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							</tbody>
 						</table>
 					</div>
+
+					<nav
+						v-if="users.length > USERS_PER_PAGE"
+						class="submissions-pagination"
+						aria-label="Users pages"
+					>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="userPage <= 1"
+							@click="goUserPage(userPage - 1)"
+						>
+							Previous
+						</button>
+						<div class="page-numbers">
+							<button
+								v-for="page in userPageCount"
+								:key="page"
+								type="button"
+								class="page-num"
+								:class="{ active: page === userPage }"
+								:aria-current="page === userPage ? 'page' : undefined"
+								@click="goUserPage(page)"
+							>
+								{{ page }}
+							</button>
+						</div>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="userPage >= userPageCount"
+							@click="goUserPage(userPage + 1)"
+						>
+							Next
+						</button>
+					</nav>
+
+					<p class="hint">Showing {{ userRangeLabel }} of {{ users.length }}.</p>
 				</section>
 
 				<!-- Add user modal -->
@@ -2151,14 +2278,21 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 				/>
 
 				<!-- Audit log -->
-				<section v-if="activeTab === 'audit'" class="card admin-section">
-					<h2>{{ section('tabs').audit ?? 'Audit log' }}</h2>
-					<p class="section-desc">
-						{{
-							section('audit').lead ??
-							'Every admin action that changes data, newest first. Click a row and use arrow keys / Tab to review.'
-						}}
-					</p>
+				<section v-if="activeTab === 'audit'" class="card admin-section audit-section">
+					<header class="audit-header">
+						<div>
+							<h2>{{ section('tabs').audit ?? 'Audit log' }}</h2>
+							<p class="section-desc">
+								{{
+									section('audit').lead ??
+									'Admin actions that changed data, newest first.'
+								}}
+							</p>
+						</div>
+						<p v-if="auditLoaded && auditTotal > 0" class="audit-count">
+							{{ auditTotal }} {{ auditTotal === 1 ? 'entry' : 'entries' }}
+						</p>
+					</header>
 
 					<div v-if="!auditLoaded" class="page-state" style="min-height: 10rem">
 						<div class="page-spinner" role="status" aria-label="Loading" />
@@ -2169,39 +2303,44 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						<div v-if="auditLog.length === 0" class="empty-inbox">
 							<p>{{ section('audit').empty ?? 'No audit entries yet.' }}</p>
 						</div>
-						<div v-else class="table-wrap">
-							<table class="data-table" aria-label="Audit log">
-								<caption class="sr-only">
-									Admin actions log, newest first
-								</caption>
-								<thead>
-									<tr>
-										<th scope="col">{{ section('audit').colWhen ?? 'When' }}</th>
-										<th scope="col">{{ section('audit').colWho ?? 'Who' }}</th>
-										<th scope="col">{{ section('audit').colAction ?? 'Action' }}</th>
-										<th scope="col">{{ section('audit').colEntity ?? 'Entity' }}</th>
-										<th scope="col">{{ section('audit').colDetail ?? 'Detail' }}</th>
-									</tr>
-								</thead>
-								<tbody>
-									<tr v-for="entry in auditLog" :key="entry.id" tabindex="0">
-										<td>{{ new Date(entry.createdAt).toLocaleString() }}</td>
-										<td>{{ entry.actorName }}</td>
-										<td>
-											<span class="badge badge-negative">{{ entry.action }}</span>
-										</td>
-										<td>
-											<template v-if="entry.entityType">
-												{{ entry.entityType }}
-												<small v-if="entry.entityId">#{{ entry.entityId.slice(-6) }}</small>
-											</template>
-											<span v-else>-</span>
-										</td>
-										<td class="audit-detail">{{ auditDetailText(entry.detail) }}</td>
-									</tr>
-								</tbody>
-							</table>
-						</div>
+
+						<ol v-else class="audit-feed" aria-label="Audit log">
+							<li
+								v-for="entry in auditLog"
+								:key="entry.id"
+								class="audit-entry"
+								tabindex="0"
+							>
+								<div class="audit-entry-top">
+									<span
+										class="audit-action"
+										:class="`tone-${auditActionTone(entry.action)}`"
+									>
+										{{ auditActionLabel(entry.action) }}
+									</span>
+									<time class="audit-when" :datetime="entry.createdAt">
+										{{ new Date(entry.createdAt).toLocaleString() }}
+									</time>
+								</div>
+								<div class="audit-entry-meta">
+									<span class="audit-who">{{ entry.actorName }}</span>
+									<span class="audit-dot" aria-hidden="true">·</span>
+									<span class="audit-entity">{{ auditEntityLabel(entry) }}</span>
+								</div>
+								<ul
+									v-if="auditDetailChips(entry.detail).length"
+									class="audit-chips"
+								>
+									<li
+										v-for="(chip, i) in auditDetailChips(entry.detail)"
+										:key="`${entry.id}-${i}`"
+									>
+										<span class="chip-label">{{ chip.label }}</span>
+										<span class="chip-value">{{ chip.value }}</span>
+									</li>
+								</ul>
+							</li>
+						</ol>
 
 						<nav
 							v-if="auditTotal > AUDIT_PAGE_SIZE"
@@ -2216,10 +2355,19 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 							>
 								Previous
 							</button>
-							<p class="hint">
-								{{ auditOffset + 1 }}–{{ Math.min(auditOffset + AUDIT_PAGE_SIZE, auditTotal) }}
-								of {{ auditTotal }}
-							</p>
+							<div class="page-numbers">
+								<button
+									v-for="page in auditPageCount"
+									:key="page"
+									type="button"
+									class="page-num"
+									:class="{ active: page === auditPage }"
+									:aria-current="page === auditPage ? 'page' : undefined"
+									@click="goAuditPageNum(page)"
+								>
+									{{ page }}
+								</button>
+							</div>
 							<button
 								type="button"
 								class="btn btn-ghost btn-sm"
@@ -2229,6 +2377,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								Next
 							</button>
 						</nav>
+
+						<p v-if="auditTotal > 0" class="hint">
+							Showing {{ auditOffset + 1 }}–{{
+								Math.min(auditOffset + AUDIT_PAGE_SIZE, auditTotal)
+							}}
+							of {{ auditTotal }}.
+						</p>
 					</template>
 				</section>
 				<!-- Settings -->
@@ -3225,22 +3380,6 @@ small {
 	border-top: 1px solid var(--realm-border);
 }
 
-.settings-tip-card {
-	margin-bottom: 1.25rem;
-}
-
-.linkish {
-	display: inline;
-	padding: 0;
-	border: 0;
-	background: none;
-	color: var(--realm-accent-glow);
-	font: inherit;
-	font-weight: 600;
-	text-decoration: underline;
-	cursor: pointer;
-}
-
 .discord-webhook-section {
 	margin-top: 1rem;
 	margin-bottom: 1.25rem;
@@ -3360,13 +3499,172 @@ small {
 	margin-bottom: 0.75rem;
 }
 
-.audit-detail {
-	max-width: 26rem;
-	font-size: 0.82rem;
-	font-family: ui-monospace, monospace;
+.audit-section {
+	padding: 1.15rem 1.25rem 1.35rem;
+}
+
+.audit-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 1rem;
+	margin-bottom: 1rem;
+}
+
+.audit-header h2 {
+	margin: 0 0 0.3rem;
+}
+
+.audit-count {
+	margin: 0;
+	padding: 0.3rem 0.65rem;
+	border-radius: 999px;
+	border: 1px solid var(--realm-border);
+	font-size: 0.78rem;
 	color: var(--realm-text-muted);
-	white-space: pre-wrap;
-	word-break: break-word;
+	white-space: nowrap;
+}
+
+.audit-feed {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.65rem;
+}
+
+.audit-entry {
+	padding: 0.85rem 1rem;
+	border-radius: var(--radius);
+	border: 1px solid var(--realm-border);
+	background: color-mix(in srgb, var(--realm-bg) 70%, transparent);
+	outline: none;
+}
+
+.audit-entry:focus-visible {
+	border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--realm-accent) 22%, transparent);
+}
+
+.audit-entry-top {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.45rem 0.85rem;
+	margin-bottom: 0.4rem;
+}
+
+.audit-action {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.22rem 0.6rem;
+	border-radius: 999px;
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	border: 1px solid var(--realm-border);
+	background: var(--realm-surface);
+	color: var(--realm-text);
+}
+
+.audit-action.tone-ok {
+	border-color: color-mix(in srgb, var(--realm-success) 45%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-success) 14%, transparent);
+	color: var(--realm-success);
+}
+
+.audit-action.tone-warn {
+	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-accent) 14%, transparent);
+	color: var(--realm-accent-glow);
+}
+
+.audit-action.tone-danger {
+	border-color: color-mix(in srgb, #e07070 45%, var(--realm-border));
+	background: color-mix(in srgb, #e07070 12%, transparent);
+	color: #f0a0a0;
+}
+
+.audit-action.tone-neutral {
+	color: var(--realm-accent-glow);
+	border-color: color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-accent) 10%, transparent);
+}
+
+.audit-when {
+	font-size: 0.8rem;
+	color: var(--realm-text-muted);
+}
+
+.audit-entry-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.35rem;
+	font-size: 0.88rem;
+	color: var(--realm-text-muted);
+	margin-bottom: 0.55rem;
+}
+
+.audit-who {
+	color: var(--realm-text);
+	font-weight: 600;
+}
+
+.audit-dot {
+	opacity: 0.55;
+}
+
+.audit-entity {
+	font-size: 0.84rem;
+}
+
+.audit-chips {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+}
+
+.audit-chips li {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.3rem 0.45rem;
+	max-width: 100%;
+	padding: 0.28rem 0.55rem;
+	border-radius: 8px;
+	background: var(--realm-surface);
+	border: 1px solid var(--realm-border);
+	font-size: 0.78rem;
+}
+
+.chip-label {
+	color: var(--realm-text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-size: 0.68rem;
+	font-weight: 700;
+}
+
+.chip-value {
+	color: var(--realm-text);
+	overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+	.audit-header {
+		flex-direction: column;
+	}
+
+	.audit-entry-top {
+		flex-direction: column;
+		align-items: flex-start;
+	}
 }
 
 </style>

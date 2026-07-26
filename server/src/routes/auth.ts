@@ -135,9 +135,19 @@ authRoutes.get('/google/callback', async (c) => {
     const res = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
       headers: { Authorization: `Bearer ${tokens.accessToken()}` },
     })
-    const profile = (await res.json()) as { sub: string; name: string; email: string }
+    const profile = (await res.json()) as {
+      sub: string
+      name: string
+      email: string
+      picture?: string
+    }
 
-    const user = await findOrCreateGoogleUser(profile.sub, profile.name, profile.email)
+    const user = await findOrCreateGoogleUser(
+      profile.sub,
+      profile.name,
+      profile.email,
+      profile.picture ?? null,
+    )
     await createSession(c, user._id.toString())
     return c.redirect(`${frontend}/`)
   } catch {

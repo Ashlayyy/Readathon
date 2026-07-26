@@ -8,7 +8,12 @@ import { useAdminCopy } from './composables/useAdminCopy';
 import { closeAllNavDropdowns } from './composables/useNavDropdown';
 import SiteNavDropdown from './components/SiteNavDropdown.vue';
 import ThemeSwitcher from './components/ThemeSwitcher.vue';
+import UserAvatar from './components/UserAvatar.vue';
 import { APP_VERSION } from './lib/version';
+
+function prefetchProfile() {
+	void import('./views/ReaderProfileView.vue');
+}
 
 const { user, logout } = useAuth();
 const { config, configLoading, configError, loadConfig } = useConfig();
@@ -189,13 +194,19 @@ function closeMenu() {
 
 					<template v-if="user">
 						<RouterLink
-							to="/profile"
+							:to="`/readers/${user.id}`"
 							class="btn btn-secondary btn-sm profile-btn profile-btn-compact"
 							:title="user.displayName"
+							@mouseenter="prefetchProfile"
+							@focus="prefetchProfile"
 							@click="closeMenu"
 						>
 							<span class="profile-avatar">
-								{{ user.displayName.charAt(0).toUpperCase() }}
+								<UserAvatar
+									:name="user.displayName"
+									:avatar-url="user.avatarUrl"
+									size="sm"
+								/>
 								<span v-if="user.unreadAnswers" class="avatar-badge">{{
 									user.unreadAnswers
 								}}</span>
@@ -280,13 +291,19 @@ function closeMenu() {
 
 					<template v-if="user">
 						<RouterLink
-							to="/profile"
+							:to="`/readers/${user.id}`"
 							class="btn btn-secondary btn-sm profile-btn profile-btn-compact"
 							:title="user.displayName"
+							@mouseenter="prefetchProfile"
+							@focus="prefetchProfile"
 							@click="closeMenu"
 						>
 							<span class="profile-avatar">
-								{{ user.displayName.charAt(0).toUpperCase() }}
+								<UserAvatar
+									:name="user.displayName"
+									:avatar-url="user.avatarUrl"
+									size="sm"
+								/>
 								<span v-if="user.unreadAnswers" class="avatar-badge">{{
 									user.unreadAnswers
 								}}</span>
@@ -373,8 +390,11 @@ function closeMenu() {
 						nav.standings ?? 'Standings'
 					}}</RouterLink>
 					<RouterLink to="/faq">{{ nav.faq ?? 'FAQ' }}</RouterLink>
+					<RouterLink to="/changelog">Changelog</RouterLink>
 				</nav>
-				<p class="app-version">v{{ APP_VERSION }}</p>
+				<RouterLink to="/changelog" class="app-version" :title="`v${APP_VERSION}`">
+					v{{ APP_VERSION }}
+				</RouterLink>
 			</div>
 		</footer>
 	</div>
@@ -692,12 +712,8 @@ function closeMenu() {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: linear-gradient(135deg, var(--realm-accent), #a84030);
-	color: white;
-	font-family: var(--font-display);
-	font-size: 0.9rem;
-	font-weight: 700;
 	position: relative;
+	background: transparent;
 }
 
 .avatar-badge {
@@ -850,6 +866,14 @@ function closeMenu() {
 	font-size: 0.75rem;
 	opacity: 0.7;
 	font-family: ui-monospace, monospace;
+	color: var(--realm-text-muted);
+	text-decoration: none;
+}
+
+.app-version:hover {
+	opacity: 1;
+	color: var(--realm-accent-glow);
+	text-decoration: underline;
 }
 
 .page-fade-enter-active,

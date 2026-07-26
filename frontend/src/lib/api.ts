@@ -41,6 +41,9 @@ export type PublicUser = {
   teamId: string | null
   status: 'pending' | 'assigned'
   isAdmin: boolean
+  avatarUrl?: string | null
+  /** True when the user uploaded a custom photo (vs Google default). */
+  hasCustomAvatar?: boolean
   unreadAnswers?: number
 }
 
@@ -116,6 +119,10 @@ export type AdminSiteSettings = {
   teamChatHooksEnabled: boolean
   /** teamId -> Discord webhook URL */
   teamChatWebhookUrls: Record<string, string>
+  /** Realm chat Discord message templates (add logs) */
+  teamChatAddTemplates: string[]
+  /** Realm chat Discord message templates (sabotage logs) */
+  teamChatSabotageTemplates: string[]
   scheduledPublishEnabled: boolean
   /** 0 = Sunday .. 6 = Saturday (matches JS Date#getDay) */
   scheduledPublishDay: number
@@ -125,6 +132,15 @@ export type AdminSiteSettings = {
   configOverrides?: unknown
   seasonArchive?: SeasonArchive
 }
+
+/** Variables available in realm chat message templates. */
+export const TEAM_CHAT_TEMPLATE_VARS = [
+  { key: 'displayName', example: '{{displayName}}' },
+  { key: 'bookTitle', example: '{{bookTitle}}' },
+  { key: 'teamName', example: '{{teamName}}' },
+  { key: 'targetTeamName', example: '{{targetTeamName}}' },
+  { key: 'submissionType', example: '{{submissionType}}' },
+] as const
 
 export type AuditLogEntry = {
   id: string

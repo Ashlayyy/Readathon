@@ -13,45 +13,65 @@ function resolveCoverSrc(url: string | null | undefined): string | null {
 	if (!url?.trim()) return null
 	const trimmed = url.trim()
 	if (/^https?:\/\//i.test(trimmed)) return trimmed
-	// Stored as /covers/files/... or legacy /api/covers/files/...
 	const path = trimmed.replace(/^\/api(?=\/)/, '')
 	return apiUrl(path.startsWith('/') ? path : `/${path}`)
 }
 
 const src = ref<string | null>(resolveCoverSrc(props.coverUrl))
 const failed = ref(false)
+const loading = ref(Boolean(resolveCoverSrc(props.coverUrl)))
 
 watch(
 	() => [props.coverUrl, props.title, props.author] as const,
 	([url]) => {
-		src.value = resolveCoverSrc(url)
+		const next = resolveCoverSrc(url)
+		src.value = next
 		failed.value = false
+		loading.value = Boolean(next)
 	},
 )
 
+function onLoad() {
+	loading.value = false
+}
+
 function onError() {
 	failed.value = true
+	loading.value = false
 	src.value = null
 }
 </script>
 
 <template>
-	<div class="book-cover" :class="size ?? 'md'" :aria-hidden="!src">
+	<div
+		class="book-cover"
+		:class="[size ?? 'md', { loading: loading && src && !failed }]"
+		:aria-busy="loading && !!src && !failed"
+	>
+		<div v-if="loading && src && !failed" class="book-cover-skeleton" aria-hidden="true">
+			<span class="book-cover-spinner" />
+		</div>
 		<img
 			v-if="src && !failed"
 			:src="src"
 			:alt="title ? `Cover of ${title}` : 'Book cover'"
+			:class="{ ready: !loading }"
 			loading="lazy"
+			@load="onLoad"
 			@error="onError"
 		/>
-		<div v-else class="book-cover-fallback">
+		<div v-else-if="!loading" class="book-cover-fallback">
 			<span>{{ title?.charAt(0)?.toUpperCase() || '?' }}</span>
+		</div>
+		<div v-else class="book-cover-skeleton" aria-hidden="true">
+			<span class="book-cover-spinner" />
 		</div>
 	</div>
 </template>
 
 <style scoped>
 .book-cover {
+	position: relative;
 	flex-shrink: 0;
 	border-radius: 4px;
 	overflow: hidden;
@@ -78,6 +98,41 @@ function onError() {
 	height: 100%;
 	object-fit: cover;
 	display: block;
+	opacity: 0;
+	transition: opacity 0.2s ease;
+}
+
+.book-cover img.ready {
+	opacity: 1;
+}
+
+.book-cover-skeleton {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	background: linear-gradient(
+		110deg,
+		var(--realm-surface-alt) 25%,
+		color-mix(in srgb, var(--realm-accent) 12%, var(--realm-surface)) 40%,
+		var(--realm-surface-alt) 55%
+	);
+	background-size: 200% 100%;
+	animation: cover-shimmer 1.1s ease-in-out infinite;
+}
+
+.book-cover-spinner {
+	width: 1.1rem;
+	height: 1.1rem;
+	border-radius: 50%;
+	border: 2px solid color-mix(in srgb, var(--realm-text-muted) 35%, transparent);
+	border-top-color: var(--realm-accent);
+	animation: cover-spin 0.7s linear infinite;
+}
+
+.book-cover.sm .book-cover-spinner {
+	width: 0.85rem;
+	height: 0.85rem;
 }
 
 .book-cover-fallback {
@@ -93,5 +148,20 @@ function onError() {
 		var(--realm-surface-alt),
 		color-mix(in srgb, var(--realm-accent) 18%, var(--realm-surface))
 	);
+}
+
+@keyframes cover-shimmer {
+	0% {
+		background-position: 100% 0;
+	}
+	100% {
+		background-position: -100% 0;
+	}
+}
+
+@keyframes cover-spin {
+	to {
+		transform: rotate(360deg);
+	}
 }
 </style>

@@ -128,6 +128,8 @@ adminRoutes.patch('/settings', async (c) => {
     discordRoleId?: string
     teamChatHooksEnabled?: boolean
     teamChatWebhookUrls?: Record<string, string>
+    teamChatAddTemplates?: string[]
+    teamChatSabotageTemplates?: string[]
     scheduledPublishEnabled?: boolean
     scheduledPublishDay?: number
     scheduledPublishHour?: number
