@@ -1,26 +1,21 @@
 import assert from 'node:assert/strict'
 import { describe, it, before, after } from 'node:test'
-import { MongoMemoryServer } from 'mongodb-memory-server'
 import { Hono } from 'hono'
 import { mock } from 'node:test'
-import { connectDb, disconnectDb } from '../db/connect.js'
+import { sign } from 'hono/jwt'
+import { User } from '../db/models/User.js'
+import { startMemoryMongo, type MemoryMongo } from '../test/memoryMongo.js'
 import { coverRoutes } from './covers.js'
 
 describe('cover routes', () => {
-	let mongod: MongoMemoryServer
-	const savedUri = process.env.MONGODB_URI
+	let db: MemoryMongo
 
 	before(async () => {
-		mongod = await MongoMemoryServer.create()
-		process.env.MONGODB_URI = mongod.getUri()
-		await connectDb()
+		db = await startMemoryMongo()
 	})
 
 	after(async () => {
-		await disconnectDb()
-		await mongod.stop()
-		if (savedUri === undefined) delete process.env.MONGODB_URI
-		else process.env.MONGODB_URI = savedUri
+		await db.stop()
 	})
 
 	function app() {
@@ -34,6 +29,30 @@ describe('cover routes', () => {
 		assert.equal(res.status, 400)
 		const body = (await res.json()) as { error: string }
 		assert.match(body.error, /Title is required/)
+	})
+
+	it('POST /upload requires image data for an authenticated user', async () => {
+		const user = await User.create({
+			displayName: 'Cover Reader',
+			email: 'cover@example.test',
+		})
+		const token = await sign(
+			{ userId: user._id.toString(), exp: Math.floor(Date.now() / 1000) + 3600 },
+			'dev-secret-change-in-production',
+			'HS256',
+		)
+
+		const res = await app().request('http://localhost/api/covers/upload', {
+			method: 'POST',
+			headers: {
+				Cookie: `realm_session=${token}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({}),
+		})
+
+		assert.equal(res.status, 400)
+		assert.deepEqual(await res.json(), { error: 'Image data is required' })
 	})
 
 	it('GET /lookup returns the best Open Library cover match', async () => {
