@@ -30,11 +30,13 @@ import { useAdminCopy } from '../composables/useAdminCopy';
 import { useAuth } from '../composables/useAuth';
 import { useBodyScrollLock } from '../composables/useBodyScrollLock';
 import { useFocusTrap } from '../composables/useFocusTrap';
+import { useImageLightbox } from '../composables/useImageLightbox';
 
 const { config, loadConfig } = useConfig();
 const { t } = useCopy();
 const { admin, section, msg, confirmMsg } = useAdminCopy();
 const { user: me } = useAuth();
+const { show: showLightbox } = useImageLightbox();
 const users = ref<AdminUser[]>([]);
 const pending = ref(0);
 const stats = ref({
@@ -1382,21 +1384,57 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								</p>
 							</header>
 							<div class="modal-body">
-								<img
-									:src="apiUrl(previewData.standingsSvgUrl)"
-									alt="Standings preview"
-									class="preview-image"
-								/>
-								<img
-									:src="apiUrl(previewData.breakdownSvgUrl)"
-									alt="Score breakdown preview"
-									class="preview-image"
-								/>
-								<img
-									:src="apiUrl(previewData.vibesSvgUrl)"
-									alt="Vibes preview"
-									class="preview-image"
-								/>
+								<button
+									type="button"
+									class="preview-image-btn"
+									aria-label="View standings preview larger"
+									@click="
+										showLightbox(
+											apiUrl(previewData.standingsSvgUrl),
+											'Standings preview',
+										)
+									"
+								>
+									<img
+										:src="apiUrl(previewData.standingsSvgUrl)"
+										alt="Standings preview"
+										class="preview-image"
+									/>
+								</button>
+								<button
+									type="button"
+									class="preview-image-btn"
+									aria-label="View score breakdown preview larger"
+									@click="
+										showLightbox(
+											apiUrl(previewData.breakdownSvgUrl),
+											'Score breakdown preview',
+										)
+									"
+								>
+									<img
+										:src="apiUrl(previewData.breakdownSvgUrl)"
+										alt="Score breakdown preview"
+										class="preview-image"
+									/>
+								</button>
+								<button
+									type="button"
+									class="preview-image-btn"
+									aria-label="View vibes preview larger"
+									@click="
+										showLightbox(
+											apiUrl(previewData.vibesSvgUrl),
+											'Vibes preview',
+										)
+									"
+								>
+									<img
+										:src="apiUrl(previewData.vibesSvgUrl)"
+										alt="Vibes preview"
+										class="preview-image"
+									/>
+								</button>
 								<p class="webhook-status">
 									Notifies: {{ previewData.whoGetsNotified.emails }} email{{
 										previewData.whoGetsNotified.emails === 1 ? '' : 's'
@@ -3502,12 +3540,30 @@ small {
 	max-width: 40rem;
 }
 
+.preview-image-btn {
+	display: block;
+	width: 100%;
+	padding: 0;
+	margin: 0 0 1rem;
+	border: none;
+	background: transparent;
+	cursor: zoom-in;
+	border-radius: var(--radius);
+}
+
+.preview-image-btn:focus-visible {
+	outline: 2px solid var(--realm-accent);
+	outline-offset: 2px;
+}
+
 .preview-image {
 	width: 100%;
 	border-radius: var(--radius);
 	border: 1px solid var(--realm-border);
 	background: var(--realm-bg);
-	margin-bottom: 1rem;
+	margin-bottom: 0;
+	pointer-events: none;
+	display: block;
 }
 
 .show-deleted-toggle {

@@ -111,6 +111,10 @@ html[data-theme='light'] body {
 
 body.modal-open {
 	overflow: hidden;
+	/* iOS Safari: overflow alone often still scrolls; pin the document */
+	position: fixed;
+	inset: 0;
+	width: 100%;
 }
 
 .sr-only {

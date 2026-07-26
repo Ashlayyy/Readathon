@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { apiUrl } from '../lib/apiBase'
+import { useImageLightbox } from '../composables/useImageLightbox'
 
 const props = defineProps<{
 	name: string
 	avatarUrl?: string | null
 	size?: 'sm' | 'md' | 'lg'
 	color?: string | null
+	/** Enable click-to-zoom. Off by default (nav links wrap the avatar). */
+	zoomable?: boolean
 }>()
+
+const { show } = useImageLightbox()
 
 function resolveSrc(url: string | null | undefined): string | null {
 	if (!url?.trim()) return null
@@ -41,14 +46,30 @@ function onError() {
 	loading.value = false
 	src.value = null
 }
+
+function openZoom(e?: Event) {
+	if (!props.zoomable) return
+	if (!src.value || failed.value) return
+	e?.preventDefault()
+	e?.stopPropagation()
+	show(src.value, `${props.name}'s avatar`)
+}
 </script>
 
 <template>
 	<div
 		class="user-avatar"
-		:class="size ?? 'md'"
+		:class="[size ?? 'md', { zoomable: zoomable && src && !failed }]"
 		:style="{ '--c': color || 'var(--realm-border)' }"
-		:aria-hidden="true"
+		:aria-hidden="zoomable ? undefined : true"
+		:role="zoomable && src && !failed ? 'button' : undefined"
+		:tabindex="zoomable && src && !failed ? 0 : undefined"
+		:aria-label="
+			zoomable && src && !failed ? `View ${name}'s avatar` : undefined
+		"
+		@click="openZoom"
+		@keydown.enter.prevent="openZoom"
+		@keydown.space.prevent="openZoom"
 	>
 		<div v-if="loading && src && !failed" class="avatar-skeleton">
 			<span class="avatar-spinner" />
@@ -79,6 +100,15 @@ function onError() {
 	font-family: var(--font-display);
 }
 
+.user-avatar.zoomable {
+	cursor: zoom-in;
+}
+
+.user-avatar.zoomable:focus-visible {
+	outline: 2px solid var(--realm-accent);
+	outline-offset: 2px;
+}
+
 .user-avatar.sm {
 	width: 2rem;
 	height: 2rem;
@@ -103,6 +133,7 @@ function onError() {
 	object-fit: cover;
 	opacity: 0;
 	transition: opacity 0.2s ease;
+	pointer-events: none;
 }
 
 .user-avatar img.ready {

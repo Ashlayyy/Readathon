@@ -245,6 +245,7 @@ function onAvatarUpdated(avatarUrl: string | null) {
 						:avatar-url="reader.avatarUrl"
 						:color="reader.teamColor"
 						size="md"
+						zoomable
 					/>
 					<div class="identity">
 						<h1 class="page-title">{{ reader.displayName }}</h1>

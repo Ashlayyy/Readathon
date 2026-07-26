@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TeamStanding } from '../lib/api'
+import { useImageLightbox } from '../composables/useImageLightbox'
 
 defineProps<{
   standings: TeamStanding[]
@@ -9,6 +10,12 @@ defineProps<{
   publishedAt?: string | null
   title?: string
 }>()
+
+const { show } = useImageLightbox()
+
+function openStandingsImage(url: string) {
+  show(url, 'Realm standings chart')
+}
 
 function memberLabel(count: number) {
   return count === 1 ? '1 member' : `${count} members`
@@ -45,7 +52,14 @@ function standingsDetailLine(team: TeamStanding, index: number, standings: TeamS
     </p>
 
     <div v-if="imageUrl" class="img-wrap">
-      <img :src="imageUrl" alt="Realm standings chart" loading="lazy" decoding="async" />
+      <button
+        type="button"
+        class="img-zoom-btn"
+        aria-label="View standings chart larger"
+        @click="openStandingsImage(imageUrl)"
+      >
+        <img :src="imageUrl" alt="Realm standings chart" loading="lazy" decoding="async" />
+      </button>
     </div>
     <div v-else-if="svg" class="svg-wrap" v-html="svg" />
 
@@ -102,6 +116,22 @@ h2 {
   min-width: 0;
 }
 
+.img-zoom-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+  border-radius: 8px;
+}
+
+.img-zoom-btn:focus-visible {
+  outline: 2px solid var(--realm-accent);
+  outline-offset: 2px;
+}
+
 .img-wrap img {
   width: 100%;
   max-width: 100%;
@@ -111,6 +141,7 @@ h2 {
   /* Avoid browser “helpfully” smoothing vector/bitmaps when scaled */
   image-rendering: auto;
   -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .svg-wrap :deep(svg) {

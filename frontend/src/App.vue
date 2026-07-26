@@ -9,6 +9,8 @@ import { closeAllNavDropdowns } from './composables/useNavDropdown';
 import SiteNavDropdown from './components/SiteNavDropdown.vue';
 import ThemeSwitcher from './components/ThemeSwitcher.vue';
 import UserAvatar from './components/UserAvatar.vue';
+import ImageLightbox from './components/ImageLightbox.vue';
+import { useBodyScrollLock } from './composables/useBodyScrollLock';
 import { APP_VERSION } from './lib/version';
 
 function prefetchProfile() {
@@ -68,9 +70,7 @@ watch(
 	},
 );
 
-watch(menuOpen, (open) => {
-	document.body.classList.toggle('modal-open', open);
-});
+useBodyScrollLock(menuOpen);
 
 function onViewportResize() {
 	if (window.matchMedia('(min-width: 769px)').matches) {
@@ -84,7 +84,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
 	window.removeEventListener('resize', onViewportResize);
-	document.body.classList.remove('modal-open');
 });
 
 watch(config, (c) => {
@@ -397,6 +396,7 @@ function closeMenu() {
 				</RouterLink>
 			</div>
 		</footer>
+		<ImageLightbox />
 	</div>
 </template>
 

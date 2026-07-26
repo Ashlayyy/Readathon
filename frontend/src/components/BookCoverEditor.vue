@@ -146,7 +146,12 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 			aria-label="Change book cover"
 			@click.stop="openPicker"
 		>
-			<BookCover :title="title" :author="author" :cover-url="localCover" />
+			<BookCover
+				:title="title"
+				:author="author"
+				:cover-url="localCover"
+				:zoomable="false"
+			/>
 			<span class="cover-edit-hint">Change</span>
 		</button>
 		<BookCover v-else :title="title" :author="author" :cover-url="localCover" />

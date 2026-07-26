@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import type { StandingsBreakdown, MemberContribution } from '../lib/api';
 import ReaderLink from './ReaderLink.vue';
+import { useImageLightbox } from '../composables/useImageLightbox';
 
 const props = defineProps<{
 	breakdown: StandingsBreakdown;
@@ -10,6 +11,12 @@ const props = defineProps<{
 	imageUrl?: string | null;
 	title?: string;
 }>();
+
+const { show } = useImageLightbox();
+
+function openBreakdownImage(url: string) {
+	show(url, 'Score breakdown chart');
+}
 
 function sortMembers(members: MemberContribution[]) {
 	return [...members].sort((a, b) => {
@@ -44,12 +51,19 @@ const teams = computed(() =>
 		</header>
 
 		<div v-if="imageUrl" class="img-wrap">
-			<img
-				:src="imageUrl"
-				alt="Score breakdown chart"
-				loading="lazy"
-				decoding="async"
-			/>
+			<button
+				type="button"
+				class="img-zoom-btn"
+				aria-label="View score breakdown larger"
+				@click="openBreakdownImage(imageUrl)"
+			>
+				<img
+					:src="imageUrl"
+					alt="Score breakdown chart"
+					loading="lazy"
+					decoding="async"
+				/>
+			</button>
 		</div>
 		<div v-else-if="breakdownSvg" class="svg-wrap" v-html="breakdownSvg" />
 
@@ -134,6 +148,22 @@ header h2 {
 	min-width: 0;
 }
 
+.img-zoom-btn {
+	display: block;
+	width: 100%;
+	padding: 0;
+	margin: 0;
+	border: none;
+	background: transparent;
+	cursor: zoom-in;
+	border-radius: 8px;
+}
+
+.img-zoom-btn:focus-visible {
+	outline: 2px solid var(--realm-accent);
+	outline-offset: 2px;
+}
+
 .img-wrap img {
 	width: 100%;
 	max-width: 100%;
@@ -142,6 +172,7 @@ header h2 {
 	border-radius: 8px;
 	image-rendering: auto;
 	-webkit-user-drag: none;
+	pointer-events: none;
 }
 
 .svg-wrap :deep(svg) {

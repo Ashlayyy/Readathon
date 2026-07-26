@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { apiUrl } from '../lib/apiBase'
+import { useImageLightbox } from '../composables/useImageLightbox'
 
 const props = defineProps<{
 	title: string
 	author?: string
 	coverUrl?: string | null
 	size?: 'sm' | 'md' | 'lg'
+	/** When false, click does not open the lightbox (e.g. nested controls). Default true. */
+	zoomable?: boolean
 }>()
+
+const { show } = useImageLightbox()
 
 function resolveCoverSrc(url: string | null | undefined): string | null {
 	if (!url?.trim()) return null
@@ -40,13 +45,37 @@ function onError() {
 	loading.value = false
 	src.value = null
 }
+
+function openZoom(e?: Event) {
+	if (props.zoomable === false) return
+	if (!src.value || failed.value) return
+	e?.preventDefault()
+	e?.stopPropagation()
+	show(src.value, props.title ? `Cover of ${props.title}` : 'Book cover')
+}
 </script>
 
 <template>
 	<div
 		class="book-cover"
-		:class="[size ?? 'md', { loading: loading && src && !failed }]"
+		:class="[
+			size ?? 'md',
+			{
+				loading: loading && src && !failed,
+				zoomable: zoomable !== false && src && !failed,
+			},
+		]"
 		:aria-busy="loading && !!src && !failed"
+		:role="zoomable !== false && src && !failed ? 'button' : undefined"
+		:tabindex="zoomable !== false && src && !failed ? 0 : undefined"
+		:aria-label="
+			zoomable !== false && src && !failed
+				? `View cover of ${title}`
+				: undefined
+		"
+		@click="openZoom"
+		@keydown.enter.prevent="openZoom"
+		@keydown.space.prevent="openZoom"
 	>
 		<div v-if="loading && src && !failed" class="book-cover-skeleton" aria-hidden="true">
 			<span class="book-cover-spinner" />
@@ -80,6 +109,15 @@ function onError() {
 	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
+.book-cover.zoomable {
+	cursor: zoom-in;
+}
+
+.book-cover.zoomable:focus-visible {
+	outline: 2px solid var(--realm-accent);
+	outline-offset: 2px;
+}
+
 .book-cover.sm {
 	width: 40px;
 	height: 60px;
@@ -100,6 +138,7 @@ function onError() {
 	display: block;
 	opacity: 0;
 	transition: opacity 0.2s ease;
+	pointer-events: none;
 }
 
 .book-cover img.ready {

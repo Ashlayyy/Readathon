@@ -21,6 +21,8 @@ export const CHANGELOG: ChangelogEntry[] = [
 			'Fixed a few security issues and updated dependencies.',
 			'Account settings (notifications, currently reading, custom themes) now live behind the Settings control on your own profile.',
 			'This What’s new changelog on the home page.',
+			'You are also able to see the latest books which has been read, although you cannot see who read them.',
+			'',
 		],
 	},
 ];
