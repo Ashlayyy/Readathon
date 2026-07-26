@@ -81,4 +81,39 @@ describe('week utils', () => {
 		assert.equal(range.toInput, '2026-07-20')
 		assert.equal(toDateInputValue(range.toExclusive), '2026-07-21')
 	})
+
+	it('resolvePublishRange thisWeek spans the current ISO week', () => {
+		const now = new Date(2026, 6, 22, 12, 0, 0) // Wed Jul 22 2026
+		const range = resolvePublishRange({ preset: 'thisWeek', now })
+		assert.equal(range.preset, 'thisWeek')
+		assert.equal(range.fromInput, '2026-07-20')
+		assert.equal(range.toInput, '2026-07-26')
+		assert.match(range.label, /^This week/)
+	})
+
+	it('resolvePublishRange lastWeek is the prior ISO week', () => {
+		const now = new Date(2026, 6, 22, 12, 0, 0)
+		const range = resolvePublishRange({ preset: 'lastWeek', now })
+		assert.equal(range.preset, 'lastWeek')
+		assert.equal(range.fromInput, '2026-07-13')
+		assert.equal(range.toInput, '2026-07-19')
+		assert.match(range.label, /^Last week/)
+	})
+
+	it('resolvePublishRange last7 covers the trailing seven calendar days', () => {
+		const now = new Date(2026, 6, 22, 12, 0, 0)
+		const range = resolvePublishRange({ preset: 'last7', now })
+		assert.equal(range.preset, 'last7')
+		assert.equal(range.fromInput, '2026-07-16')
+		assert.equal(range.toInput, '2026-07-22')
+		assert.match(range.label, /^Last 7 days/)
+	})
+
+	it('resolvePublishRange falls back to default for unknown presets', () => {
+		const now = new Date(2026, 6, 20, 15, 0, 0)
+		const range = resolvePublishRange({ preset: 'unknown-preset', now })
+		assert.equal(range.preset, 'lastMonToThisMon')
+		assert.equal(range.fromInput, '2026-07-13')
+		assert.equal(range.toInput, '2026-07-20')
+	})
 })

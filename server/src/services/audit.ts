@@ -18,7 +18,8 @@ export type LogAuditInput = {
   detail?: unknown
 }
 
-function actorObjectId(actor: AuditActor): Types.ObjectId | null {
+/** @internal Exported for unit tests of actor id normalization. */
+export function actorObjectId(actor: AuditActor): Types.ObjectId | null {
   const raw = actor?._id
   if (raw == null) return null
   if (raw instanceof Types.ObjectId) return raw

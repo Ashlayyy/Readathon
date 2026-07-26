@@ -13,5 +13,10 @@ function readRootPackageVersion(): string {
   }
 }
 
+/** Resolve app version from env (override) or root package.json. */
+export function resolveAppVersion(env: NodeJS.ProcessEnv = process.env): string {
+  return env.APP_VERSION?.trim() || readRootPackageVersion()
+}
+
 /** App version for health checks and deploy verification. Override with APP_VERSION. */
-export const APP_VERSION = process.env.APP_VERSION?.trim() || readRootPackageVersion()
+export const APP_VERSION = resolveAppVersion()

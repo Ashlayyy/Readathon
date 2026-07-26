@@ -73,4 +73,58 @@ describe('buildPaceSeries', () => {
 			null,
 		)
 	})
+
+	it('uses createdAt when finishedAt is missing', () => {
+		const points = buildPaceSeries([
+			{
+				bookTitle: 'Logged',
+				pageCount: 200,
+				startedAt: '2026-07-01',
+				createdAt: new Date('2026-07-10T18:00:00Z'),
+			},
+		])
+		assert.equal(points.length, 1)
+		assert.equal(points[0]!.at, '2026-07-10')
+	})
+
+	it('skips books with no finish date and null pagesPerDay for bad ranges', () => {
+		const points = buildPaceSeries([
+			{ bookTitle: 'No dates', pageCount: 100 },
+			{
+				bookTitle: 'Reversed',
+				pageCount: 100,
+				startedAt: '2026-07-10',
+				finishedAt: '2026-07-01',
+			},
+			{
+				bookTitle: 'Zero pages',
+				pageCount: 0,
+				startedAt: '2026-07-01',
+				finishedAt: '2026-07-05',
+			},
+		])
+		assert.equal(points.length, 2)
+		assert.equal(points[0]!.pagesPerDay, null)
+		assert.equal(points[1]!.pagesPerDay, null)
+	})
+
+	it('draws a flat sparkline when all pace values match', () => {
+		const points = buildPaceSeries([
+			{
+				bookTitle: 'A',
+				pageCount: 100,
+				startedAt: '2026-07-01',
+				finishedAt: '2026-07-05',
+			},
+			{
+				bookTitle: 'B',
+				pageCount: 100,
+				startedAt: '2026-07-06',
+				finishedAt: '2026-07-10',
+			},
+		])
+		const path = paceSparklinePath(points)
+		assert.ok(path)
+		assert.match(path!, /^M[\d.]+ [\d.]+ L/)
+	})
 })
