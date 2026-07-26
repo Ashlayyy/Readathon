@@ -85,7 +85,11 @@ async function postWebhookImage(
 
   const form = new FormData()
   form.append('payload_json', payloadJson)
-  form.append('files[0]', new File([png], filename, { type: 'image/png' }))
+  form.append(
+    'files[0]',
+    new Blob([Uint8Array.from(png)], { type: 'image/png' }),
+    filename,
+  )
 
   const res = await fetch(webhookUrlWithWait(webhookUrl), {
     method: 'POST',

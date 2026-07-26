@@ -23,7 +23,7 @@ describe('withActive', () => {
 	})
 
 	it('overwrites a caller-provided deletedAt', () => {
-		assert.deepEqual(withActive({ deletedAt: new Date() } as Record<string, unknown>), {
+		assert.deepEqual(withActive({ deletedAt: new Date() }), {
 			deletedAt: null,
 		})
 	})
