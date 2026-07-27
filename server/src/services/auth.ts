@@ -5,7 +5,6 @@ import type { Context } from 'hono';
 import { type HydratedDocument } from 'mongoose';
 import { AuthToken } from '../db/models/AuthToken.js';
 import { type IUser, User } from '../db/models/User.js';
-import { getStaticConfig } from '../config.js';
 import { apiPublicUrl } from '../lib/urls.js';
 import { getTeamById } from './prompts.js';
 import { generateToken, hashToken, sendMagicLink } from './email.js';
@@ -265,23 +264,3 @@ export async function findOrCreateGoogleUser(
 	return user;
 }
 
-export async function assignTeamsRandomly(): Promise<{ assigned: number }> {
-	const pending = await User.find({ status: 'pending' });
-	if (pending.length === 0) return { assigned: 0 };
-
-	const teamIds = getStaticConfig().teams.map((t) => t.id);
-	if (teamIds.length === 0) return { assigned: 0 };
-
-	const shuffled = [...pending].sort(() => Math.random() - 0.5);
-
-	await Promise.all(
-		shuffled.map((user, i) =>
-			User.findByIdAndUpdate(user._id, {
-				teamId: teamIds[i % teamIds.length],
-				status: 'assigned',
-			}),
-		),
-	);
-
-	return { assigned: shuffled.length };
-}

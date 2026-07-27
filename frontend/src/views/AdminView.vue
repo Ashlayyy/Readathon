@@ -23,6 +23,7 @@ import AdminStatsPanel from '../components/AdminStatsPanel.vue';
 import AdminSettingsPanel from '../components/AdminSettingsPanel.vue';
 import AdminAddSubmissionModal from '../components/AdminAddSubmissionModal.vue';
 import AdminCoverSearchModal from '../components/AdminCoverSearchModal.vue';
+import AdminAssignTeamsModal from '../components/AdminAssignTeamsModal.vue';
 import ReaderLink from '../components/ReaderLink.vue';
 import { useConfig } from '../composables/useConfig';
 import { useCopy } from '../composables/useCopy';
@@ -430,6 +431,9 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
 	'settings.updated': 'Settings updated',
 	'settings.downtime_toggled': 'Downtime toggled',
 	'user.team_assigned': 'Team assigned',
+	'teams.randomized': 'Teams randomized',
+	'teams.set_saved': 'Team set saved',
+	'teams.set_applied': 'Team set applied',
 	'submission.soft_deleted': 'Submission deleted',
 	'submission.restored': 'Submission restored',
 	'standings.published': 'Standings published',
@@ -768,20 +772,23 @@ function showMessage(msg: string, isError = false) {
 	messageIsError.value = isError && !!msg;
 }
 
-async function assignTeams() {
-	loading.value = 'assign';
+const assignTeamsOpen = ref(false);
+
+const canOpenAssignPreview = computed(() => {
+	if (!usersLoaded.value) return stats.value.totalUsers > 0;
+	return users.value.some(
+		(u) => u.status === 'pending' || u.status === 'assigned',
+	);
+});
+
+function openAssignTeamsPreview() {
 	showMessage('');
-	try {
-		const result = await api<{ assigned: number }>('/admin/assign-teams', {
-			method: 'POST',
-		});
-		showMessage(msg('assignedTeams', { count: result.assigned }));
-		await Promise.all([loadUsers(true), loadStats()]);
-	} catch (e) {
-		showMessage(e instanceof Error ? e.message : msg('assignFailed'), true);
-	} finally {
-		loading.value = '';
-	}
+	assignTeamsOpen.value = true;
+}
+
+async function onAssignTeamsApplied(assigned: number) {
+	showMessage(msg('assignedTeams', { count: assigned }));
+	await Promise.all([loadUsers(true), loadStats()]);
 }
 
 async function setUserTeam(userId: string, teamId: string) {
@@ -1475,17 +1482,24 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						<p class="stat-line">
 							{{ t(section('teams').assignmentLead, { pending }) }}
 						</p>
+						<p class="section-desc">
+							{{
+								section('teams').assignmentHint ??
+								'Preview a balanced shuffle before applying. Works even when everyone already has a team.'
+							}}
+						</p>
 						<button
 							class="btn btn-primary"
-							:disabled="loading === 'assign' || pending === 0"
-							@click="assignTeams"
+							:disabled="!canOpenAssignPreview"
+							@click="openAssignTeamsPreview"
 						>
-							{{
-								loading === 'assign'
-									? section('teams').assigning
-									: section('teams').assignTeams
-							}}
+							{{ section('teams').assignTeams }}
 						</button>
+						<AdminAssignTeamsModal
+							v-model:open="assignTeamsOpen"
+							@applied="onAssignTeamsApplied"
+							@error="(m) => showMessage(m, true)"
+						/>
 					</section>
 
 					<section class="card admin-section">

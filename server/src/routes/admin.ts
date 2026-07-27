@@ -10,7 +10,6 @@ import { withActive } from '../db/activeSubmission.js'
 import { User } from '../db/models/User.js'
 import { logAudit, listAuditLog } from '../services/audit.js'
 import {
-  assignTeamsRandomly,
   createUserByAdmin,
   getSessionUser,
   requireAdmin,
@@ -18,6 +17,16 @@ import {
   userToPublic,
   AuthError,
 } from '../services/auth.js'
+import {
+  applyAssignmentSet,
+  applyTeamAssignments,
+  clearAssignmentSet,
+  enrichFromProposedAssignments,
+  listAssignmentSets,
+  previewAssignmentSet,
+  previewTeamAssignments,
+  saveAssignmentSet,
+} from '../services/teamAssignment.js'
 import {
   calculateScore,
   calculateStandings,
@@ -198,8 +207,110 @@ adminRoutes.post('/discord/test-role-ping', async (c) => {
   return c.json({ ok: true, roleId: result.roleId })
 })
 
+adminRoutes.post('/assign-teams/preview', async (c) => {
+  let includeAdmins = false
+  try {
+    const body = await c.req.json<{ includeAdmins?: boolean }>()
+    includeAdmins = Boolean(body?.includeAdmins)
+  } catch {
+    /* empty body ok */
+  }
+  const result = await previewTeamAssignments(includeAdmins)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json(result)
+})
+
+adminRoutes.post('/assign-teams/enrich', async (c) => {
+  const body = await c.req.json<{
+    assignments?: { userId: string; teamId: string }[]
+  }>()
+  const result = await enrichFromProposedAssignments(body.assignments ?? [])
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json(result)
+})
+
+adminRoutes.get('/assign-teams/sets', async (c) => {
+  const sets = await listAssignmentSets()
+  return c.json({ sets })
+})
+
+adminRoutes.put('/assign-teams/sets/:slot', async (c) => {
+  const slot = Number(c.req.param('slot'))
+  const body = await c.req.json<{
+    label?: string
+    includeAdmins?: boolean
+    assignments?: { userId: string; teamId: string }[]
+  }>()
+  const result = await saveAssignmentSet(slot, {
+    label: body.label,
+    includeAdmins: body.includeAdmins,
+    assignments: body.assignments ?? [],
+  })
+  if ('error' in result) return c.json({ error: result.error }, 400)
+
+  const admin = requireAdmin(await getSessionUser(c))
+  await logAudit({
+    actor: admin,
+    action: 'teams.set_saved',
+    detail: { slot, count: result.count, label: result.label },
+  })
+  return c.json({ set: result })
+})
+
+adminRoutes.delete('/assign-teams/sets/:slot', async (c) => {
+  const slot = Number(c.req.param('slot'))
+  const result = await clearAssignmentSet(slot)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json({ set: result })
+})
+
+adminRoutes.post('/assign-teams/sets/:slot/preview', async (c) => {
+  const slot = Number(c.req.param('slot'))
+  const result = await previewAssignmentSet(slot)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json(result)
+})
+
+adminRoutes.post('/assign-teams/sets/:slot/apply', async (c) => {
+  const slot = Number(c.req.param('slot'))
+  const result = await applyAssignmentSet(slot)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+
+  const admin = requireAdmin(await getSessionUser(c))
+  await logAudit({
+    actor: admin,
+    action: 'teams.set_applied',
+    detail: { slot, assigned: result.assigned },
+  })
+  return c.json(result)
+})
+
 adminRoutes.post('/assign-teams', async (c) => {
-  const result = await assignTeamsRandomly()
+  const body = await c.req.json<{
+    assignments?: { userId: string; teamId: string }[]
+    includeAdmins?: boolean
+  }>()
+
+  // Legacy: no body assignments → pending-only one-shot (non-admins).
+  if (!body?.assignments) {
+    const { assignTeamsRandomly } = await import('../services/teamAssignment.js')
+    const result = await assignTeamsRandomly()
+    return c.json(result)
+  }
+
+  const result = await applyTeamAssignments(body.assignments)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+
+  const admin = requireAdmin(await getSessionUser(c))
+  await logAudit({
+    actor: admin,
+    action: 'teams.randomized',
+    detail: {
+      assigned: result.assigned,
+      includeAdmins: Boolean(body.includeAdmins),
+    },
+  })
+
   return c.json(result)
 })
 
