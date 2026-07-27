@@ -1,4 +1,4 @@
-import { type HydratedDocument } from 'mongoose'
+import { Types, type HydratedDocument } from 'mongoose'
 import { AuditLog } from '../db/models/AuditLog.js'
 import { type IUser } from '../db/models/User.js'
 
@@ -18,11 +18,21 @@ export type LogAuditInput = {
   detail?: unknown
 }
 
+function actorObjectId(actor: AuditActor): Types.ObjectId | null {
+  const raw = actor?._id
+  if (raw == null) return null
+  if (raw instanceof Types.ObjectId) return raw
+  if (typeof raw === 'string' && Types.ObjectId.isValid(raw)) {
+    return new Types.ObjectId(raw)
+  }
+  return null
+}
+
 /** Best-effort audit trail write - never throws, so a logging failure can't break the admin action it describes. */
 export async function logAudit(input: LogAuditInput): Promise<void> {
   try {
     await AuditLog.create({
-      actorId: input.actor?._id ?? null,
+      actorId: actorObjectId(input.actor),
       actorName: input.actor?.displayName ?? 'Unknown',
       action: input.action,
       entityType: input.entityType ?? null,
