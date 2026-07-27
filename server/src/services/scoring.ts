@@ -222,20 +222,33 @@ export type TeamStanding = {
 	icon: string;
 };
 
-export async function calculateStandings(): Promise<TeamStanding[]> {
+/**
+ * @param teamByUserId optional override map (userId → teamId) for hypothetical previews
+ */
+export async function calculateStandings(
+	teamByUserId?: Map<string, string>,
+): Promise<TeamStanding[]> {
 	const config = getConfigWithPrompts();
 
-	const assignedUsers = await User.find({
-		status: 'assigned',
-		teamId: { $ne: null },
-	});
 	const memberCounts = new Map<string, number>();
 	const userTeamMap = new Map<string, string>();
 
-	for (const u of assignedUsers) {
-		if (u.teamId) {
-			memberCounts.set(u.teamId, (memberCounts.get(u.teamId) ?? 0) + 1);
-			userTeamMap.set(u._id.toString(), u.teamId);
+	if (teamByUserId) {
+		for (const [userId, teamId] of teamByUserId) {
+			if (!teamId) continue;
+			userTeamMap.set(userId, teamId);
+			memberCounts.set(teamId, (memberCounts.get(teamId) ?? 0) + 1);
+		}
+	} else {
+		const assignedUsers = await User.find({
+			status: 'assigned',
+			teamId: { $ne: null },
+		});
+		for (const u of assignedUsers) {
+			if (u.teamId) {
+				memberCounts.set(u.teamId, (memberCounts.get(u.teamId) ?? 0) + 1);
+				userTeamMap.set(u._id.toString(), u.teamId);
+			}
 		}
 	}
 

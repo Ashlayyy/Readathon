@@ -33,16 +33,43 @@ export type StandingsBreakdown = {
   teams: TeamBreakdown[]
 }
 
-export async function calculateStandingsBreakdown(): Promise<StandingsBreakdown> {
+/**
+ * @param teamByUserId optional override map (userId → teamId) for hypothetical previews
+ */
+export async function calculateStandingsBreakdown(
+  teamByUserId?: Map<string, string>,
+): Promise<StandingsBreakdown> {
   const config = getConfigWithPrompts()
-  const assignedUsers = await User.find({ status: 'assigned', teamId: { $ne: null } })
   const userTeamMap = new Map<string, string>()
   const userNameMap = new Map<string, string>()
 
-  for (const u of assignedUsers) {
-    if (!u.teamId) continue
-    userTeamMap.set(u._id.toString(), u.teamId)
-    userNameMap.set(u._id.toString(), u.displayName)
+  let memberUserIds: string[]
+
+  if (teamByUserId) {
+    for (const [userId, teamId] of teamByUserId) {
+      if (!teamId) continue
+      userTeamMap.set(userId, teamId)
+    }
+    memberUserIds = [...userTeamMap.keys()]
+    if (memberUserIds.length > 0) {
+      const named = await User.find({ _id: { $in: memberUserIds } }).select(
+        'displayName',
+      )
+      for (const u of named) {
+        userNameMap.set(u._id.toString(), u.displayName)
+      }
+    }
+  } else {
+    const assignedUsers = await User.find({
+      status: 'assigned',
+      teamId: { $ne: null },
+    })
+    for (const u of assignedUsers) {
+      if (!u.teamId) continue
+      userTeamMap.set(u._id.toString(), u.teamId)
+      userNameMap.set(u._id.toString(), u.displayName)
+    }
+    memberUserIds = [...userTeamMap.keys()]
   }
 
   const memberStats = new Map<
@@ -50,8 +77,8 @@ export async function calculateStandingsBreakdown(): Promise<StandingsBreakdown>
     { xpGained: number; xpDealt: number; addCount: number; sabotageCount: number }
   >()
 
-  for (const u of assignedUsers) {
-    memberStats.set(u._id.toString(), {
+  for (const userId of memberUserIds) {
+    memberStats.set(userId, {
       xpGained: 0,
       xpDealt: 0,
       addCount: 0,
@@ -101,14 +128,13 @@ export async function calculateStandingsBreakdown(): Promise<StandingsBreakdown>
   }
 
   const teams: TeamBreakdown[] = config.teams.map((team) => {
-    const members = assignedUsers
-      .filter((u) => u.teamId === team.id)
-      .map((u) => {
-        const id = u._id.toString()
+    const members = memberUserIds
+      .filter((id) => userTeamMap.get(id) === team.id)
+      .map((id) => {
         const s = memberStats.get(id)!
         return {
           userId: id,
-          displayName: u.displayName,
+          displayName: userNameMap.get(id) ?? 'Unknown',
           xpGained: s.xpGained,
           xpDealt: s.xpDealt,
           addCount: s.addCount,
