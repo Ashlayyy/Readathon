@@ -55,6 +55,7 @@ export async function sendLiveStandingsToDiscord(opts: {
   channel: DiscordWebhookChannel
   includeMonthlyWrap?: boolean
   withPing?: boolean
+  guildId?: string | null
 }): Promise<{ sent: boolean; error?: string }> {
   const images = await buildLiveStandingsImages()
   let monthlyWrapSvg: string | undefined
@@ -74,5 +75,6 @@ export async function sendLiveStandingsToDiscord(opts: {
     withPing: opts.withPing ?? false,
     monthlyWrapSvg,
     monthlyWrapLabel,
+    guildId: opts.guildId,
   })
 }

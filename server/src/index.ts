@@ -23,6 +23,11 @@ import { enrichActiveMonthlyEvent } from './services/monthlyThemeExtras.js';
 import { PublishedStandings } from './db/models/PublishedStandings.js';
 import { startScheduledPublishChecker } from './services/scheduledPublish.js';
 import {
+	startDiscordGateway,
+	stopDiscordGateway,
+	wireDiscordGatewaySettingsHook,
+} from './discord/gateway.js';
+import {
 	metricsContentType,
 	renderMetrics,
 	setAppVersion,
@@ -332,6 +337,9 @@ async function main() {
 	await connectDb();
 	await Promise.all([refreshPromptsCache(), refreshSiteSettingsCache()]);
 
+	wireDiscordGatewaySettingsHook();
+	await startDiscordGateway();
+
 	// Checks every 60s whether it's time for the weekly (default Monday) scheduled publish.
 	startScheduledPublishChecker();
 	startMetricsGaugeRefresh();
@@ -360,7 +368,11 @@ async function main() {
 
 async function gracefulShutdown(signal: string) {
 	log.info(`Shutting down (${signal})…`);
-	await Promise.allSettled([shutdownPostHog(), flushBetterStackLogs()]);
+	await Promise.allSettled([
+		stopDiscordGateway(),
+		shutdownPostHog(),
+		flushBetterStackLogs(),
+	]);
 	process.exit(0);
 }
 

@@ -178,6 +178,22 @@ export type SeasonArchive = {
   publishedStandingsIds: string[]
 } | null
 
+export type DiscordGuildConfig = {
+  guildId: string
+  name: string
+  testDeliveryMode: 'webhook' | 'bot'
+  productionDeliveryMode: 'webhook' | 'bot'
+  testWebhookUrl: string
+  testRoleId: string
+  productionWebhookUrl: string
+  productionRoleId: string
+  testChannelId: string
+  productionChannelId: string
+  botCommandRoleIds: string[]
+  teamChatWebhookUrls: Record<string, string>
+  teamChatChannelIds: Record<string, string>
+}
+
 export type AdminSiteSettings = {
   showTeamRosters: boolean
   downtimeMode: boolean
@@ -189,9 +205,31 @@ export type AdminSiteSettings = {
   discordTestRoleId: string
   discordProductionWebhookUrl: string
   discordProductionRoleId: string
+  /** @deprecated Prefer discordTestDeliveryMode / discordProductionDeliveryMode */
+  discordDeliveryMode: 'webhook' | 'bot'
+  discordTestDeliveryMode: 'webhook' | 'bot'
+  discordProductionDeliveryMode: 'webhook' | 'bot'
+  /** True when an encrypted bot token is stored (plaintext never returned). */
+  discordBotTokenConfigured: boolean
+  /** Primary guild for auto-publish / realm chat */
+  discordPrimaryGuildId: string
+  /** Per-server Discord destinations */
+  discordGuildConfigs: Record<string, DiscordGuildConfig>
+  /** Cached Discord servers the bot is in (from last refresh) */
+  discordBotGuildsCache: {
+    guilds: Array<{ id: string; name: string }>
+    fetchedAt: string
+  } | null
+  /** @deprecated Alias of primary guild */
+  discordGuildId: string
+  discordTestChannelId: string
+  discordProductionChannelId: string
+  discordBotCommandRoleIds: string[]
   teamChatHooksEnabled: boolean
-  /** teamId -> Discord webhook URL */
+  /** teamId -> Discord webhook URL (legacy) */
   teamChatWebhookUrls: Record<string, string>
+  /** teamId -> Discord channel ID (bot mode) */
+  teamChatChannelIds: Record<string, string>
   /** Realm chat Discord message templates (add logs) */
   teamChatAddTemplates: string[]
   /** Realm chat Discord message templates (sabotage logs) */

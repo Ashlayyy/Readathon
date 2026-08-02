@@ -109,13 +109,43 @@ type AdminAnalytics = {
 };
 
 type Preset = 'all' | 'thisWeek' | 'lastWeek' | 'last7' | 'last30' | 'custom';
-type SortDir = 'asc' | 'desc';
+type SortDir = 'asc' | 'desc'
+type StatsView = 'overview' | 'people' | 'teams' | 'books' | 'prompts' | 'site'
+
+const STATS_VIEWS: { id: StatsView; label: string; hint: string }[] = [
+	{ id: 'overview', label: 'Overview', hint: 'Headline numbers & charts' },
+	{ id: 'people', label: 'People', hint: 'Readers & saboteurs' },
+	{ id: 'teams', label: 'Realms', hint: 'Teams, dogpiles & rivalries' },
+	{ id: 'books', label: 'Books', hint: 'Titles, authors & pace' },
+	{ id: 'prompts', label: 'Prompts', hint: 'What people claim' },
+	{ id: 'site', label: 'Site', hint: 'Ops & Discord health' },
+]
+
+type SiteHealth = {
+	totalUsers: number
+	pending: number
+	assigned: number
+	submissions: number
+	unreadQuestions: number
+	downtimeMode: boolean
+	teamChatHooksEnabled: boolean
+	discordBotTokenConfigured: boolean
+	discordGuildId: string
+	discordTestDeliveryMode: string
+	discordProductionDeliveryMode: string
+	commandRoleCount: number
+	gatewayReady: boolean
+	gatewayUser: string | null
+}
 
 const emit = defineEmits<{ message: [text: string, isError?: boolean] }>();
 const { section } = useAdminCopy();
 const { config, loadConfig } = useConfig();
 
 const copy = computed(() => section('stats'));
+const activeView = ref<StatsView>('overview');
+const siteHealth = ref<SiteHealth | null>(null);
+const siteHealthLoading = ref(false);
 
 const PRESET_OPTIONS: { id: Preset; label: string }[] = [
 	{ id: 'all', label: 'All time' },
@@ -141,6 +171,66 @@ const fromDate = ref('');
 const toDate = ref('');
 const teamId = ref('');
 
+async function loadSiteHealth() {
+	siteHealthLoading.value = true
+	try {
+		const [stats, settingsRes, gateway] = await Promise.all([
+			api<{
+				totalUsers: number
+				pending: number
+				assigned: number
+				submissions: number
+				unreadQuestions: number
+			}>('/admin/stats'),
+			api<{
+				settings: {
+					downtimeMode?: boolean
+					teamChatHooksEnabled?: boolean
+					discordBotTokenConfigured?: boolean
+					discordGuildId?: string
+					discordTestDeliveryMode?: string
+					discordProductionDeliveryMode?: string
+					discordDeliveryMode?: string
+					discordBotCommandRoleIds?: string[]
+				}
+			}>('/admin/settings'),
+			api<{ ready: boolean; user: string | null }>('/admin/discord/gateway-status'),
+		])
+		const s = settingsRes.settings
+		siteHealth.value = {
+			totalUsers: stats.totalUsers,
+			pending: stats.pending,
+			assigned: stats.assigned,
+			submissions: stats.submissions,
+			unreadQuestions: stats.unreadQuestions,
+			downtimeMode: Boolean(s.downtimeMode),
+			teamChatHooksEnabled: Boolean(s.teamChatHooksEnabled),
+			discordBotTokenConfigured: Boolean(s.discordBotTokenConfigured),
+			discordGuildId: s.discordGuildId ?? '',
+			discordTestDeliveryMode:
+				s.discordTestDeliveryMode ?? s.discordDeliveryMode ?? 'webhook',
+			discordProductionDeliveryMode:
+				s.discordProductionDeliveryMode ?? s.discordDeliveryMode ?? 'webhook',
+			commandRoleCount: s.discordBotCommandRoleIds?.length ?? 0,
+			gatewayReady: Boolean(gateway.ready),
+			gatewayUser: gateway.user,
+		}
+	} catch (e) {
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Failed to load site health.',
+			true,
+		)
+	} finally {
+		siteHealthLoading.value = false
+	}
+}
+
+function setView(view: StatsView) {
+	activeView.value = view
+	if (view === 'site' && !siteHealth.value) void loadSiteHealth()
+}
+
 async function load() {
 	loading.value = true;
 	try {
@@ -156,6 +246,7 @@ async function load() {
 		);
 		analytics.value = data.analytics;
 		loaded.value = true;
+		if (activeView.value === 'site') void loadSiteHealth()
 	} catch (e) {
 		emit('message', e instanceof Error ? e.message : 'Failed to load analytics.', true);
 	} finally {
@@ -408,7 +499,7 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				<p class="section-desc">
 					{{
 						copy.lead ??
-						'Submissions, teams, and readers at a glance. Filter by date range or realm, then click any column header to sort.'
+						'Pick a view below — Overview, People, Realms, Books, Prompts, or Site. Filter by date or realm, then sort any table column.'
 					}}
 				</p>
 				<p v-if="analytics" class="range-label">{{ analytics.range.label }}</p>
@@ -469,6 +560,24 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 			</div>
 		</div>
 
+
+		<nav class="stats-views card" role="tablist" aria-label="Stats views">
+			<button
+				v-for="v in STATS_VIEWS"
+				:key="v.id"
+				type="button"
+				role="tab"
+				class="stats-view-tab"
+				:class="{ active: activeView === v.id }"
+				:aria-selected="activeView === v.id"
+				:title="v.hint"
+				@click="setView(v.id)"
+			>
+				<span class="stats-view-label">{{ v.label }}</span>
+				<span class="stats-view-hint">{{ v.hint }}</span>
+			</button>
+		</nav>
+
 		<div v-if="loading && !loaded" class="page-state card">
 			<div class="page-spinner" role="status" aria-label="Loading" />
 			<p>{{ copy.loading ?? 'Loading analytics…' }}</p>
@@ -479,6 +588,7 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 		</div>
 
 		<template v-else>
+			<div v-show="activeView === 'overview'" class="stats-view-panel">
 			<!-- Overview -->
 			<div class="stat-cards">
 				<article class="stat-card card">
@@ -649,6 +759,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				</article>
 			</div>
 
+			</div>
+
+			<div v-show="activeView === 'teams'" class="stats-view-panel">
 			<!-- Team overview -->
 			<article class="card table-card">
 				<h3>Team overview</h3>
@@ -794,6 +907,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				</div>
 			</article>
 
+			</div>
+
+			<div v-show="activeView === 'people'" class="stats-view-panel">
 			<!-- Warmongers -->
 			<article class="card table-card">
 				<h3>Top saboteurs</h3>
@@ -939,6 +1055,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				</div>
 			</article>
 
+			</div>
+
+			<div v-show="activeView === 'prompts'" class="stats-view-panel">
 			<!-- Prompts -->
 			<article class="card table-card">
 				<h3>Prompt usage</h3>
@@ -993,6 +1112,9 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 				</template>
 			</article>
 
+			</div>
+
+			<div v-show="activeView === 'books'" class="stats-view-panel">
 			<!-- Authors -->
 			<article class="card table-card">
 				<h3>Top authors</h3>
@@ -1334,11 +1456,123 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 					</table>
 				</div>
 			</article>
+
+			</div>
+
+			<div v-show="activeView === 'site'" class="stats-view-panel">
+				<div class="stat-cards">
+					<article class="stat-card card">
+						<p class="stat-kicker">Site status</p>
+						<strong>{{ siteHealth?.downtimeMode ? 'Downtime' : 'Live' }}</strong>
+						<span>{{ siteHealth?.teamChatHooksEnabled ? 'Realm chat on' : 'Realm chat off' }}</span>
+					</article>
+					<article class="stat-card card">
+						<p class="stat-kicker">Users</p>
+						<strong>{{ siteHealth?.assigned ?? '—' }}</strong>
+						<span>{{ siteHealth?.pending ?? 0 }} pending · {{ siteHealth?.totalUsers ?? 0 }} total</span>
+					</article>
+					<article class="stat-card card">
+						<p class="stat-kicker">Submissions</p>
+						<strong>{{ siteHealth?.submissions ?? '—' }}</strong>
+						<span>all-time logs</span>
+					</article>
+					<article class="stat-card card">
+						<p class="stat-kicker">Unread inbox</p>
+						<strong>{{ siteHealth?.unreadQuestions ?? '—' }}</strong>
+						<span>questions waiting</span>
+					</article>
+					<article class="stat-card card" :class="{ chaos: !siteHealth?.gatewayReady }">
+						<p class="stat-kicker">Discord gateway</p>
+						<strong>{{ siteHealthLoading ? '…' : siteHealth?.gatewayReady ? 'Online' : 'Offline' }}</strong>
+						<span>{{ siteHealth?.gatewayUser || 'No bot connected' }}</span>
+					</article>
+					<article class="stat-card card">
+						<p class="stat-kicker">Bot token</p>
+						<strong>{{ siteHealth?.discordBotTokenConfigured ? 'Configured' : 'Missing' }}</strong>
+						<span>{{ siteHealth?.commandRoleCount ?? 0 }} command role(s)</span>
+					</article>
+					<article class="stat-card card">
+						<p class="stat-kicker">Test delivery</p>
+						<strong>{{ siteHealth?.discordTestDeliveryMode ?? '—' }}</strong>
+						<span>standings test channel</span>
+					</article>
+					<article class="stat-card card">
+						<p class="stat-kicker">Prod delivery</p>
+						<strong>{{ siteHealth?.discordProductionDeliveryMode ?? '—' }}</strong>
+						<span>guild {{ siteHealth?.discordGuildId || '—' }}</span>
+					</article>
+				</div>
+				<article class="card table-card">
+					<h3>Site health</h3>
+					<p class="chart-lead">
+						Ops snapshot for Discord and the admin surface. Refresh after changing Settings.
+					</p>
+					<div class="btn-row" style="margin-top: 0.75rem">
+						<button
+							type="button"
+							class="btn btn-secondary btn-sm"
+							:disabled="siteHealthLoading"
+							@click="loadSiteHealth"
+						>
+							{{ siteHealthLoading ? 'Refreshing…' : 'Refresh site health' }}
+						</button>
+					</div>
+				</article>
+			</div>
 		</template>
 	</section>
 </template>
 
 <style scoped>
+
+.stats-views {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+	gap: 0.5rem;
+	padding: 0.65rem;
+	margin-bottom: 1rem;
+}
+
+.stats-view-tab {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.15rem;
+	padding: 0.65rem 0.75rem;
+	border-radius: var(--radius);
+	border: 1px solid var(--realm-border);
+	background: color-mix(in srgb, var(--realm-bg) 65%, transparent);
+	color: var(--realm-text);
+	cursor: pointer;
+	text-align: left;
+}
+
+.stats-view-tab:hover {
+	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+}
+
+.stats-view-tab.active {
+	border-color: var(--realm-accent);
+	background: color-mix(in srgb, var(--realm-accent) 14%, var(--realm-bg));
+}
+
+.stats-view-label {
+	font-weight: 700;
+	font-size: 0.95rem;
+}
+
+.stats-view-hint {
+	font-size: 0.75rem;
+	color: var(--realm-text-muted);
+	line-height: 1.3;
+}
+
+.stats-view-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 1rem;
+}
+
 .stats-header {
 	display: flex;
 	flex-wrap: wrap;

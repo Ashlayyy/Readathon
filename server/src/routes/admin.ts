@@ -43,6 +43,7 @@ import {
   getDiscordRoleId,
   getSiteSettingsAdminSync,
   updateSiteSettings,
+  type SiteSettingsAdminPatch,
 } from '../services/siteSettings.js'
 import { publishStandings } from '../services/standingsPublish.js'
 import { buildStandingsDigestDraft } from '../services/standingsDigest.js'
@@ -50,6 +51,10 @@ import {
   sendDiscordChannelMessage,
   sendDiscordMonthlyWrap,
 } from '../services/discord.js'
+import {
+  listGuildRoles,
+  verifyDiscordRole,
+} from '../services/discordRoleVerify.js'
 import { sendLiveStandingsToDiscord } from '../services/standingsDiscordPreview.js'
 import { buildMonthlyWrapSvg } from '../services/monthlyWrap.js'
 import { submissionsCreatedTotal } from '../services/metrics.js'
@@ -192,26 +197,7 @@ adminRoutes.post('/monthly-themes/resolve-reader', async (c) => {
 
 adminRoutes.patch('/settings', async (c) => {
   const admin = requireAdmin(await getSessionUser(c))
-  const body = await c.req.json<{
-    showTeamRosters?: boolean
-    downtimeMode?: boolean
-    discordWebhookUrl?: string
-    discordRoleId?: string
-    discordTestWebhookUrl?: string
-    discordTestRoleId?: string
-    discordProductionWebhookUrl?: string
-    discordProductionRoleId?: string
-    teamChatHooksEnabled?: boolean
-    teamChatWebhookUrls?: Record<string, string>
-    teamChatAddTemplates?: string[]
-    teamChatSabotageTemplates?: string[]
-    scheduledPublishEnabled?: boolean
-    scheduledPublishDay?: number
-    scheduledPublishHour?: number
-    scheduledPublishTimezone?: string
-    monthlyEvents?: unknown
-    monthlyWrapOnPublish?: boolean
-  }>()
+  const body = await c.req.json<SiteSettingsAdminPatch>()
   try {
     const before = getSiteSettingsAdminSync()
     const settings = await updateSiteSettings(body)
@@ -244,6 +230,11 @@ adminRoutes.patch('/settings', async (c) => {
       e instanceof Error &&
       (e.message === 'Invalid Discord role ID' ||
         e.message.startsWith('Invalid Discord role ID') ||
+        e.message.startsWith('Invalid Discord ID') ||
+        e.message.startsWith('Invalid Discord bot command') ||
+        e.message.startsWith('Invalid Discord channel') ||
+        e.message.includes('encrypt') ||
+        e.message.includes('SETTINGS_ENCRYPTION_KEY') ||
         e.message.includes('Scheduled themes overlap') ||
         e.message.includes('monthly event') ||
         e.message.includes('ends before it starts') ||
@@ -253,6 +244,83 @@ adminRoutes.patch('/settings', async (c) => {
     }
     throw e
   }
+})
+
+/** List guilds the bot is currently in (memory + DB cached; ?refresh=1 forces Discord). */
+adminRoutes.get('/discord/bot-guilds', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const force =
+    c.req.query('refresh') === '1' ||
+    c.req.query('refresh') === 'true' ||
+    c.req.query('force') === '1'
+  const { listBotGuilds } = await import('../services/discordBotGuilds.js')
+  const result = await listBotGuilds({ force })
+  if (!result.ok) return c.json({ error: result.error }, 400)
+  return c.json({
+    guilds: result.guilds,
+    cached: result.cached,
+    fetchedAt: result.fetchedAt,
+  })
+})
+
+/** Discord gateway readiness for Admin site health. */
+adminRoutes.get('/discord/gateway-status', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const { getDiscordGatewayStatus } = await import('../discord/gateway.js')
+  return c.json(getDiscordGatewayStatus())
+})
+
+/** List guild roles (for picking bot command / ping roles in Admin). */
+adminRoutes.get('/discord/guild-roles', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const guildId = String(c.req.query('guildId') ?? '').trim()
+  const result = await listGuildRoles(guildId || undefined)
+  if (!result.ok) {
+    return c.json({ error: result.error }, 400)
+  }
+  return c.json({
+    guildId: result.guildId,
+    roles: result.roles
+      .filter((r) => r.id !== result.guildId)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  })
+})
+
+/** Invite URL for the configured bot (bot + applications.commands). */
+adminRoutes.get('/discord/bot-invite', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const { getDiscordBotInviteUrl } = await import('../services/discordRoleVerify.js')
+  const result = await getDiscordBotInviteUrl()
+  if (!result.ok) {
+    return c.json({ error: result.error }, 400)
+  }
+  return c.json(result)
+})
+
+/** Verify one role ID exists on the configured guild. */
+adminRoutes.post('/discord/verify-role', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{ roleId?: string; webhookUrl?: string }>()
+  const roleId = String(body.roleId ?? '').trim()
+  if (!roleId) {
+    return c.json({ error: 'roleId is required' }, 400)
+  }
+  const result = await verifyDiscordRole({
+    roleId,
+    webhookUrl: body.webhookUrl,
+  })
+  if (!result.ok) {
+    return c.json(
+      { ok: false, error: result.error, roleId: result.roleId, guildId: result.guildId },
+      400,
+    )
+  }
+  return c.json({
+    ok: true,
+    roleId: result.roleId,
+    roleName: result.roleName,
+    guildId: result.guildId,
+  })
 })
 
 /**
@@ -266,13 +334,16 @@ adminRoutes.post('/discord/send', async (c) => {
   const body = await c.req.json<{
     channel?: string
     withPing?: boolean
+    guildId?: string
   }>()
   const channel = body.channel === 'test' ? 'test' : 'production'
   const withPing = Boolean(body.withPing)
+  const guildId = String(body.guildId ?? '').trim() || undefined
   const result = await sendDiscordChannelMessage({
     channel,
     withPing,
     kind: channel === 'test' ? 'test' : 'announce',
+    guildId,
   })
   if (!result.sent) {
     return c.json(
@@ -290,6 +361,7 @@ adminRoutes.post('/discord/send', async (c) => {
     roleId: result.roleId,
     channel: result.channel,
     withPing: result.withPing,
+    guildId: guildId ?? null,
   })
 })
 
@@ -304,12 +376,15 @@ adminRoutes.post('/discord/send-standings', async (c) => {
     channel?: string
     includeMonthlyWrap?: boolean
     withPing?: boolean
+    guildId?: string
   }>()
   const channel = body.channel === 'production' ? 'production' : 'test'
+  const guildId = String(body.guildId ?? '').trim() || undefined
   const result = await sendLiveStandingsToDiscord({
     channel,
     includeMonthlyWrap: Boolean(body.includeMonthlyWrap),
     withPing: Boolean(body.withPing),
+    guildId,
   })
   if (!result.sent) {
     return c.json({ error: result.error ?? 'Failed to send standings' }, 400)
@@ -318,6 +393,7 @@ adminRoutes.post('/discord/send-standings', async (c) => {
     ok: true,
     channel,
     includeMonthlyWrap: Boolean(body.includeMonthlyWrap),
+    guildId: guildId ?? null,
   })
 })
 
@@ -327,19 +403,22 @@ adminRoutes.post('/discord/send-monthly-wrap', async (c) => {
   const body = await c.req.json<{
     channel?: string
     withPing?: boolean
+    guildId?: string
   }>()
   const channel = body.channel === 'production' ? 'production' : 'test'
+  const guildId = String(body.guildId ?? '').trim() || undefined
   const wrap = await buildMonthlyWrapSvg()
   const result = await sendDiscordMonthlyWrap({
     channel,
     wrapSvg: wrap.svg,
     label: wrap.label,
     withPing: Boolean(body.withPing),
+    guildId,
   })
   if (!result.sent) {
     return c.json({ error: result.error ?? 'Failed to send monthly wrap' }, 400)
   }
-  return c.json({ ok: true, channel, label: wrap.label })
+  return c.json({ ok: true, channel, label: wrap.label, guildId: guildId ?? null })
 })
 
 adminRoutes.get('/discord/monthly-wrap-preview.svg', async (c) => {

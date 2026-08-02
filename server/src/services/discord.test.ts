@@ -14,23 +14,30 @@ import {
 
 describe('Discord webhook test sender', () => {
   let db: MemoryMongo
+  const prevEncKey = process.env.SETTINGS_ENCRYPTION_KEY
 
   before(async () => {
+    process.env.SETTINGS_ENCRYPTION_KEY = 'test-encryption-key-for-discord-tests'
     db = await startMemoryMongo()
-  })
-
-  after(async () => {
-    await db.stop()
-  })
-
-  it('reads normalized webhook and role settings', async () => {
     await updateSiteSettings({
+      discordTestDeliveryMode: 'webhook',
+      discordProductionDeliveryMode: 'webhook',
+      discordBotToken: 'test-bot-token',
+      discordGuildId: '111111111111111111',
       discordProductionWebhookUrl: ' https://discord.com/api/webhooks/123/token ',
       discordProductionRoleId: ' <@&123456789012345678> ',
       discordTestWebhookUrl: 'https://discord.com/api/webhooks/999/test',
       discordTestRoleId: '999999999999999999',
     })
+  })
 
+  after(async () => {
+    if (prevEncKey === undefined) delete process.env.SETTINGS_ENCRYPTION_KEY
+    else process.env.SETTINGS_ENCRYPTION_KEY = prevEncKey
+    await db.stop()
+  })
+
+  it('reads normalized webhook and role settings', async () => {
     assert.equal(getDiscordWebhookUrl(), 'https://discord.com/api/webhooks/123/token')
     assert.equal(getDiscordRoleId(), '123456789012345678')
   })
@@ -67,7 +74,17 @@ describe('Discord webhook test sender', () => {
     const originalFetch = globalThis.fetch
     const calls: Array<{ url: string; init?: RequestInit }> = []
     globalThis.fetch = mock.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      calls.push({ url: url.toString(), init })
+      const href = url.toString()
+      calls.push({ url: href, init })
+      if (href.includes('/guilds/') && href.endsWith('/roles')) {
+        return new Response(
+          JSON.stringify([
+            { id: '123456789012345678', name: 'Readers' },
+            { id: '999999999999999999', name: 'Testers' },
+          ]),
+          { status: 200 },
+        )
+      }
       return new Response('{}', { status: 200 })
     }) as typeof fetch
 
@@ -76,8 +93,10 @@ describe('Discord webhook test sender', () => {
         channel: 'production',
         withPing: true,
       })
-      assert.equal(result.sent, true)
-      const body = JSON.parse(String(calls[0]!.init!.body)) as {
+      assert.equal(result.sent, true, result.error ?? 'send failed')
+      const webhookCall = calls.find((c) => c.url.includes('/webhooks/'))
+      assert.ok(webhookCall)
+      const body = JSON.parse(String(webhookCall!.init!.body)) as {
         content: string
         allowed_mentions: { roles: string[] }
       }
@@ -95,7 +114,7 @@ describe('Discord webhook test sender', () => {
     try {
       const result = await sendDiscordWebhookTest()
       assert.equal(result.sent, false)
-      assert.equal(result.error, 'Discord returned 401')
+      assert.match(result.error ?? '', /401/)
       assert.equal(result.channel, 'production')
       assert.equal(result.withPing, false)
     } finally {
