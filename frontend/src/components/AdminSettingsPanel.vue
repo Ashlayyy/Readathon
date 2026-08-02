@@ -438,12 +438,14 @@ async function loadBotGuilds(opts?: { silent?: boolean; force?: boolean }) {
 		const savedNext = { ...discordGuildConfigsSaved.value };
 		let touched = false;
 		for (const g of data.guilds) {
-			if (next[g.id] && g.name && next[g.id].name !== g.name) {
-				next[g.id] = { ...next[g.id], name: g.name };
+			const current = next[g.id]
+			if (current && g.name && current.name !== g.name) {
+				next[g.id] = { ...current, name: g.name };
 				touched = true;
 			}
-			if (savedNext[g.id] && g.name && savedNext[g.id].name !== g.name) {
-				savedNext[g.id] = { ...savedNext[g.id], name: g.name };
+			const saved = savedNext[g.id]
+			if (saved && g.name && saved.name !== g.name) {
+				savedNext[g.id] = { ...saved, name: g.name };
 			}
 		}
 		if (touched) {
