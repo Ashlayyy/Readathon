@@ -70,7 +70,7 @@ useBodyScrollLock(open)
 useFocusTrap(open, modalRef)
 
 const teamOptions = computed(() =>
-	(config.value.teams ?? []).map((t) => ({
+	(config.value?.teams ?? []).map((t) => ({
 		id: t.id,
 		name: t.name,
 		color: t.color ?? '#888',
