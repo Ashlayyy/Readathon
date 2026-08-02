@@ -11,6 +11,7 @@ import ThemeSwitcher from './components/ThemeSwitcher.vue';
 import UserAvatar from './components/UserAvatar.vue';
 import ImageLightbox from './components/ImageLightbox.vue';
 import { useBodyScrollLock } from './composables/useBodyScrollLock';
+import { useMonthlyThemePreview } from './composables/useMonthlyThemePreview';
 import { APP_VERSION } from './lib/version';
 
 function prefetchProfile() {
@@ -18,13 +19,19 @@ function prefetchProfile() {
 }
 
 const { user, logout } = useAuth();
-const { config, configLoading, configError, loadConfig } = useConfig();
+const { config, configLoading, configError, loadConfig, exitMonthlyThemePreview } =
+	useConfig();
+const { previewActive, previewTitle } = useMonthlyThemePreview();
 const { admin } = useAdminCopy();
 const route = useRoute();
 const router = useRouter();
 const unreadQuestions = ref(0);
 const menuOpen = ref(false);
 let unreadPromise: Promise<void> | null = null;
+
+async function exitThemePreview() {
+	await exitMonthlyThemePreview();
+}
 
 const isMaintenancePage = computed(() => route.name === 'maintenance');
 const downtimeActive = computed(
@@ -338,6 +345,21 @@ function closeMenu() {
 		</Teleport>
 
 		<div id="main-content" class="app-content" tabindex="-1">
+			<div
+				v-if="previewActive && user?.isAdmin && !isMaintenancePage"
+				class="alert theme-preview-banner status-banner"
+				role="status"
+			>
+				<strong>Previewing theme:</strong> {{ previewTitle }}
+				<button
+					type="button"
+					class="btn btn-secondary btn-sm theme-preview-exit"
+					@click="exitThemePreview"
+				>
+					Exit preview
+				</button>
+			</div>
+
 			<div
 				v-if="downtimeActive && user?.isAdmin && !isMaintenancePage"
 				class="alert alert-warning status-banner"
@@ -803,6 +825,19 @@ function closeMenu() {
 .app-content {
 	flex: 1;
 	min-width: 0;
+}
+
+.theme-preview-banner {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.65rem;
+	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-accent) 14%, var(--realm-surface));
+}
+
+.theme-preview-exit {
+	margin-left: auto;
 }
 
 .status-banner {

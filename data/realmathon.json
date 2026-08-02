@@ -277,7 +277,8 @@
 			"teams": {
 				"assignmentTitle": "Team Assignment",
 				"assignmentLead": "{pending} users waiting in the pool",
-				"assignTeams": "Randomly Assign Teams",
+				"assignmentHint": "Opens a preview first — Apply, reshuffle with Again, or Cancel. Keeps team sizes equal first, then balances existing points. Works even when everyone already has a team.",
+				"assignTeams": "Randomize Teams…",
 				"assigning": "Assigning…",
 				"quickStatsTitle": "Quick Stats",
 				"statTotalUsers": "total users",
@@ -456,7 +457,7 @@
 			"messages": {
 				"loadFailed": "Failed to load admin data",
 				"settingsLoadFailed": "Failed to load settings",
-				"assignedTeams": "Assigned {count} users to teams.",
+				"assignedTeams": "Applied team shuffle for {count} users.",
 				"assignFailed": "Failed to assign teams",
 				"teamUpdated": "Team updated.",
 				"teamUpdateFailed": "Failed to update team",

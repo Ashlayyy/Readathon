@@ -4,11 +4,35 @@ const siteSettingsSchema = new Schema(
   {
     showTeamRosters: { type: Boolean, default: false },
     downtimeMode: { type: Boolean, default: false },
+    /** @deprecated Prefer discordProductionWebhookUrl — kept in sync for older docs. */
     discordWebhookUrl: { type: String, default: '' },
+    /** @deprecated Prefer discordProductionRoleId — kept in sync for older docs. */
     discordRoleId: { type: String, default: '' },
+    discordTestWebhookUrl: { type: String, default: '' },
+    discordTestRoleId: { type: String, default: '' },
+    discordProductionWebhookUrl: { type: String, default: '' },
+    discordProductionRoleId: { type: String, default: '' },
+    /** @deprecated Prefer per-channel discordTestDeliveryMode / discordProductionDeliveryMode */
+    discordDeliveryMode: { type: String, default: 'webhook' },
+    discordTestDeliveryMode: { type: String, default: 'webhook' },
+    discordProductionDeliveryMode: { type: String, default: 'webhook' },
+    /** AES-GCM encrypted bot token (enc:v1:…). Never return plaintext to clients. */
+    discordBotTokenEnc: { type: String, default: '' },
+    /** Active guild for auto-publish / realm chat */
+    discordPrimaryGuildId: { type: String, default: '' },
+    /** guildId -> per-server Discord destinations & roles */
+    discordGuildConfigs: { type: Schema.Types.Mixed, default: {} },
+    /** @deprecated Prefer discordPrimaryGuildId / discordGuildConfigs */
+    discordGuildId: { type: String, default: '' },
+    discordTestChannelId: { type: String, default: '' },
+    discordProductionChannelId: { type: String, default: '' },
+    /** @deprecated Prefer per-guild botCommandRoleIds */
+    discordBotCommandRoleIds: { type: [String], default: [] },
     teamChatHooksEnabled: { type: Boolean, default: false },
-    /** teamId -> webhook URL */
+    /** @deprecated Prefer per-guild teamChatWebhookUrls */
     teamChatWebhookUrls: { type: Schema.Types.Mixed, default: {} },
+    /** @deprecated Prefer per-guild teamChatChannelIds */
+    teamChatChannelIds: { type: Schema.Types.Mixed, default: {} },
     /** Discord message templates for realm chat (add logs). Empty → seeded with defaults. */
     teamChatAddTemplates: { type: [String], default: undefined },
     /** Discord message templates for realm chat (sabotage logs). Empty → seeded with defaults. */
@@ -24,6 +48,17 @@ const siteSettingsSchema = new Schema(
     configOverrides: { type: Schema.Types.Mixed, default: null },
     /** { slug, title, from, to, message, publishedStandingsIds[] } for a wrapped-up season */
     seasonArchive: { type: Schema.Types.Mixed, default: null },
+    /**
+     * Scheduled Theme-of-the-Month slots (draft = invisible; scheduled = live only in window).
+     * See services/monthlyEvents.ts
+     */
+    monthlyEvents: { type: Schema.Types.Mixed, default: [] },
+    /** Last Discord /users/@me/guilds snapshot for Admin server pickers */
+    discordBotGuildsCache: { type: Schema.Types.Mixed, default: null },
+    /** When true, first Monday publish also sends the 4-week wrap stats image. */
+    monthlyWrapOnPublish: { type: Boolean, default: false },
+    /** Idempotency key for auto wrap, e.g. "2026-08" */
+    lastMonthlyWrapMonthKey: { type: String, default: '' },
   },
   { timestamps: true },
 )

@@ -165,13 +165,19 @@ const availablePrompts = computed(() =>
 
 const filteredPrompts = computed(() => {
 	const q = promptSearch.value.trim().toLowerCase();
-	if (!q) return availablePrompts.value;
-	return availablePrompts.value.filter(
-		(p) =>
-			p.label.toLowerCase().includes(q) ||
-			p.gameName.toLowerCase().includes(q) ||
-			p.description.toLowerCase().includes(q),
-	);
+	const list = q
+		? availablePrompts.value.filter(
+				(p) =>
+					p.label.toLowerCase().includes(q) ||
+					p.gameName.toLowerCase().includes(q) ||
+					p.description.toLowerCase().includes(q),
+			)
+		: availablePrompts.value;
+	return [...list].sort((a, b) => {
+		const byPoints = Math.abs(b.points) - Math.abs(a.points);
+		if (byPoints !== 0) return byPoints;
+		return a.label.localeCompare(b.label);
+	});
 });
 
 const selectedPromptDetails = computed(() => {

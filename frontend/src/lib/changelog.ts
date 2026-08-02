@@ -1,20 +1,31 @@
-import { APP_VERSION } from './version';
+import { APP_VERSION } from './version'
 
 /**
- * What’s-new entries. The latest entry’s version is always the root package.json
- * version (`APP_VERSION`) — bump that when you ship so the home popup shows again.
- * Older entries may keep an explicit `version` for history.
+ * What’s-new entries. Set `version` on each entry (especially the latest).
+ * The home popup reopens when `LATEST_CHANGELOG_VERSION` (latest entry) differs
+ * from localStorage — also bump root package.json so the footer matches.
  */
 export type ChangelogEntry = {
-	/** Only needed for older entries; the first entry uses APP_VERSION. */
-	version?: string;
-	date: string;
-	title: string;
-	items: string[];
-};
+	version?: string
+	date: string
+	title: string
+	items: string[]
+}
 
 export const CHANGELOG: ChangelogEntry[] = [
 	{
+		version: '1.6.0',
+		date: '2026-08-02',
+		title: 'Theme of the month & more',
+		items: [
+			'Theme of the Month can change the site’s look and feel while it’s running.',
+			'Home now shows the month’s theme banner, and sometimes a month photo.',
+			'Reader of the Month on the home page.',
+			'Discord standings and the new 4-week wrap images follow the live theme colors.',
+		],
+	},
+	{
+		version: '1.5.1',
 		date: '2026-07-26',
 		title: 'Profiles, realm chat & what’s new',
 		items: [
@@ -24,17 +35,23 @@ export const CHANGELOG: ChangelogEntry[] = [
 			'You are also able to see the latest books which has been read, although you cannot see who read them.',
 		],
 	},
-];
+]
 
 export function changelogEntryVersion(
 	entry: ChangelogEntry,
 	index: number,
 ): string {
-	if (index === 0) return APP_VERSION;
-	return entry.version ?? APP_VERSION;
+	if (entry.version) return entry.version
+	if (index === 0) return APP_VERSION
+	return APP_VERSION
 }
 
-/** Used for localStorage “seen” — bumps when root package.json version bumps. */
-export const LATEST_CHANGELOG_VERSION = APP_VERSION;
+/**
+ * Triggers the home “What’s new” popup when this differs from localStorage.
+ * Prefer the latest entry’s explicit version so a new release pops even if the
+ * Vite-injected APP_VERSION is briefly stale in dev.
+ */
+export const LATEST_CHANGELOG_VERSION =
+	CHANGELOG[0]?.version?.trim() || APP_VERSION
 
-export const CHANGELOG_SEEN_KEY = 'realm-changelog-seen-version';
+export const CHANGELOG_SEEN_KEY = 'realm-changelog-seen-version'

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+	buildPublishWeekLabel,
 	endOfIsoWeek,
+	getChallengeWeekNumber,
 	getDefaultPublishRange,
+	getSeasonStartDate,
 	getWeekBoundsFromKey,
 	getWeekInfo,
 	resolvePublishRange,
@@ -60,15 +63,47 @@ describe('week utils', () => {
 		assert.equal(toDateInputValue(new Date(2026, 11, 31)), '2026-12-31')
 	})
 
-	it('getDefaultPublishRange is last Monday through this Monday inclusive', () => {
-		// Monday Jul 20, 2026 afternoon
-		const now = new Date(2026, 6, 20, 15, 0, 0)
-		const range = getDefaultPublishRange(now)
-		assert.equal(range.fromInput, '2026-07-13')
-		assert.equal(range.toInput, '2026-07-20')
+	it('getDefaultPublishRange on Monday is last Monday through this Monday inclusive', () => {
+		// Monday Jul 27, 2026 afternoon (publish day)
+		const now = new Date(2026, 6, 27, 15, 0, 0)
+		const range = getDefaultPublishRange(now, 'Europe/Amsterdam')
+		assert.equal(range.fromInput, '2026-07-20')
+		assert.equal(range.toInput, '2026-07-27')
 		assert.equal(range.preset, 'lastMonToThisMon')
-		// Exclusive end is Tuesday Jul 21 00:00 so Monday is fully included
-		assert.equal(toDateInputValue(range.toExclusive), '2026-07-21')
+		// Exclusive end is Tuesday Jul 28 00:00 so Monday is fully included
+		assert.equal(toDateInputValue(range.toExclusive), '2026-07-28')
+		// ISO week of Jul 20 2026 is 30; label includes both ends
+		assert.equal(range.weekLabel, 'Week 30 - Jul 20 - Jul 27, 2026')
+	})
+
+	it('getDefaultPublishRange on Sunday uses this Mon -> next Mon (not a week behind)', () => {
+		// Sunday Aug 2, 2026 - must not still show Jul 20-27
+		const now = new Date(2026, 7, 2, 15, 0, 0)
+		const range = getDefaultPublishRange(now, 'Europe/Amsterdam')
+		assert.equal(range.fromInput, '2026-07-27')
+		assert.equal(range.toInput, '2026-08-03')
+		assert.equal(range.weekLabel, 'Week 31 - Jul 27 - Aug 3, 2026')
+	})
+
+	it('getChallengeWeekNumber counts from readathon start (July 1)', () => {
+		const start = getSeasonStartDate(new Date(2026, 6, 15))
+		assert.equal(start.getMonth(), 6)
+		assert.equal(start.getDate(), 1)
+		assert.equal(getChallengeWeekNumber(new Date(2026, 6, 1), start), 1)
+		assert.equal(getChallengeWeekNumber(new Date(2026, 6, 7), start), 1)
+		assert.equal(getChallengeWeekNumber(new Date(2026, 6, 8), start), 2)
+		assert.equal(getChallengeWeekNumber(new Date(2026, 6, 27), start), 4)
+	})
+
+	it('buildPublishWeekLabel uses ISO calendar week of the range start', () => {
+		assert.equal(
+			buildPublishWeekLabel(new Date(2026, 6, 20), new Date(2026, 6, 27)),
+			'Week 30 - Jul 20 - Jul 27, 2026',
+		)
+		assert.equal(
+			buildPublishWeekLabel(new Date(2026, 6, 27), new Date(2026, 7, 3)),
+			'Week 31 - Jul 27 - Aug 3, 2026',
+		)
 	})
 
 	it('resolvePublishRange custom uses inclusive end-of-day', () => {
@@ -80,5 +115,70 @@ describe('week utils', () => {
 		assert.equal(range.fromInput, '2026-07-13')
 		assert.equal(range.toInput, '2026-07-20')
 		assert.equal(toDateInputValue(range.toExclusive), '2026-07-21')
+	})
+
+	it('resolvePublishRange thisWeek spans the current ISO week', () => {
+		const now = new Date(2026, 6, 22, 12, 0, 0) // Wed Jul 22 2026
+		const range = resolvePublishRange({
+			preset: 'thisWeek',
+			now,
+			timeZone: 'Europe/Amsterdam',
+		})
+		assert.equal(range.preset, 'thisWeek')
+		assert.equal(range.fromInput, '2026-07-20')
+		assert.equal(range.toInput, '2026-07-26')
+		assert.match(range.label, /^This week/)
+		assert.match(range.weekLabel, /^Week 30 -/)
+	})
+
+	it('resolvePublishRange lastWeek is the prior ISO week', () => {
+		const now = new Date(2026, 6, 22, 12, 0, 0)
+		const range = resolvePublishRange({
+			preset: 'lastWeek',
+			now,
+			timeZone: 'Europe/Amsterdam',
+		})
+		assert.equal(range.preset, 'lastWeek')
+		assert.equal(range.fromInput, '2026-07-13')
+		assert.equal(range.toInput, '2026-07-19')
+		assert.match(range.label, /^Last week/)
+		assert.equal(range.weekLabel, 'Week 29 - Jul 13 - Jul 19, 2026')
+	})
+
+	it('resolvePublishRange last7 covers the trailing seven calendar days', () => {
+		const now = new Date(2026, 6, 22, 12, 0, 0)
+		const range = resolvePublishRange({
+			preset: 'last7',
+			now,
+			timeZone: 'Europe/Amsterdam',
+		})
+		assert.equal(range.preset, 'last7')
+		assert.equal(range.fromInput, '2026-07-16')
+		assert.equal(range.toInput, '2026-07-22')
+		assert.match(range.label, /^Last 7 days/)
+	})
+
+	it('resolvePublishRange falls back to default for unknown presets', () => {
+		const now = new Date(2026, 6, 27, 15, 0, 0)
+		const range = resolvePublishRange({
+			preset: 'unknown-preset',
+			now,
+			timeZone: 'Europe/Amsterdam',
+		})
+		assert.equal(range.preset, 'lastMonToThisMon')
+		assert.equal(range.fromInput, '2026-07-20')
+		assert.equal(range.toInput, '2026-07-27')
+	})
+
+	it('uses Amsterdam calendar day so late-Sunday UTC still counts as Monday there', () => {
+		// Monday 27 Jul 2026 00:30 in Amsterdam = Sunday 26 Jul 22:30 UTC
+		const now = new Date(Date.UTC(2026, 6, 26, 22, 30, 0))
+		const range = resolvePublishRange({
+			preset: 'lastMonToThisMon',
+			now,
+			timeZone: 'Europe/Amsterdam',
+		})
+		assert.equal(range.toInput, '2026-07-27')
+		assert.equal(range.fromInput, '2026-07-20')
 	})
 })

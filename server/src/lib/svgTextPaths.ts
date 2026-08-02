@@ -62,7 +62,7 @@ function pickFont(attrs: string): Font | null {
 function textWidth(font: Font, text: string, fontSize: number): number {
   const run = font.layout(text)
   const scale = fontSize / font.unitsPerEm
-  return run.positions.reduce((sum, pos) => sum + pos.xAdvance * scale, 0)
+  return run.positions.reduce((sum: number, pos: { xAdvance: number }) => sum + pos.xAdvance * scale, 0)
 }
 
 function textToPathData(

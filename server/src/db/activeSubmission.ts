@@ -1,6 +1,11 @@
-/** Shared filter helpers so every scoring/analytics query consistently excludes soft-deleted submissions. */
-export const ACTIVE_SUB_FILTER = { deletedAt: null }
+import type { QueryFilter } from 'mongoose'
+import type { ISubmission } from './models/Submission.js'
 
-export function withActive<T extends Record<string, unknown>>(filter: T = {} as T): T & { deletedAt: null } {
-  return { ...filter, deletedAt: null }
+/** Shared filter helpers so every scoring/analytics query consistently excludes soft-deleted submissions. */
+export const ACTIVE_SUB_FILTER = { deletedAt: null } as const
+
+export function withActive(
+	filter: QueryFilter<ISubmission> = {},
+): QueryFilter<ISubmission> {
+	return { ...filter, deletedAt: null }
 }

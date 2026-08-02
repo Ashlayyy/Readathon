@@ -15,13 +15,16 @@ const prompts = computed(() => {
   if (!config.value) return []
   const list = tab.value === 'positive' ? config.value.prompts.positive : config.value.prompts.negative
   const q = search.value.toLowerCase().trim()
-  if (!q) return list
-  return list.filter(
-    (p) =>
-      p.label.toLowerCase().includes(q) ||
-      p.gameName.toLowerCase().includes(q) ||
-      p.description.toLowerCase().includes(q),
-  )
+  const filtered = q
+    ? list.filter(
+        (p) =>
+          p.label.toLowerCase().includes(q) ||
+          p.gameName.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q),
+      )
+    : list
+  // Featured theme prompts float to the top while a month is live.
+  return [...filtered].sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)))
 })
 
 const tabLabel = computed(() => {

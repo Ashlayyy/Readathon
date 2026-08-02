@@ -10,7 +10,6 @@ import { withActive } from '../db/activeSubmission.js'
 import { User } from '../db/models/User.js'
 import { logAudit, listAuditLog } from '../services/audit.js'
 import {
-  assignTeamsRandomly,
   createUserByAdmin,
   getSessionUser,
   requireAdmin,
@@ -18,6 +17,16 @@ import {
   userToPublic,
   AuthError,
 } from '../services/auth.js'
+import {
+  applyAssignmentSet,
+  applyTeamAssignments,
+  clearAssignmentSet,
+  enrichFromProposedAssignments,
+  listAssignmentSets,
+  previewAssignmentSet,
+  previewTeamAssignments,
+  saveAssignmentSet,
+} from '../services/teamAssignment.js'
 import {
   calculateScore,
   calculateStandings,
@@ -34,10 +43,20 @@ import {
   getDiscordRoleId,
   getSiteSettingsAdminSync,
   updateSiteSettings,
+  type SiteSettingsAdminPatch,
 } from '../services/siteSettings.js'
 import { publishStandings } from '../services/standingsPublish.js'
 import { buildStandingsDigestDraft } from '../services/standingsDigest.js'
-import { sendDiscordRolePingTest, sendDiscordWebhookTest } from '../services/discord.js'
+import {
+  sendDiscordChannelMessage,
+  sendDiscordMonthlyWrap,
+} from '../services/discord.js'
+import {
+  listGuildRoles,
+  verifyDiscordRole,
+} from '../services/discordRoleVerify.js'
+import { sendLiveStandingsToDiscord } from '../services/standingsDiscordPreview.js'
+import { buildMonthlyWrapSvg } from '../services/monthlyWrap.js'
 import { submissionsCreatedTotal } from '../services/metrics.js'
 import {
   createPrompt,
@@ -45,12 +64,18 @@ import {
   importPromptsFromConfigFile,
   importPromptsFromJson,
   isPromptLive,
+  previewConfigWithMonthlyEvent,
   promptToAdminPublic,
   promptsUseDatabase,
   refreshPromptsCache,
   updatePrompt,
   type PromptInput,
 } from '../services/prompts.js'
+import { normalizeMonthlyEventSlot } from '../services/monthlyEvents.js'
+import {
+  enrichActiveMonthlyEvent,
+  resolveReaderOfMonth,
+} from '../services/monthlyThemeExtras.js'
 import { Prompt } from '../db/models/Prompt.js'
 import { getWeekInfo } from '../utils/week.js'
 import {
@@ -124,22 +149,55 @@ adminRoutes.get('/settings', (c) => {
   return c.json({ settings: getSiteSettingsAdminSync() })
 })
 
+/**
+ * Preview a monthly theme slot as if it were live (drafts allowed).
+ * body: MonthlyEventSlot (or partial that normalizes)
+ */
+adminRoutes.post('/monthly-themes/preview-config', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<unknown>()
+  const slot = normalizeMonthlyEventSlot(body)
+  if (!slot) {
+    return c.json(
+      { error: 'Invalid theme slot (need valid from/to dates, etc.).' },
+      400,
+    )
+  }
+  const config = previewConfigWithMonthlyEvent(slot)
+  if (config.site) {
+    config.site.activeMonthlyEvent = await enrichActiveMonthlyEvent(slot)
+  }
+  return c.json({ config })
+})
+
+/** Resolve reader-of-the-month for admin UI (auto or override). */
+adminRoutes.post('/monthly-themes/resolve-reader', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{
+    from?: string
+    to?: string
+    userId?: string
+    shoutout?: string
+  }>()
+  const from = String(body.from ?? '').trim()
+  const to = String(body.to ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return c.json({ error: 'Valid from/to dates required.' }, 400)
+  }
+  const reader = await resolveReaderOfMonth({
+    from,
+    to,
+    readerOfMonth: {
+      userId: String(body.userId ?? '').trim(),
+      shoutout: String(body.shoutout ?? '').trim(),
+    },
+  })
+  return c.json({ reader })
+})
+
 adminRoutes.patch('/settings', async (c) => {
   const admin = requireAdmin(await getSessionUser(c))
-  const body = await c.req.json<{
-    showTeamRosters?: boolean
-    downtimeMode?: boolean
-    discordWebhookUrl?: string
-    discordRoleId?: string
-    teamChatHooksEnabled?: boolean
-    teamChatWebhookUrls?: Record<string, string>
-    teamChatAddTemplates?: string[]
-    teamChatSabotageTemplates?: string[]
-    scheduledPublishEnabled?: boolean
-    scheduledPublishDay?: number
-    scheduledPublishHour?: number
-    scheduledPublishTimezone?: string
-  }>()
+  const body = await c.req.json<SiteSettingsAdminPatch>()
   try {
     const before = getSiteSettingsAdminSync()
     const settings = await updateSiteSettings(body)
@@ -168,27 +226,231 @@ adminRoutes.patch('/settings', async (c) => {
     if (e instanceof Error && e.message === 'Invalid Discord webhook URL') {
       return c.json({ error: e.message }, 400)
     }
-    if (e instanceof Error && e.message === 'Invalid Discord role ID') {
+    if (
+      e instanceof Error &&
+      (e.message === 'Invalid Discord role ID' ||
+        e.message.startsWith('Invalid Discord role ID') ||
+        e.message.startsWith('Invalid Discord ID') ||
+        e.message.startsWith('Invalid Discord bot command') ||
+        e.message.startsWith('Invalid Discord channel') ||
+        e.message.includes('encrypt') ||
+        e.message.includes('SETTINGS_ENCRYPTION_KEY') ||
+        e.message.includes('Scheduled themes overlap') ||
+        e.message.includes('monthly event') ||
+        e.message.includes('ends before it starts') ||
+        e.message.includes('valid from/to'))
+    ) {
       return c.json({ error: e.message }, 400)
     }
     throw e
   }
 })
 
-/** Smoke-test the standings Discord webhook. Never pings a role. */
+/** List guilds the bot is currently in (memory + DB cached; ?refresh=1 forces Discord). */
+adminRoutes.get('/discord/bot-guilds', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const force =
+    c.req.query('refresh') === '1' ||
+    c.req.query('refresh') === 'true' ||
+    c.req.query('force') === '1'
+  const { listBotGuilds } = await import('../services/discordBotGuilds.js')
+  const result = await listBotGuilds({ force })
+  if (!result.ok) return c.json({ error: result.error }, 400)
+  return c.json({
+    guilds: result.guilds,
+    cached: result.cached,
+    fetchedAt: result.fetchedAt,
+  })
+})
+
+/** Discord gateway readiness for Admin site health. */
+adminRoutes.get('/discord/gateway-status', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const { getDiscordGatewayStatus } = await import('../discord/gateway.js')
+  return c.json(getDiscordGatewayStatus())
+})
+
+/** List guild roles (for picking bot command / ping roles in Admin). */
+adminRoutes.get('/discord/guild-roles', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const guildId = String(c.req.query('guildId') ?? '').trim()
+  const result = await listGuildRoles(guildId || undefined)
+  if (!result.ok) {
+    return c.json({ error: result.error }, 400)
+  }
+  return c.json({
+    guildId: result.guildId,
+    roles: result.roles
+      .filter((r) => r.id !== result.guildId)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+  })
+})
+
+/** Invite URL for the configured bot (bot + applications.commands). */
+adminRoutes.get('/discord/bot-invite', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const { getDiscordBotInviteUrl } = await import('../services/discordRoleVerify.js')
+  const result = await getDiscordBotInviteUrl()
+  if (!result.ok) {
+    return c.json({ error: result.error }, 400)
+  }
+  return c.json(result)
+})
+
+/** Verify one role ID exists on the configured guild. */
+adminRoutes.post('/discord/verify-role', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{ roleId?: string; webhookUrl?: string }>()
+  const roleId = String(body.roleId ?? '').trim()
+  if (!roleId) {
+    return c.json({ error: 'roleId is required' }, 400)
+  }
+  const result = await verifyDiscordRole({
+    roleId,
+    webhookUrl: body.webhookUrl,
+  })
+  if (!result.ok) {
+    return c.json(
+      { ok: false, error: result.error, roleId: result.roleId, guildId: result.guildId },
+      400,
+    )
+  }
+  return c.json({
+    ok: true,
+    roleId: result.roleId,
+    roleName: result.roleName,
+    guildId: result.guildId,
+  })
+})
+
+/**
+ * Send to test or production standings webhook.
+ * body: { channel: 'test'|'production', withPing: boolean }
+ * - test channel → short “test message”
+ * - production channel → sample standings announce line
+ */
+adminRoutes.post('/discord/send', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{
+    channel?: string
+    withPing?: boolean
+    guildId?: string
+  }>()
+  const channel = body.channel === 'test' ? 'test' : 'production'
+  const withPing = Boolean(body.withPing)
+  const guildId = String(body.guildId ?? '').trim() || undefined
+  const result = await sendDiscordChannelMessage({
+    channel,
+    withPing,
+    kind: channel === 'test' ? 'test' : 'announce',
+    guildId,
+  })
+  if (!result.sent) {
+    return c.json(
+      {
+        error: result.error ?? 'Failed to send Discord message',
+        roleId: result.roleId,
+        channel: result.channel,
+        withPing: result.withPing,
+      },
+      400,
+    )
+  }
+  return c.json({
+    ok: true,
+    roleId: result.roleId,
+    channel: result.channel,
+    withPing: result.withPing,
+    guildId: guildId ?? null,
+  })
+})
+
+/**
+ * Send live standings images (optional + 4-week wrap) to test or production webhook.
+ * Does not publish/unpublish standings in the DB.
+ * body: { channel?: 'test'|'production', includeMonthlyWrap?: boolean, withPing?: boolean }
+ */
+adminRoutes.post('/discord/send-standings', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{
+    channel?: string
+    includeMonthlyWrap?: boolean
+    withPing?: boolean
+    guildId?: string
+  }>()
+  const channel = body.channel === 'production' ? 'production' : 'test'
+  const guildId = String(body.guildId ?? '').trim() || undefined
+  const result = await sendLiveStandingsToDiscord({
+    channel,
+    includeMonthlyWrap: Boolean(body.includeMonthlyWrap),
+    withPing: Boolean(body.withPing),
+    guildId,
+  })
+  if (!result.sent) {
+    return c.json({ error: result.error ?? 'Failed to send standings' }, 400)
+  }
+  return c.json({
+    ok: true,
+    channel,
+    includeMonthlyWrap: Boolean(body.includeMonthlyWrap),
+    guildId: guildId ?? null,
+  })
+})
+
+/** Send only the dense 4-week wrap image. */
+adminRoutes.post('/discord/send-monthly-wrap', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{
+    channel?: string
+    withPing?: boolean
+    guildId?: string
+  }>()
+  const channel = body.channel === 'production' ? 'production' : 'test'
+  const guildId = String(body.guildId ?? '').trim() || undefined
+  const wrap = await buildMonthlyWrapSvg()
+  const result = await sendDiscordMonthlyWrap({
+    channel,
+    wrapSvg: wrap.svg,
+    label: wrap.label,
+    withPing: Boolean(body.withPing),
+    guildId,
+  })
+  if (!result.sent) {
+    return c.json({ error: result.error ?? 'Failed to send monthly wrap' }, 400)
+  }
+  return c.json({ ok: true, channel, label: wrap.label, guildId: guildId ?? null })
+})
+
+adminRoutes.get('/discord/monthly-wrap-preview.svg', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const wrap = await buildMonthlyWrapSvg()
+  c.header('Content-Type', 'image/svg+xml; charset=utf-8')
+  c.header('Cache-Control', 'no-store')
+  return c.body(wrap.svg)
+})
+
+/** @deprecated Prefer POST /discord/send */
 adminRoutes.post('/discord/test-webhook', async (c) => {
   requireAdmin(await getSessionUser(c))
-  const result = await sendDiscordWebhookTest()
+  const result = await sendDiscordChannelMessage({
+    channel: 'production',
+    withPing: false,
+    kind: 'test',
+  })
   if (!result.sent) {
     return c.json({ error: result.error ?? 'Failed to send test message' }, 400)
   }
   return c.json({ ok: true })
 })
 
-/** Test that the configured role ID resolves in the webhook's guild. */
+/** @deprecated Prefer POST /discord/send */
 adminRoutes.post('/discord/test-role-ping', async (c) => {
   requireAdmin(await getSessionUser(c))
-  const result = await sendDiscordRolePingTest()
+  const result = await sendDiscordChannelMessage({
+    channel: 'production',
+    withPing: true,
+    kind: 'test',
+  })
   if (!result.sent) {
     return c.json(
       { error: result.error ?? 'Failed to send role ping test', roleId: result.roleId },
@@ -198,8 +460,110 @@ adminRoutes.post('/discord/test-role-ping', async (c) => {
   return c.json({ ok: true, roleId: result.roleId })
 })
 
+adminRoutes.post('/assign-teams/preview', async (c) => {
+  let includeAdmins = false
+  try {
+    const body = await c.req.json<{ includeAdmins?: boolean }>()
+    includeAdmins = Boolean(body?.includeAdmins)
+  } catch {
+    /* empty body ok */
+  }
+  const result = await previewTeamAssignments(includeAdmins)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json(result)
+})
+
+adminRoutes.post('/assign-teams/enrich', async (c) => {
+  const body = await c.req.json<{
+    assignments?: { userId: string; teamId: string }[]
+  }>()
+  const result = await enrichFromProposedAssignments(body.assignments ?? [])
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json(result)
+})
+
+adminRoutes.get('/assign-teams/sets', async (c) => {
+  const sets = await listAssignmentSets()
+  return c.json({ sets })
+})
+
+adminRoutes.put('/assign-teams/sets/:slot', async (c) => {
+  const slot = Number(c.req.param('slot'))
+  const body = await c.req.json<{
+    label?: string
+    includeAdmins?: boolean
+    assignments?: { userId: string; teamId: string }[]
+  }>()
+  const result = await saveAssignmentSet(slot, {
+    label: body.label,
+    includeAdmins: body.includeAdmins,
+    assignments: body.assignments ?? [],
+  })
+  if ('error' in result) return c.json({ error: result.error }, 400)
+
+  const admin = requireAdmin(await getSessionUser(c))
+  await logAudit({
+    actor: admin,
+    action: 'teams.set_saved',
+    detail: { slot, count: result.count, label: result.label },
+  })
+  return c.json({ set: result })
+})
+
+adminRoutes.delete('/assign-teams/sets/:slot', async (c) => {
+  const slot = Number(c.req.param('slot'))
+  const result = await clearAssignmentSet(slot)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json({ set: result })
+})
+
+adminRoutes.post('/assign-teams/sets/:slot/preview', async (c) => {
+  const slot = Number(c.req.param('slot'))
+  const result = await previewAssignmentSet(slot)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+  return c.json(result)
+})
+
+adminRoutes.post('/assign-teams/sets/:slot/apply', async (c) => {
+  const slot = Number(c.req.param('slot'))
+  const result = await applyAssignmentSet(slot)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+
+  const admin = requireAdmin(await getSessionUser(c))
+  await logAudit({
+    actor: admin,
+    action: 'teams.set_applied',
+    detail: { slot, assigned: result.assigned },
+  })
+  return c.json(result)
+})
+
 adminRoutes.post('/assign-teams', async (c) => {
-  const result = await assignTeamsRandomly()
+  const body = await c.req.json<{
+    assignments?: { userId: string; teamId: string }[]
+    includeAdmins?: boolean
+  }>()
+
+  // Legacy: no body assignments → pending-only one-shot (non-admins).
+  if (!body?.assignments) {
+    const { assignTeamsRandomly } = await import('../services/teamAssignment.js')
+    const result = await assignTeamsRandomly()
+    return c.json(result)
+  }
+
+  const result = await applyTeamAssignments(body.assignments)
+  if ('error' in result) return c.json({ error: result.error }, 400)
+
+  const admin = requireAdmin(await getSessionUser(c))
+  await logAudit({
+    actor: admin,
+    action: 'teams.randomized',
+    detail: {
+      assigned: result.assigned,
+      includeAdmins: Boolean(body.includeAdmins),
+    },
+  })
+
   return c.json(result)
 })
 
@@ -596,6 +960,7 @@ adminRoutes.get('/standings/preview.svg', async (c) => {
     preset: c.req.query('preset'),
     from: c.req.query('from'),
     to: c.req.query('to'),
+    timeZone: getSiteSettingsAdminSync().scheduledPublishTimezone || 'Europe/Amsterdam',
   })
   const { weekKey, weekLabel } = range
 

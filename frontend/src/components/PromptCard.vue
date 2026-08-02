@@ -48,7 +48,10 @@ const pointLabel = computed(() => xpTier.value?.label ?? 'points')
       </div>
 
       <div class="prompt-heading">
-        <h3>{{ prompt.label }}</h3>
+        <div class="prompt-title-row">
+          <h3>{{ prompt.label }}</h3>
+          <span v-if="prompt.featured" class="featured-badge">Featured</span>
+        </div>
         <p class="game-name">{{ prompt.gameName }}</p>
       </div>
     </div>
@@ -105,6 +108,25 @@ const pointLabel = computed(() => xpTier.value?.label ?? 'points')
   gap: 0.9rem;
   align-items: start;
   padding-left: 0.35rem;
+}
+
+.prompt-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.featured-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  color: var(--realm-accent);
+  border: 1px solid color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+  background: color-mix(in srgb, var(--realm-accent) 14%, transparent);
 }
 
 .point-badge {

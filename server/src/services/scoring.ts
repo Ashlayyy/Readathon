@@ -5,6 +5,7 @@ import { type IUser, User } from '../db/models/User.js';
 import { Submission, type ISubmission } from '../db/models/Submission.js';
 import { withActive } from '../db/activeSubmission.js';
 import { isAllowedCoverUrl } from './covers.js';
+import { getActiveMonthlyEventSync } from './siteSettings.js';
 
 export type SubmissionInput = {
 	bookTitle: string;
@@ -170,7 +171,6 @@ export function calculateScore(
 		const p = getPromptById(id)!;
 		return { id: p.id, label: p.label, points: p.points };
 	});
-	const promptPoints = promptDetails.reduce((sum, p) => sum + p.points, 0);
 
 	const bonusDetails: { id: string; label: string; points: number }[] = [];
 
@@ -194,8 +194,30 @@ export function calculateScore(
 		}
 	}
 
-	const bonusPoints = bonusDetails.reduce((sum, b) => sum + b.points, 0);
-	const pageBonus = pageCountBonus(input.pageCount);
+	const rawBonusPoints = bonusDetails.reduce((sum, b) => sum + b.points, 0);
+	const rawPageBonus = pageCountBonus(input.pageCount);
+
+	const multipliers = getActiveMonthlyEventSync()?.multipliers;
+	const mPrompts = multipliers?.prompts ?? 1;
+	const mBonuses = multipliers?.bonuses ?? 1;
+	const mPage = multipliers?.pageBonus ?? 1;
+
+	const scaleDetails = <T extends { points: number }>(
+		rows: T[],
+		mult: number,
+	): T[] =>
+		mult === 1
+			? rows
+			: rows.map((r) => ({ ...r, points: Math.round(r.points * mult) }));
+
+	const promptDetailsScaled = scaleDetails(promptDetails, mPrompts);
+	const bonusDetailsScaled = scaleDetails(bonusDetails, mBonuses);
+	const promptPoints = promptDetailsScaled.reduce((sum, p) => sum + p.points, 0);
+	const bonusPoints =
+		mBonuses === 1
+			? rawBonusPoints
+			: bonusDetailsScaled.reduce((sum, b) => sum + b.points, 0);
+	const pageBonus = Math.round(rawPageBonus * mPage);
 	const totalImpact = promptPoints + bonusPoints + pageBonus;
 
 	return {
@@ -203,8 +225,8 @@ export function calculateScore(
 		bonusPoints,
 		pageBonus,
 		totalImpact,
-		promptDetails,
-		bonusDetails,
+		promptDetails: promptDetailsScaled,
+		bonusDetails: bonusDetailsScaled,
 	};
 }
 
@@ -222,20 +244,33 @@ export type TeamStanding = {
 	icon: string;
 };
 
-export async function calculateStandings(): Promise<TeamStanding[]> {
+/**
+ * @param teamByUserId optional override map (userId → teamId) for hypothetical previews
+ */
+export async function calculateStandings(
+	teamByUserId?: Map<string, string>,
+): Promise<TeamStanding[]> {
 	const config = getConfigWithPrompts();
 
-	const assignedUsers = await User.find({
-		status: 'assigned',
-		teamId: { $ne: null },
-	});
 	const memberCounts = new Map<string, number>();
 	const userTeamMap = new Map<string, string>();
 
-	for (const u of assignedUsers) {
-		if (u.teamId) {
-			memberCounts.set(u.teamId, (memberCounts.get(u.teamId) ?? 0) + 1);
-			userTeamMap.set(u._id.toString(), u.teamId);
+	if (teamByUserId) {
+		for (const [userId, teamId] of teamByUserId) {
+			if (!teamId) continue;
+			userTeamMap.set(userId, teamId);
+			memberCounts.set(teamId, (memberCounts.get(teamId) ?? 0) + 1);
+		}
+	} else {
+		const assignedUsers = await User.find({
+			status: 'assigned',
+			teamId: { $ne: null },
+		});
+		for (const u of assignedUsers) {
+			if (u.teamId) {
+				memberCounts.set(u.teamId, (memberCounts.get(u.teamId) ?? 0) + 1);
+				userTeamMap.set(u._id.toString(), u.teamId);
+			}
 		}
 	}
 

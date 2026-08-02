@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
-import { buildDraftText, type LeaderGap } from './standingsDigest.js'
+import { describe, it, mock, afterEach, before, after } from 'node:test'
+import { MongoMemoryServer } from 'mongodb-memory-server'
+import { User } from '../db/models/User.js'
+import { connectDb, disconnectDb } from '../db/connect.js'
+import { buildDraftText, buildStandingsDigestDraft, type LeaderGap } from './standingsDigest.js'
 import type { PublicStandingsVibes } from './adminAnalytics.js'
 
 function vibes(partial: Partial<PublicStandingsVibes['overview']> = {}): PublicStandingsVibes {
@@ -79,5 +82,57 @@ describe('buildDraftText', () => {
 			notify: { emailCount: 0, discordConfigured: false },
 		})
 		assert.doesNotMatch(text, /leads by/)
+	})
+
+	it('includes competition bonus line when competitionRate is positive', () => {
+		const text = buildDraftText({
+			weekLabel: 'Busy Week',
+			vibes: vibes({ competitionRate: 25 }),
+			leaderGap: null,
+			notify: { emailCount: 2, discordConfigured: false },
+		})
+		assert.match(text, /25% of books claimed the competition bonus/)
+	})
+})
+
+afterEach(() => {
+	mock.restoreAll()
+})
+
+describe('buildStandingsDigestDraft', () => {
+	let mongod: MongoMemoryServer
+	const savedUri = process.env.MONGODB_URI
+
+	before(async () => {
+		mongod = await MongoMemoryServer.create()
+		process.env.MONGODB_URI = mongod.getUri()
+		await connectDb()
+	})
+
+	after(async () => {
+		await disconnectDb()
+		await mongod.stop()
+		if (savedUri === undefined) delete process.env.MONGODB_URI
+		else process.env.MONGODB_URI = savedUri
+	})
+
+	it('assembles a draft from an empty database', async () => {
+		await User.create({
+			displayName: 'Notify Me',
+			email: 'notify@example.com',
+			status: 'assigned',
+			teamId: 'wielders',
+			notifyStandings: true,
+		})
+
+		const draft = await buildStandingsDigestDraft({ preset: 'last7' })
+
+		assert.equal(draft.notify.emailCount, 1)
+		assert.equal(typeof draft.notify.discordConfigured, 'boolean')
+		assert.equal(draft.range.preset, 'last7')
+		assert.match(draft.draftText, /\*\*.*Vibes\*\*/)
+		assert.match(draft.draftText, /Publishing will notify:/)
+		assert.ok(Array.isArray(draft.standingsPreview))
+		assert.ok(draft.vibes.overview)
 	})
 })

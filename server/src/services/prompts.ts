@@ -9,7 +9,15 @@ import {
 	type Team,
 } from '../config.js';
 import { Prompt, type IPrompt } from '../db/models/Prompt.js';
-import { getConfigOverridesSync, getSiteSettingsSync } from './siteSettings.js';
+import {
+	getActiveMonthlyEventSync,
+	getConfigOverridesSync,
+	getSiteSettingsSync,
+} from './siteSettings.js';
+import {
+	toActiveMonthlyEventPublic,
+	type MonthlyEventSlot,
+} from './monthlyEvents.js';
 
 const configPath = join(
 	dirname(fileURLToPath(import.meta.url)),
@@ -118,11 +126,119 @@ function mergeConfigOverrides(config: RealmathonConfig): RealmathonConfig {
 	};
 }
 
+function deepMergeRecords(
+	base: Record<string, unknown>,
+	overlay: Record<string, unknown>,
+): Record<string, unknown> {
+	const out: Record<string, unknown> = { ...base };
+	for (const [key, value] of Object.entries(overlay)) {
+		const prev = out[key];
+		if (
+			value &&
+			typeof value === 'object' &&
+			!Array.isArray(value) &&
+			prev &&
+			typeof prev === 'object' &&
+			!Array.isArray(prev)
+		) {
+			out[key] = deepMergeRecords(
+				prev as Record<string, unknown>,
+				value as Record<string, unknown>,
+			);
+		} else {
+			out[key] = value;
+		}
+	}
+	return out;
+}
+
+/**
+ * Applies a Theme-of-the-Month slot (event/copy/branding + featured prompts).
+ * Live config only passes scheduled-in-window slots; preview may pass drafts.
+ */
+export function mergeActiveMonthlyEvent(
+	config: RealmathonConfig,
+	slot: MonthlyEventSlot | null,
+): RealmathonConfig {
+	if (!slot) return config;
+
+	let next: RealmathonConfig = { ...config };
+
+	if (slot.siteOverride.event && typeof slot.siteOverride.event === 'object') {
+		next = {
+			...next,
+			event: { ...next.event, ...slot.siteOverride.event },
+		};
+	}
+	if (slot.siteOverride.copy && typeof slot.siteOverride.copy === 'object') {
+		next = {
+			...next,
+			copy: deepMergeRecords(
+				next.copy as Record<string, unknown>,
+				slot.siteOverride.copy,
+			),
+		};
+	}
+	const theme = slot.siteOverride.branding?.theme;
+	if (theme && Object.keys(theme).length > 0) {
+		const branding = (next.branding ?? {}) as Record<string, unknown>;
+		const baseTheme =
+			branding.theme && typeof branding.theme === 'object'
+				? (branding.theme as Record<string, string>)
+				: {};
+		next = {
+			...next,
+			branding: {
+				...branding,
+				theme: { ...baseTheme, ...theme },
+			},
+		};
+	}
+
+	const featured = new Set(slot.featuredPromptIds);
+	if (featured.size > 0) {
+		const mark = (p: PublicPrompt): PublicPrompt =>
+			featured.has(p.id) ? { ...p, featured: true } : p;
+		next = {
+			...next,
+			prompts: {
+				positive: next.prompts.positive.map(mark),
+				negative: next.prompts.negative.map(mark),
+			},
+		};
+	}
+
+	return next;
+}
+
+/** Base public config before any monthly theme merge. */
+export function getBaseConfig(): RealmathonConfig {
+	return mergeConfigOverrides(getConfigWithPrompts(true));
+}
+
 /** Public site config - prompts from DB when populated, else JSON fallback. */
 export function getConfig(): RealmathonConfig {
+	const active = getActiveMonthlyEventSync();
 	return {
-		...mergeConfigOverrides(getConfigWithPrompts(true)),
+		...mergeActiveMonthlyEvent(getBaseConfig(), active),
 		site: getSiteSettingsSync(),
+	};
+}
+
+/**
+ * Admin preview: merge a (possibly draft / unsaved) slot as if it were live.
+ * Does not change stored settings or production /config for other users.
+ */
+export function previewConfigWithMonthlyEvent(
+	slot: MonthlyEventSlot,
+): RealmathonConfig {
+	const site = getSiteSettingsSync();
+	return {
+		...mergeActiveMonthlyEvent(getBaseConfig(), slot),
+		site: {
+			...site,
+			activeMonthlyEvent: toActiveMonthlyEventPublic(slot),
+		},
 	};
 }
 

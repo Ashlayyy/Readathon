@@ -3,6 +3,8 @@ import { describe, it } from 'node:test'
 import {
 	buildTeamChatMessage,
 	DEFAULT_TEAM_CHAT_ADD_TEMPLATES,
+	DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES,
+	normalizeTemplateList,
 	renderTeamChatTemplate,
 } from './teamChatMessage.js'
 
@@ -92,5 +94,70 @@ describe('buildTeamChatMessage', () => {
 			},
 		)
 		assert.equal(msg, 'hit a rival')
+	})
+
+	it('uses sabotage defaults when rng is 0', () => {
+		const msg = buildTeamChatMessage(
+			{
+				displayName: 'Ash',
+				bookTitle: 'Dune',
+				teamName: 'Wielders',
+				submissionType: 'sabotage',
+				targetTeamName: 'Riders',
+			},
+			{ rng: () => 0 },
+		)
+		assert.equal(
+			msg,
+			renderTeamChatTemplate(DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES[0]!, {
+				displayName: 'Ash',
+				bookTitle: 'Dune',
+				teamName: 'Wielders',
+				targetTeamName: 'Riders',
+				submissionType: 'sabotage',
+			}),
+		)
+	})
+
+	it('prefers sabotage templates without target when target is missing', () => {
+		const msg = buildTeamChatMessage(
+			{
+				displayName: 'Ash',
+				bookTitle: 'Dune',
+				teamName: 'Wielders',
+				submissionType: 'sabotage',
+			},
+			{
+				templates: [
+					'with target {{targetTeamName}}',
+					'no target line for {{displayName}}',
+				],
+				rng: () => 0,
+			},
+		)
+		assert.equal(msg, 'no target line for Ash')
+	})
+
+	it('falls back to a plain line when the template pool is empty', () => {
+		const msg = buildTeamChatMessage(
+			{
+				displayName: 'Ash',
+				bookTitle: 'Dune',
+				teamName: 'Wielders',
+				submissionType: 'add',
+			},
+			{ templates: ['   '], rng: () => 0 },
+		)
+		assert.match(msg, /Ash.*Dune.*Wielders/)
+	})
+})
+
+describe('normalizeTemplateList', () => {
+	it('filters non-strings and trims entries', () => {
+		assert.deepEqual(
+			normalizeTemplateList(['  hi ', '', 42, null, 'there']),
+			['hi', 'there'],
+		)
+		assert.deepEqual(normalizeTemplateList('nope'), [])
 	})
 })

@@ -3,6 +3,7 @@ import { calculateStandings } from './scoring.js'
 import { buildPublicStandingsVibes, type PublicStandingsVibes } from './adminAnalytics.js'
 import { getDiscordWebhookUrl } from './siteSettings.js'
 import { resolvePublishRange } from '../utils/week.js'
+import { getSiteSettingsAdminSync } from './siteSettings.js'
 
 export type LeaderGap = {
   leaderTeamName: string
@@ -88,7 +89,10 @@ export async function buildStandingsDigestDraft(opts: {
   from?: string | null
   to?: string | null
 } = {}): Promise<StandingsDigestDraft> {
-  const range = resolvePublishRange(opts)
+  const range = resolvePublishRange({
+    ...opts,
+    timeZone: getSiteSettingsAdminSync().scheduledPublishTimezone || 'Europe/Amsterdam',
+  })
 
   const [standings, vibes, emailCount] = await Promise.all([
     calculateStandings(),

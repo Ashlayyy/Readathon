@@ -80,6 +80,73 @@ export type Prompt = {
   description: string
   points: number
   link?: string
+  featured?: boolean
+}
+
+export type MonthlyEventMultipliers = {
+  prompts: number
+  bonuses: number
+  pageBonus: number
+}
+
+export type MonthlyEventSiteOverride = {
+  event?: Record<string, unknown>
+  copy?: Record<string, unknown>
+  branding?: { theme?: Record<string, string> }
+}
+
+export type MonthlyDiscordTemplates = {
+  add: string[]
+  sabotage: string[]
+  standings: string
+  breakdown: string
+  vibes: string
+  wrap: string
+}
+
+export type MonthlyReaderOfMonth = {
+  userId: string
+  shoutout: string
+}
+
+export type MonthlyEventSlot = {
+  id: string
+  status: 'draft' | 'scheduled'
+  title: string
+  blurb: string
+  from: string
+  to: string
+  timezone: string
+  multipliers: MonthlyEventMultipliers
+  featuredPromptIds: string[]
+  siteOverride: MonthlyEventSiteOverride
+  imageUrl: string
+  discordTemplates: MonthlyDiscordTemplates
+  readerOfMonth: MonthlyReaderOfMonth
+}
+
+export type MonthlyReaderOfMonthPublic = {
+  userId: string
+  displayName: string
+  avatarUrl: string | null
+  teamName: string | null
+  shoutout: string
+  auto: boolean
+  books: number
+  points: number
+  source?: 'override' | 'range' | 'allTime'
+}
+
+export type ActiveMonthlyEvent = {
+  id: string
+  title: string
+  blurb: string
+  from: string
+  to: string
+  featuredPromptIds: string[]
+  multipliers: MonthlyEventMultipliers
+  imageUrl?: string | null
+  readerOfMonth?: MonthlyReaderOfMonthPublic | null
 }
 
 export type TeamConfig = {
@@ -111,14 +178,58 @@ export type SeasonArchive = {
   publishedStandingsIds: string[]
 } | null
 
+export type DiscordGuildConfig = {
+  guildId: string
+  name: string
+  testDeliveryMode: 'webhook' | 'bot'
+  productionDeliveryMode: 'webhook' | 'bot'
+  testWebhookUrl: string
+  testRoleId: string
+  productionWebhookUrl: string
+  productionRoleId: string
+  testChannelId: string
+  productionChannelId: string
+  botCommandRoleIds: string[]
+  teamChatWebhookUrls: Record<string, string>
+  teamChatChannelIds: Record<string, string>
+}
+
 export type AdminSiteSettings = {
   showTeamRosters: boolean
   downtimeMode: boolean
+  /** @deprecated Use discordProductionWebhookUrl */
   discordWebhookUrl: string
+  /** @deprecated Use discordProductionRoleId */
   discordRoleId: string
+  discordTestWebhookUrl: string
+  discordTestRoleId: string
+  discordProductionWebhookUrl: string
+  discordProductionRoleId: string
+  /** @deprecated Prefer discordTestDeliveryMode / discordProductionDeliveryMode */
+  discordDeliveryMode: 'webhook' | 'bot'
+  discordTestDeliveryMode: 'webhook' | 'bot'
+  discordProductionDeliveryMode: 'webhook' | 'bot'
+  /** True when an encrypted bot token is stored (plaintext never returned). */
+  discordBotTokenConfigured: boolean
+  /** Primary guild for auto-publish / realm chat */
+  discordPrimaryGuildId: string
+  /** Per-server Discord destinations */
+  discordGuildConfigs: Record<string, DiscordGuildConfig>
+  /** Cached Discord servers the bot is in (from last refresh) */
+  discordBotGuildsCache: {
+    guilds: Array<{ id: string; name: string }>
+    fetchedAt: string
+  } | null
+  /** @deprecated Alias of primary guild */
+  discordGuildId: string
+  discordTestChannelId: string
+  discordProductionChannelId: string
+  discordBotCommandRoleIds: string[]
   teamChatHooksEnabled: boolean
-  /** teamId -> Discord webhook URL */
+  /** teamId -> Discord webhook URL (legacy) */
   teamChatWebhookUrls: Record<string, string>
+  /** teamId -> Discord channel ID (bot mode) */
+  teamChatChannelIds: Record<string, string>
   /** Realm chat Discord message templates (add logs) */
   teamChatAddTemplates: string[]
   /** Realm chat Discord message templates (sabotage logs) */
@@ -131,6 +242,10 @@ export type AdminSiteSettings = {
   configDraft?: unknown
   configOverrides?: unknown
   seasonArchive?: SeasonArchive
+  monthlyEvents?: MonthlyEventSlot[]
+  monthlyWrapOnPublish?: boolean
+  lastMonthlyWrapMonthKey?: string
+  activeMonthlyEvent?: ActiveMonthlyEvent | null
 }
 
 /** Variables available in realm chat message templates. */
@@ -176,7 +291,12 @@ export type RealmathonConfig = {
   howItWorks: { step: number; title: string; body: string }[]
   scoringRules: { maxPromptsPerBook: number }
   faq: { q: string; a: string }[]
-  site?: { showTeamRosters: boolean; downtimeMode: boolean; seasonArchive?: SeasonArchive }
+  site?: {
+    showTeamRosters: boolean
+    downtimeMode: boolean
+    seasonArchive?: SeasonArchive
+    activeMonthlyEvent?: ActiveMonthlyEvent | null
+  }
 }
 
 export type TeamStanding = {

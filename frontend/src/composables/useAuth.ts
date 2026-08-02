@@ -55,6 +55,12 @@ export function useAuth() {
     fetchPromise = null
     identifyUser(null)
     captureEvent('auth_logout')
+    try {
+      const { useMonthlyThemePreview } = await import('./useMonthlyThemePreview')
+      useMonthlyThemePreview().clearPreview()
+    } catch {
+      /* ignore */
+    }
   }
 
   return { user, loaded, fetchUser, register, login, logout, googleLoginUrl }
