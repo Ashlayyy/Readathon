@@ -70,6 +70,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 defineExpose({ openPanel, close })
 
+/** Popup only shows the newest release; full history is on /changelog. */
+const latestOnly = computed(() => (CHANGELOG[0] ? [CHANGELOG[0]] : []))
+
 function entryId(entry: ChangelogEntry, index: number) {
 	return `${changelogEntryVersion(entry, index)}-${entry.date}`
 }
@@ -96,7 +99,11 @@ function entryId(entry: ChangelogEntry, index: number) {
 				</header>
 
 				<ul class="entry-list">
-					<li v-for="(entry, index) in CHANGELOG" :key="entryId(entry, index)" class="entry">
+					<li
+						v-for="(entry, index) in latestOnly"
+						:key="entryId(entry, index)"
+						class="entry"
+					>
 						<div class="entry-meta">
 							<span class="version">{{ changelogEntryVersion(entry, index) }}</span>
 							<time>{{ entry.date }}</time>
