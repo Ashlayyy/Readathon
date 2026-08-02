@@ -14,7 +14,10 @@ import { getTeamById } from '../services/prompts.js';
 import { captureServerEvent } from '../services/posthog.js';
 import { notifyTeamChatSubmission } from '../services/discord.js';
 import { buildTeamChatMessage } from '../services/teamChatMessage.js';
-import { getSiteSettingsAdminSync } from '../services/siteSettings.js';
+import {
+	getActiveMonthlyEventSync,
+	getSiteSettingsAdminSync,
+} from '../services/siteSettings.js';
 import { submissionsCreatedTotal } from '../services/metrics.js';
 
 function optionalDate(value: string | null | undefined): string | null {
@@ -113,6 +116,15 @@ submissionRoutes.post('/', async (c) => {
 			? getTeamById(body.targetTeamId)?.name ?? null
 			: null;
 		const settings = getSiteSettingsAdminSync();
+		const liveSlot = getActiveMonthlyEventSync();
+		const themeTemplates =
+			body.submissionType === 'sabotage'
+				? liveSlot?.discordTemplates?.sabotage
+				: liveSlot?.discordTemplates?.add;
+		const globalTemplates =
+			body.submissionType === 'sabotage'
+				? settings.teamChatSabotageTemplates
+				: settings.teamChatAddTemplates;
 		notifyTeamChatSubmission(
 			user.teamId,
 			buildTeamChatMessage(
@@ -125,9 +137,9 @@ submissionRoutes.post('/', async (c) => {
 				},
 				{
 					templates:
-						body.submissionType === 'sabotage'
-							? settings.teamChatSabotageTemplates
-							: settings.teamChatAddTemplates,
+						themeTemplates && themeTemplates.length > 0
+							? themeTemplates
+							: globalTemplates,
 				},
 			),
 		);

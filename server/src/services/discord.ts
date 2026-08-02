@@ -8,6 +8,11 @@ import {
 } from './siteSettings.js'
 import { svgToPng, isPngBuffer } from './svgToPng.js'
 import { discordWebhookTotal } from './metrics.js'
+import { getSvgEventName } from './svgTheme.js'
+import {
+  getLiveMonthlyDiscordTemplates,
+  renderDiscordCaption,
+} from './monthlyThemeExtras.js'
 
 /** Fallback when a publish label wasn't provided (legacy ISO key → "Week 30"). */
 function weekNumberLabel(weekKey: string): string {
@@ -19,6 +24,74 @@ function weekNumberLabel(weekKey: string): string {
 function discordWeekHeading(weekKey: string, weekLabel?: string | null): string {
   const trimmed = weekLabel?.trim()
   return trimmed || weekNumberLabel(weekKey)
+}
+
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const
+
+/** Turn `2026-07-06` into `Jul 6`. */
+function formatWrapDay(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return iso
+  const month = SHORT_MONTHS[Number(m[2]) - 1]
+  const day = Number(m[3])
+  if (!month || !Number.isFinite(day)) return iso
+  return `${month} ${day}`
+}
+
+/**
+ * Pretty range for Discord copy.
+ * Accepts labels like `2026-07-06 → 2026-08-02 (4 weeks)`.
+ */
+export function formatDiscordWrapRange(label: string): string {
+  const trimmed = label.trim()
+  const m = trimmed.match(
+    /^(\d{4}-\d{2}-\d{2})\s*(?:→|->|-)\s*(\d{4}-\d{2}-\d{2})/,
+  )
+  if (!m) return trimmed.replace(/\s*→\s*/g, ' - ')
+  const from = formatWrapDay(m[1]!)
+  const to = formatWrapDay(m[2]!)
+  const fromYear = m[1]!.slice(0, 4)
+  const toYear = m[2]!.slice(0, 4)
+  if (fromYear === toYear) return `${from} - ${to}, ${toYear}`
+  return `${from}, ${fromYear} - ${to}, ${toYear}`
+}
+
+/** Caption for the 4-week wrap image (standalone or after standings). */
+export function discordMonthlyWrapContent(opts: {
+  channel: DiscordWebhookChannel
+  label: string
+  /** Role mention prefix including trailing space, e.g. `<@&123> `. */
+  mention?: string
+}): string {
+  const mention = opts.mention ?? ''
+  const eventName = getSvgEventName()
+  const range = formatDiscordWrapRange(opts.label || 'Last 4 weeks')
+  const isTest = opts.channel === 'test'
+  if (isTest) {
+    return [
+      `${mention}**[TEST] ${eventName} - 4-week wrap**`,
+      `Looking back at **${range}**`,
+      `_Top readers, warmongers, realms & more_`,
+    ].join('\n')
+  }
+  return [
+    `${mention}**${eventName} - the 4-week wrap is here!**`,
+    `Looking back at **${range}**`,
+    `_Top readers, warmongers, realms & more_`,
+  ].join('\n')
 }
 
 function webhookUrlWithWait(webhookUrl: string): string {
@@ -338,12 +411,27 @@ export async function notifyDiscordStandingsPublished(
   })
 
   try {
+    const themeTpl = getLiveMonthlyDiscordTemplates()
+    const eventName = getSvgEventName()
+    const captionVarsBase = {
+      mention,
+      weekLabel: heading,
+      eventName,
+      wrapLabel: '',
+      wrapRange: '',
+    }
+
     console.log('[discord] standings: rasterizing SVG to PNG…')
     const standingsPng = svgToPng(opts.standingsSvg)
-    const standingsContent =
+    const standingsFallback =
       channel === 'test'
         ? `${mention}**[TEST]** ${heading} standings preview`
         : `${mention}**${heading} standings are live!**`
+    const standingsContent = renderDiscordCaption(
+      themeTpl?.standings,
+      captionVarsBase,
+      standingsFallback,
+    )
     const standingsSent = await postWebhookImage(
       'standings',
       webhookUrl,
@@ -357,10 +445,15 @@ export async function notifyDiscordStandingsPublished(
     if (hasBreakdown && opts.breakdownSvg) {
       console.log('[discord] breakdown: rasterizing SVG to PNG…')
       const breakdownPng = svgToPng(opts.breakdownSvg)
-      const breakdownContent =
+      const breakdownFallback =
         channel === 'test'
           ? `**[TEST]** ${heading} score breakdown`
           : `**${heading} score breakdown**`
+      const breakdownContent = renderDiscordCaption(
+        themeTpl?.breakdown,
+        { ...captionVarsBase, mention: '' },
+        breakdownFallback,
+      )
       const breakdownSent = await postWebhookImage(
         'breakdown',
         webhookUrl,
@@ -379,10 +472,15 @@ export async function notifyDiscordStandingsPublished(
     if (hasVibes && opts.vibesSvg) {
       console.log('[discord] vibes: rasterizing SVG to PNG…')
       const vibesPng = svgToPng(opts.vibesSvg)
-      const vibesContent =
+      const vibesFallback =
         channel === 'test'
           ? `**[TEST]** ${heading} reading vibes`
           : `**${heading} reading vibes**`
+      const vibesContent = renderDiscordCaption(
+        themeTpl?.vibes,
+        { ...captionVarsBase, mention: '' },
+        vibesFallback,
+      )
       const vibesSent = await postWebhookImage(
         'vibes',
         webhookUrl,
@@ -402,10 +500,21 @@ export async function notifyDiscordStandingsPublished(
       console.log('[discord] monthly wrap: rasterizing SVG to PNG…')
       const wrapPng = svgToPng(opts.monthlyWrapSvg)
       const wrapLabel = opts.monthlyWrapLabel?.trim() || 'Last 4 weeks'
-      const wrapContent =
-        channel === 'test'
-          ? `**[TEST]** 4-week wrap · ${wrapLabel}`
-          : `**4-week wrap** · ${wrapLabel}`
+      const wrapRange = formatDiscordWrapRange(wrapLabel)
+      const wrapFallback = discordMonthlyWrapContent({
+        channel,
+        label: wrapLabel,
+      })
+      const wrapContent = renderDiscordCaption(
+        themeTpl?.wrap,
+        {
+          ...captionVarsBase,
+          mention: '',
+          wrapLabel,
+          wrapRange,
+        },
+        wrapFallback,
+      )
       const wrapSent = await postWebhookImage(
         'monthly_wrap',
         webhookUrl,
@@ -451,10 +560,20 @@ export async function sendDiscordMonthlyWrap(opts: {
   const label = opts.label?.trim() || 'Last 4 weeks'
   try {
     const png = svgToPng(opts.wrapSvg)
-    const content =
-      channel === 'test'
-        ? `${mention}**[TEST]** 4-week wrap · ${label}`
-        : `${mention}**4-week wrap** · ${label}`
+    const themeTpl = getLiveMonthlyDiscordTemplates()
+    const wrapRange = formatDiscordWrapRange(label)
+    const fallback = discordMonthlyWrapContent({ channel, label, mention })
+    const content = renderDiscordCaption(
+      themeTpl?.wrap,
+      {
+        mention,
+        weekLabel: '',
+        eventName: getSvgEventName(),
+        wrapLabel: label,
+        wrapRange,
+      },
+      fallback,
+    )
     const ok = await postWebhookImage(
       'monthly_wrap',
       webhookUrl,

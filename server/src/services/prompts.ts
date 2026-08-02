@@ -14,7 +14,10 @@ import {
 	getConfigOverridesSync,
 	getSiteSettingsSync,
 } from './siteSettings.js';
-import type { MonthlyEventSlot } from './monthlyEvents.js';
+import {
+	toActiveMonthlyEventPublic,
+	type MonthlyEventSlot,
+} from './monthlyEvents.js';
 
 const configPath = join(
 	dirname(fileURLToPath(import.meta.url)),
@@ -150,10 +153,10 @@ function deepMergeRecords(
 }
 
 /**
- * Applies a live Theme-of-the-Month slot (event/copy/branding + featured prompts).
- * Outside the window / draft slots never reach here — auto-reverts to base config.
+ * Applies a Theme-of-the-Month slot (event/copy/branding + featured prompts).
+ * Live config only passes scheduled-in-window slots; preview may pass drafts.
  */
-function mergeActiveMonthlyEvent(
+export function mergeActiveMonthlyEvent(
 	config: RealmathonConfig,
 	slot: MonthlyEventSlot | null,
 ): RealmathonConfig {
@@ -208,15 +211,34 @@ function mergeActiveMonthlyEvent(
 	return next;
 }
 
+/** Base public config before any monthly theme merge. */
+export function getBaseConfig(): RealmathonConfig {
+	return mergeConfigOverrides(getConfigWithPrompts(true));
+}
+
 /** Public site config - prompts from DB when populated, else JSON fallback. */
 export function getConfig(): RealmathonConfig {
 	const active = getActiveMonthlyEventSync();
 	return {
-		...mergeActiveMonthlyEvent(
-			mergeConfigOverrides(getConfigWithPrompts(true)),
-			active,
-		),
+		...mergeActiveMonthlyEvent(getBaseConfig(), active),
 		site: getSiteSettingsSync(),
+	};
+}
+
+/**
+ * Admin preview: merge a (possibly draft / unsaved) slot as if it were live.
+ * Does not change stored settings or production /config for other users.
+ */
+export function previewConfigWithMonthlyEvent(
+	slot: MonthlyEventSlot,
+): RealmathonConfig {
+	const site = getSiteSettingsSync();
+	return {
+		...mergeActiveMonthlyEvent(getBaseConfig(), slot),
+		site: {
+			...site,
+			activeMonthlyEvent: toActiveMonthlyEventPublic(slot),
+		},
 	};
 }
 

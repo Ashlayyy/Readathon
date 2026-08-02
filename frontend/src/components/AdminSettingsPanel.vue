@@ -426,10 +426,17 @@ async function saveMonthlyWrapToggle() {
 	}
 }
 
-async function sendDiscordStandings(includeMonthlyWrap: boolean) {
+async function sendDiscordStandings(
+	includeMonthlyWrap: boolean,
+	withPing = false,
+) {
 	const busyKey = includeMonthlyWrap
-		? 'discord-standings-wrap'
-		: 'discord-standings';
+		? withPing
+			? 'discord-standings-wrap-ping'
+			: 'discord-standings-wrap'
+		: withPing
+			? 'discord-standings-ping'
+			: 'discord-standings';
 	autoSaving.value = busyKey;
 	emit('message', '');
 	try {
@@ -438,15 +445,12 @@ async function sendDiscordStandings(includeMonthlyWrap: boolean) {
 			body: JSON.stringify({
 				channel: 'test',
 				includeMonthlyWrap,
-				withPing: false,
+				withPing,
 			}),
 		});
-		emit(
-			'message',
-			includeMonthlyWrap
-				? 'Test webhook: standings + 4-week wrap sent.'
-				: 'Test webhook: standings sent.',
-		);
+		const wrapNote = includeMonthlyWrap ? ' + 4-week wrap' : '';
+		const pingNote = withPing ? ' with ping' : '';
+		emit('message', `Test webhook: standings${wrapNote} sent${pingNote}.`);
 	} catch (e) {
 		emit(
 			'message',
@@ -730,6 +734,23 @@ function openWrapPreview() {
 									autoSaving === 'discord-standings-wrap'
 										? 'Sending…'
 										: 'Send standings + 4-week stats'
+								}}
+							</button>
+							<button
+								type="button"
+								class="btn btn-secondary btn-sm"
+								:disabled="
+									saving ||
+									autoSaving === 'discord-standings-wrap-ping' ||
+									!discordTestWebhookUrl ||
+									!discordTestRoleId
+								"
+								@click="sendDiscordStandings(true, true)"
+							>
+								{{
+									autoSaving === 'discord-standings-wrap-ping'
+										? 'Sending…'
+										: 'Send standings + wrap with ping'
 								}}
 							</button>
 							<button
@@ -1079,14 +1100,22 @@ function openWrapPreview() {
 	top: 0;
 	left: 0;
 	right: 0;
+	bottom: auto;
 	z-index: 10000;
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
 	gap: 0.65rem 1rem;
+	width: auto;
+	max-width: none;
+	height: auto;
+	max-height: none;
+	transform: none;
 	padding: 0.7rem 1.1rem;
+	border-radius: 0;
 	background: #8b1e1e;
+	border: 0;
 	border-bottom: 2px solid #ff6b6b;
 	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
 	color: #fff5f5;

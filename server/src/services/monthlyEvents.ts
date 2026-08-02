@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { calendarDateInTimeZone } from '../utils/week.js'
+import { normalizeTemplateList } from './teamChatMessage.js'
 
 export type MonthlyEventMultipliers = {
   prompts: number
@@ -11,6 +12,23 @@ export type MonthlyEventSiteOverride = {
   event?: Record<string, unknown>
   copy?: Record<string, unknown>
   branding?: { theme?: Record<string, string> }
+}
+
+/** Optional Discord overrides while the theme is live. Empty = keep global defaults. */
+export type MonthlyDiscordTemplates = {
+  add: string[]
+  sabotage: string[]
+  /** Caption templates; placeholders: {{mention}} {{weekLabel}} {{eventName}} {{wrapLabel}} {{wrapRange}} */
+  standings: string
+  breakdown: string
+  vibes: string
+  wrap: string
+}
+
+export type MonthlyReaderOfMonth = {
+  /** Manual override user id; empty = auto top reader in range */
+  userId: string
+  shoutout: string
 }
 
 export type MonthlyEventStatus = 'draft' | 'scheduled'
@@ -26,6 +44,23 @@ export type MonthlyEventSlot = {
   multipliers: MonthlyEventMultipliers
   featuredPromptIds: string[]
   siteOverride: MonthlyEventSiteOverride
+  /** Photo of the month URL; empty = no image on home */
+  imageUrl: string
+  discordTemplates: MonthlyDiscordTemplates
+  readerOfMonth: MonthlyReaderOfMonth
+}
+
+export type MonthlyReaderOfMonthPublic = {
+  userId: string
+  displayName: string
+  avatarUrl: string | null
+  teamName: string | null
+  shoutout: string
+  auto: boolean
+  books: number
+  points: number
+  /** How the reader was chosen (admin preview / debugging). */
+  source: 'override' | 'range' | 'allTime'
 }
 
 /** Public slice when a scheduled event is currently live. */
@@ -37,6 +72,8 @@ export type ActiveMonthlyEventPublic = {
   to: string
   featuredPromptIds: string[]
   multipliers: MonthlyEventMultipliers
+  imageUrl: string | null
+  readerOfMonth: MonthlyReaderOfMonthPublic | null
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -47,10 +84,23 @@ export const DEFAULT_MULTIPLIERS: MonthlyEventMultipliers = {
   pageBonus: 1,
 }
 
+export const EMPTY_DISCORD_TEMPLATES: MonthlyDiscordTemplates = {
+  add: [],
+  sabotage: [],
+  standings: '',
+  breakdown: '',
+  vibes: '',
+  wrap: '',
+}
+
+export const EMPTY_READER_OF_MONTH: MonthlyReaderOfMonth = {
+  userId: '',
+  shoutout: '',
+}
+
 function clampMultiplier(n: unknown, fallback = 1): number {
   const v = typeof n === 'number' ? n : Number(n)
   if (!Number.isFinite(v) || v < 0) return fallback
-  // Cap absurd values so a typo can't nuke standings.
   return Math.min(v, 100)
 }
 
@@ -86,6 +136,38 @@ function normalizeMultipliers(raw: unknown): MonthlyEventMultipliers {
   }
 }
 
+function normalizeDiscordTemplates(raw: unknown): MonthlyDiscordTemplates {
+  const obj = asRecord(raw) ?? {}
+  return {
+    add: normalizeTemplateList(obj.add),
+    sabotage: normalizeTemplateList(obj.sabotage),
+    standings: typeof obj.standings === 'string' ? obj.standings.trim() : '',
+    breakdown: typeof obj.breakdown === 'string' ? obj.breakdown.trim() : '',
+    vibes: typeof obj.vibes === 'string' ? obj.vibes.trim() : '',
+    wrap: typeof obj.wrap === 'string' ? obj.wrap.trim() : '',
+  }
+}
+
+function normalizeReaderOfMonth(raw: unknown): MonthlyReaderOfMonth {
+  const obj = asRecord(raw) ?? {}
+  return {
+    userId: typeof obj.userId === 'string' ? obj.userId.trim() : '',
+    shoutout: typeof obj.shoutout === 'string' ? obj.shoutout.trim() : '',
+  }
+}
+
+function normalizeImageUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return ''
+  const t = raw.trim()
+  if (!t) return ''
+  // Allow local upload paths and https URLs only.
+  if (t.startsWith('/covers/files/') || t.startsWith('https://') || t.startsWith('http://localhost')) {
+    return t
+  }
+  if (t.startsWith('http://') || t.startsWith('https://')) return t
+  return ''
+}
+
 export function normalizeMonthlyEventSlot(raw: unknown): MonthlyEventSlot | null {
   const obj = asRecord(raw)
   if (!obj) return null
@@ -110,6 +192,9 @@ export function normalizeMonthlyEventSlot(raw: unknown): MonthlyEventSlot | null
     multipliers: normalizeMultipliers(obj.multipliers),
     featuredPromptIds: featured,
     siteOverride: normalizeSiteOverride(obj.siteOverride),
+    imageUrl: normalizeImageUrl(obj.imageUrl),
+    discordTemplates: normalizeDiscordTemplates(obj.discordTemplates),
+    readerOfMonth: normalizeReaderOfMonth(obj.readerOfMonth),
   }
 }
 
@@ -142,7 +227,6 @@ export function findOverlappingScheduled(
   for (const other of slots) {
     if (other.id === candidate.id) continue
     if (other.status !== 'scheduled') continue
-    // Inclusive ranges overlap if fromA <= toB && fromB <= toA
     if (candidate.from <= other.to && other.from <= candidate.to) return other
   }
   return null
@@ -172,7 +256,6 @@ export function resolveActiveMonthlyEvent(
 ): MonthlyEventSlot | null {
   const live = slots.filter((s) => isMonthlyEventLive(s, now))
   if (live.length === 0) return null
-  // Prefer later start if data somehow overlaps (validation should prevent this).
   live.sort((a, b) => (a.from < b.from ? 1 : a.from > b.from ? -1 : 0))
   return live[0] ?? null
 }
@@ -186,6 +269,8 @@ export function toActiveMonthlyEventPublic(slot: MonthlyEventSlot): ActiveMonthl
     to: slot.to,
     featuredPromptIds: [...slot.featuredPromptIds],
     multipliers: { ...slot.multipliers },
+    imageUrl: slot.imageUrl?.trim() || null,
+    readerOfMonth: null,
   }
 }
 
@@ -209,6 +294,9 @@ export function createEmptyMonthlyEventSlot(
     multipliers: { ...DEFAULT_MULTIPLIERS },
     featuredPromptIds: [],
     siteOverride: {},
+    imageUrl: '',
+    discordTemplates: { ...EMPTY_DISCORD_TEMPLATES },
+    readerOfMonth: { ...EMPTY_READER_OF_MONTH },
     ...partial,
   })!
 }
@@ -216,7 +304,6 @@ export function createEmptyMonthlyEventSlot(
 /** First Monday of the calendar month in `timeZone`. */
 export function isFirstMondayOfMonth(now: Date, timeZone: string): boolean {
   const cal = calendarDateInTimeZone(now, timeZone)
-  // JS: 0=Sun … 1=Mon
   return cal.getDay() === 1 && cal.getDate() <= 7
 }
 

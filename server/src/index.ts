@@ -17,7 +17,9 @@ import { refreshPromptsCache, getConfig } from './services/prompts.js';
 import {
 	refreshSiteSettingsCache,
 	getSiteSettingsSync,
+	getActiveMonthlyEventSync,
 } from './services/siteSettings.js';
+import { enrichActiveMonthlyEvent } from './services/monthlyThemeExtras.js';
 import { PublishedStandings } from './db/models/PublishedStandings.js';
 import { startScheduledPublishChecker } from './services/scheduledPublish.js';
 import {
@@ -102,7 +104,14 @@ app.get('/api/health', (c) =>
 	}),
 );
 
-app.get('/api/config', (c) => c.json(getConfig()));
+app.get('/api/config', async (c) => {
+	const config = getConfig();
+	const live = getActiveMonthlyEventSync();
+	if (live && config.site) {
+		config.site.activeMonthlyEvent = await enrichActiveMonthlyEvent(live);
+	}
+	return c.json(config);
+});
 
 app.get('/api/roster', async (c) => {
 	if (!getSiteSettingsSync().showTeamRosters) {

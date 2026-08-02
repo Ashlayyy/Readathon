@@ -95,6 +95,20 @@ export type MonthlyEventSiteOverride = {
   branding?: { theme?: Record<string, string> }
 }
 
+export type MonthlyDiscordTemplates = {
+  add: string[]
+  sabotage: string[]
+  standings: string
+  breakdown: string
+  vibes: string
+  wrap: string
+}
+
+export type MonthlyReaderOfMonth = {
+  userId: string
+  shoutout: string
+}
+
 export type MonthlyEventSlot = {
   id: string
   status: 'draft' | 'scheduled'
@@ -106,6 +120,21 @@ export type MonthlyEventSlot = {
   multipliers: MonthlyEventMultipliers
   featuredPromptIds: string[]
   siteOverride: MonthlyEventSiteOverride
+  imageUrl: string
+  discordTemplates: MonthlyDiscordTemplates
+  readerOfMonth: MonthlyReaderOfMonth
+}
+
+export type MonthlyReaderOfMonthPublic = {
+  userId: string
+  displayName: string
+  avatarUrl: string | null
+  teamName: string | null
+  shoutout: string
+  auto: boolean
+  books: number
+  points: number
+  source?: 'override' | 'range' | 'allTime'
 }
 
 export type ActiveMonthlyEvent = {
@@ -116,6 +145,8 @@ export type ActiveMonthlyEvent = {
   to: string
   featuredPromptIds: string[]
   multipliers: MonthlyEventMultipliers
+  imageUrl?: string | null
+  readerOfMonth?: MonthlyReaderOfMonthPublic | null
 }
 
 export type TeamConfig = {

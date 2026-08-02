@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { api, type RealmathonConfig, type TeamConfig } from '../lib/api'
 import { applyBrandingTheme } from '../lib/branding'
 import { useTheme } from './useTheme'
+import { useMonthlyThemePreview } from './useMonthlyThemePreview'
 
 const config = ref<RealmathonConfig | null>(null)
 const configLoading = ref(false)
@@ -15,6 +16,9 @@ function syncThemePoll(data: RealmathonConfig | null) {
     clearInterval(themePollHandle)
     themePollHandle = null
   }
+  const { previewActive } = useMonthlyThemePreview()
+  // Don't poll-revert while an admin is site-previewing a draft.
+  if (previewActive.value) return
   if (!data?.site?.activeMonthlyEvent) return
   themePollHandle = setInterval(() => {
     void loadConfigInternal(true)
@@ -30,13 +34,34 @@ async function loadConfigInternal(force = false): Promise<RealmathonConfig | nul
 
   loadPromise = (async () => {
     try {
-      const data = await api<RealmathonConfig>('/config')
+      const preview = useMonthlyThemePreview()
+      const slot = preview.previewSlot.value ?? preview.readStoredSlot()
+      let data: RealmathonConfig
+      let usingPreview = false
+
+      if (slot) {
+        try {
+          data = await preview.fetchPreviewConfig(slot)
+          usingPreview = true
+          if (!preview.previewSlot.value) {
+            preview.setPreviewSlot(slot)
+          }
+        } catch {
+          preview.clearPreview()
+          data = await api<RealmathonConfig>('/config')
+        }
+      } else {
+        data = await api<RealmathonConfig>('/config')
+      }
+
       config.value = data
-      // Branding paints event colors first; user preference always wins afterward.
       if (data.branding?.theme) {
         applyBrandingTheme(data.branding.theme)
       }
-      useTheme().applyTheme()
+      // Site theme preview: force event branding so admins actually see month colors.
+      if (!usingPreview) {
+        useTheme().applyTheme()
+      }
       syncThemePoll(data)
     } catch (e) {
       console.error('Failed to load config:', e)
@@ -61,5 +86,17 @@ export function useConfig() {
     return config.value?.teams.find((t) => t.id === teamId)
   }
 
-  return { config, configLoading, configError, loadConfig, getTeam }
+  async function exitMonthlyThemePreview() {
+    useMonthlyThemePreview().clearPreview()
+    return loadConfigInternal(true)
+  }
+
+  return {
+    config,
+    configLoading,
+    configError,
+    loadConfig,
+    getTeam,
+    exitMonthlyThemePreview,
+  }
 }

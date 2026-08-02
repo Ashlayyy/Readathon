@@ -24,6 +24,13 @@ const canSubmit = computed(() => user.value?.status === 'assigned')
 
 const activeTheme = computed(() => config.value?.site?.activeMonthlyEvent ?? null)
 
+function mediaUrl(path: string | null | undefined): string {
+  const p = path?.trim() ?? ''
+  if (!p) return ''
+  if (/^https?:\/\//i.test(p)) return p
+  return apiUrl(p)
+}
+
 const profilePath = computed(() =>
   user.value ? `/readers/${user.value.id}` : '/login',
 )
@@ -103,6 +110,46 @@ onMounted(async () => {
       <h2>{{ activeTheme.title || 'Special month' }}</h2>
       <p v-if="activeTheme.blurb">{{ activeTheme.blurb }}</p>
       <p class="theme-dates">{{ activeTheme.from }} → {{ activeTheme.to }}</p>
+      <div v-if="activeTheme.imageUrl" class="theme-photo">
+        <img
+          :src="mediaUrl(activeTheme.imageUrl)"
+          :alt="`${activeTheme.title || 'Theme'} photo`"
+        />
+      </div>
+      <div
+        v-if="activeTheme.readerOfMonth"
+        class="theme-reader"
+      >
+        <p class="theme-reader-label">Reader of the month</p>
+        <div class="theme-reader-row">
+          <img
+            v-if="activeTheme.readerOfMonth.avatarUrl"
+            class="theme-reader-avatar"
+            :src="mediaUrl(activeTheme.readerOfMonth.avatarUrl)"
+            alt=""
+          />
+          <div>
+            <p class="theme-reader-name">
+              {{ activeTheme.readerOfMonth.displayName }}
+              <span v-if="activeTheme.readerOfMonth.teamName" class="theme-reader-team">
+                · {{ activeTheme.readerOfMonth.teamName }}
+              </span>
+            </p>
+            <p
+              v-if="activeTheme.readerOfMonth.auto"
+              class="theme-reader-stats"
+            >
+              {{ activeTheme.readerOfMonth.books }} books this month
+            </p>
+            <p
+              v-if="activeTheme.readerOfMonth.shoutout"
+              class="theme-reader-shout"
+            >
+              {{ activeTheme.readerOfMonth.shoutout }}
+            </p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="lore">
@@ -307,6 +354,73 @@ details[open] > .collapse-summary::after {
   margin-top: 0.5rem !important;
   font-size: 0.85rem;
   opacity: 0.85;
+}
+
+.theme-photo {
+  margin: 1rem auto 0;
+  max-width: min(28rem, 100%);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--realm-border);
+}
+
+.theme-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 18rem;
+  object-fit: cover;
+}
+
+.theme-reader {
+  margin: 1.15rem auto 0;
+  max-width: 28rem;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  border-radius: 12px;
+  border: 1px solid var(--realm-border);
+  background: color-mix(in srgb, var(--realm-surface) 80%, transparent);
+}
+
+.theme-reader-label {
+  margin: 0 0 0.45rem !important;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--realm-accent) !important;
+}
+
+.theme-reader-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.theme-reader-avatar {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--realm-border);
+  flex-shrink: 0;
+}
+
+.theme-reader-name {
+  margin: 0 !important;
+  font-weight: 700;
+  color: var(--realm-text) !important;
+}
+
+.theme-reader-team {
+  font-weight: 500;
+  color: var(--realm-text-muted);
+}
+
+.theme-reader-stats,
+.theme-reader-shout {
+  margin: 0.25rem 0 0 !important;
+  font-size: 0.88rem;
 }
 
 .submit-banner {

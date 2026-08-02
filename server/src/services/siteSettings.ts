@@ -121,6 +121,19 @@ export function getMonthlyEventsSync(): MonthlyEventSlot[] {
     ...s,
     multipliers: { ...s.multipliers },
     featuredPromptIds: [...s.featuredPromptIds],
+    imageUrl: s.imageUrl ?? '',
+    discordTemplates: {
+      add: [...(s.discordTemplates?.add ?? [])],
+      sabotage: [...(s.discordTemplates?.sabotage ?? [])],
+      standings: s.discordTemplates?.standings ?? '',
+      breakdown: s.discordTemplates?.breakdown ?? '',
+      vibes: s.discordTemplates?.vibes ?? '',
+      wrap: s.discordTemplates?.wrap ?? '',
+    },
+    readerOfMonth: {
+      userId: s.readerOfMonth?.userId ?? '',
+      shoutout: s.readerOfMonth?.shoutout ?? '',
+    },
     siteOverride: {
       event: s.siteOverride.event ? { ...s.siteOverride.event } : undefined,
       copy: s.siteOverride.copy ? { ...s.siteOverride.copy } : undefined,

@@ -59,12 +59,18 @@ import {
   importPromptsFromConfigFile,
   importPromptsFromJson,
   isPromptLive,
+  previewConfigWithMonthlyEvent,
   promptToAdminPublic,
   promptsUseDatabase,
   refreshPromptsCache,
   updatePrompt,
   type PromptInput,
 } from '../services/prompts.js'
+import { normalizeMonthlyEventSlot } from '../services/monthlyEvents.js'
+import {
+  enrichActiveMonthlyEvent,
+  resolveReaderOfMonth,
+} from '../services/monthlyThemeExtras.js'
 import { Prompt } from '../db/models/Prompt.js'
 import { getWeekInfo } from '../utils/week.js'
 import {
@@ -136,6 +142,52 @@ adminRoutes.post('/users', async (c) => {
 
 adminRoutes.get('/settings', (c) => {
   return c.json({ settings: getSiteSettingsAdminSync() })
+})
+
+/**
+ * Preview a monthly theme slot as if it were live (drafts allowed).
+ * body: MonthlyEventSlot (or partial that normalizes)
+ */
+adminRoutes.post('/monthly-themes/preview-config', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<unknown>()
+  const slot = normalizeMonthlyEventSlot(body)
+  if (!slot) {
+    return c.json(
+      { error: 'Invalid theme slot (need valid from/to dates, etc.).' },
+      400,
+    )
+  }
+  const config = previewConfigWithMonthlyEvent(slot)
+  if (config.site) {
+    config.site.activeMonthlyEvent = await enrichActiveMonthlyEvent(slot)
+  }
+  return c.json({ config })
+})
+
+/** Resolve reader-of-the-month for admin UI (auto or override). */
+adminRoutes.post('/monthly-themes/resolve-reader', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{
+    from?: string
+    to?: string
+    userId?: string
+    shoutout?: string
+  }>()
+  const from = String(body.from ?? '').trim()
+  const to = String(body.to ?? '').trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return c.json({ error: 'Valid from/to dates required.' }, 400)
+  }
+  const reader = await resolveReaderOfMonth({
+    from,
+    to,
+    readerOfMonth: {
+      userId: String(body.userId ?? '').trim(),
+      shoutout: String(body.shoutout ?? '').trim(),
+    },
+  })
+  return c.json({ reader })
 })
 
 adminRoutes.patch('/settings', async (c) => {
