@@ -82,13 +82,20 @@ const availablePrompts = computed((): Prompt[] => {
 
 const filteredPrompts = computed(() => {
   const q = promptSearch.value.toLowerCase().trim()
-  if (!q) return availablePrompts.value
-  return availablePrompts.value.filter(
-    (p) =>
-      p.label.toLowerCase().includes(q) ||
-      p.gameName.toLowerCase().includes(q) ||
-      p.description.toLowerCase().includes(q),
-  )
+  const list = q
+    ? availablePrompts.value.filter(
+        (p) =>
+          p.label.toLowerCase().includes(q) ||
+          p.gameName.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q),
+      )
+    : availablePrompts.value
+  // Highest point value first (by magnitude for sabotage prompts).
+  return [...list].sort((a, b) => {
+    const byPoints = Math.abs(b.points) - Math.abs(a.points)
+    if (byPoints !== 0) return byPoints
+    return a.label.localeCompare(b.label)
+  })
 })
 
 const userTeam = computed(() => config.value?.teams.find((t) => t.id === user.value?.teamId))

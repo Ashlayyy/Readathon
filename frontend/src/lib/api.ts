@@ -80,6 +80,42 @@ export type Prompt = {
   description: string
   points: number
   link?: string
+  featured?: boolean
+}
+
+export type MonthlyEventMultipliers = {
+  prompts: number
+  bonuses: number
+  pageBonus: number
+}
+
+export type MonthlyEventSiteOverride = {
+  event?: Record<string, unknown>
+  copy?: Record<string, unknown>
+  branding?: { theme?: Record<string, string> }
+}
+
+export type MonthlyEventSlot = {
+  id: string
+  status: 'draft' | 'scheduled'
+  title: string
+  blurb: string
+  from: string
+  to: string
+  timezone: string
+  multipliers: MonthlyEventMultipliers
+  featuredPromptIds: string[]
+  siteOverride: MonthlyEventSiteOverride
+}
+
+export type ActiveMonthlyEvent = {
+  id: string
+  title: string
+  blurb: string
+  from: string
+  to: string
+  featuredPromptIds: string[]
+  multipliers: MonthlyEventMultipliers
 }
 
 export type TeamConfig = {
@@ -114,8 +150,14 @@ export type SeasonArchive = {
 export type AdminSiteSettings = {
   showTeamRosters: boolean
   downtimeMode: boolean
+  /** @deprecated Use discordProductionWebhookUrl */
   discordWebhookUrl: string
+  /** @deprecated Use discordProductionRoleId */
   discordRoleId: string
+  discordTestWebhookUrl: string
+  discordTestRoleId: string
+  discordProductionWebhookUrl: string
+  discordProductionRoleId: string
   teamChatHooksEnabled: boolean
   /** teamId -> Discord webhook URL */
   teamChatWebhookUrls: Record<string, string>
@@ -131,6 +173,10 @@ export type AdminSiteSettings = {
   configDraft?: unknown
   configOverrides?: unknown
   seasonArchive?: SeasonArchive
+  monthlyEvents?: MonthlyEventSlot[]
+  monthlyWrapOnPublish?: boolean
+  lastMonthlyWrapMonthKey?: string
+  activeMonthlyEvent?: ActiveMonthlyEvent | null
 }
 
 /** Variables available in realm chat message templates. */
@@ -176,7 +222,12 @@ export type RealmathonConfig = {
   howItWorks: { step: number; title: string; body: string }[]
   scoringRules: { maxPromptsPerBook: number }
   faq: { q: string; a: string }[]
-  site?: { showTeamRosters: boolean; downtimeMode: boolean; seasonArchive?: SeasonArchive }
+  site?: {
+    showTeamRosters: boolean
+    downtimeMode: boolean
+    seasonArchive?: SeasonArchive
+    activeMonthlyEvent?: ActiveMonthlyEvent | null
+  }
 }
 
 export type TeamStanding = {

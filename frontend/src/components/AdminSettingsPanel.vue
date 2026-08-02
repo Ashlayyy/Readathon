@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { api, TEAM_CHAT_TEMPLATE_VARS, type AdminSiteSettings } from '../lib/api';
+import {
+	api,
+	apiUrl,
+	TEAM_CHAT_TEMPLATE_VARS,
+	type AdminSiteSettings,
+} from '../lib/api';
 import { useConfig } from '../composables/useConfig';
 import { useAdminCopy } from '../composables/useAdminCopy';
 
@@ -15,11 +20,16 @@ const autoSaving = ref('');
 
 const showTeamRosters = ref(false);
 const downtimeMode = ref(false);
+const monthlyWrapOnPublish = ref(false);
 
-const discordWebhookUrl = ref('');
-const discordWebhookDraft = ref('');
-const discordRoleId = ref('');
-const discordRoleIdDraft = ref('');
+const discordTestWebhookUrl = ref('');
+const discordTestWebhookDraft = ref('');
+const discordTestRoleId = ref('');
+const discordTestRoleIdDraft = ref('');
+const discordProductionWebhookUrl = ref('');
+const discordProductionWebhookDraft = ref('');
+const discordProductionRoleId = ref('');
+const discordProductionRoleIdDraft = ref('');
 
 const scheduledPublishEnabled = ref(false);
 const scheduledPublishDay = ref(1);
@@ -50,8 +60,14 @@ function listsEqual(a: string[], b: string[]) {
 }
 
 const dirty = computed(() => {
-	if (discordWebhookDraft.value.trim() !== discordWebhookUrl.value) return true;
-	if (discordRoleIdDraft.value.trim() !== discordRoleId.value) return true;
+	if (discordTestWebhookDraft.value.trim() !== discordTestWebhookUrl.value) return true;
+	if (discordTestRoleIdDraft.value.trim() !== discordTestRoleId.value) return true;
+	if (
+		discordProductionWebhookDraft.value.trim() !== discordProductionWebhookUrl.value
+	)
+		return true;
+	if (discordProductionRoleIdDraft.value.trim() !== discordProductionRoleId.value)
+		return true;
 	const teams = config.value?.teams ?? [];
 	for (const team of teams) {
 		const draft = (teamChatWebhookDrafts.value[team.id] ?? '').trim();
@@ -66,8 +82,10 @@ const dirty = computed(() => {
 const statusChips = computed(() => [
 	{
 		id: 'discord',
-		label: discordWebhookUrl.value ? 'Discord publish ready' : 'Discord publish off',
-		on: Boolean(discordWebhookUrl.value),
+		label: discordProductionWebhookUrl.value
+			? 'Discord publish ready'
+			: 'Discord publish off',
+		on: Boolean(discordProductionWebhookUrl.value),
 	},
 	{
 		id: 'schedule',
@@ -84,15 +102,31 @@ const statusChips = computed(() => [
 		label: downtimeMode.value ? 'Downtime mode' : 'Site live',
 		on: !downtimeMode.value,
 	},
+	{
+		id: 'wrap',
+		label: monthlyWrapOnPublish.value
+			? '4-week wrap on 1st Mon'
+			: '4-week wrap off',
+		on: monthlyWrapOnPublish.value,
+	},
 ]);
 
 function applySettings(settings: AdminSiteSettings) {
 	showTeamRosters.value = settings.showTeamRosters ?? false;
 	downtimeMode.value = settings.downtimeMode ?? false;
-	discordWebhookUrl.value = settings.discordWebhookUrl ?? '';
-	discordWebhookDraft.value = settings.discordWebhookUrl ?? '';
-	discordRoleId.value = settings.discordRoleId ?? '';
-	discordRoleIdDraft.value = settings.discordRoleId ?? '';
+	monthlyWrapOnPublish.value = settings.monthlyWrapOnPublish ?? false;
+	discordTestWebhookUrl.value = settings.discordTestWebhookUrl ?? '';
+	discordTestWebhookDraft.value = settings.discordTestWebhookUrl ?? '';
+	discordTestRoleId.value = settings.discordTestRoleId ?? '';
+	discordTestRoleIdDraft.value = settings.discordTestRoleId ?? '';
+	discordProductionWebhookUrl.value =
+		settings.discordProductionWebhookUrl || settings.discordWebhookUrl || '';
+	discordProductionWebhookDraft.value =
+		settings.discordProductionWebhookUrl || settings.discordWebhookUrl || '';
+	discordProductionRoleId.value =
+		settings.discordProductionRoleId || settings.discordRoleId || '';
+	discordProductionRoleIdDraft.value =
+		settings.discordProductionRoleId || settings.discordRoleId || '';
 	scheduledPublishEnabled.value = settings.scheduledPublishEnabled ?? false;
 	scheduledPublishDay.value = settings.scheduledPublishDay ?? 1;
 	scheduledPublishHour.value = settings.scheduledPublishHour ?? 9;
@@ -147,8 +181,10 @@ async function saveAllWebhookSettings() {
 		}
 		await patchSettings(
 			{
-				discordWebhookUrl: discordWebhookDraft.value.trim(),
-				discordRoleId: discordRoleIdDraft.value.trim(),
+				discordTestWebhookUrl: discordTestWebhookDraft.value.trim(),
+				discordTestRoleId: discordTestRoleIdDraft.value.trim(),
+				discordProductionWebhookUrl: discordProductionWebhookDraft.value.trim(),
+				discordProductionRoleId: discordProductionRoleIdDraft.value.trim(),
 				teamChatWebhookUrls: drafts,
 				teamChatAddTemplates: teamChatAddDrafts.value
 					.map((s) => s.trim())
@@ -162,19 +198,17 @@ async function saveAllWebhookSettings() {
 		emit('message', 'Settings saved.');
 	} catch (e) {
 		emit('message', e instanceof Error ? e.message : 'Failed to save settings', true);
-		discordWebhookDraft.value = discordWebhookUrl.value;
-		discordRoleIdDraft.value = discordRoleId.value;
-		teamChatWebhookDrafts.value = { ...teamChatWebhookUrls.value };
-		teamChatAddDrafts.value = [...teamChatAddTemplates.value];
-		teamChatSabotageDrafts.value = [...teamChatSabotageTemplates.value];
+		discardDrafts();
 	} finally {
 		saving.value = false;
 	}
 }
 
 function discardDrafts() {
-	discordWebhookDraft.value = discordWebhookUrl.value;
-	discordRoleIdDraft.value = discordRoleId.value;
+	discordTestWebhookDraft.value = discordTestWebhookUrl.value;
+	discordTestRoleIdDraft.value = discordTestRoleId.value;
+	discordProductionWebhookDraft.value = discordProductionWebhookUrl.value;
+	discordProductionRoleIdDraft.value = discordProductionRoleId.value;
 	teamChatWebhookDrafts.value = { ...teamChatWebhookUrls.value };
 	teamChatAddDrafts.value = [...teamChatAddTemplates.value];
 	teamChatSabotageDrafts.value = [...teamChatSabotageTemplates.value];
@@ -332,37 +366,34 @@ async function saveTeamChatToggle() {
 	}
 }
 
-async function testDiscordWebhook() {
-	autoSaving.value = 'discord-test';
+async function sendDiscord(
+	channel: 'test' | 'production',
+	withPing: boolean,
+) {
+	const busyKey = `discord-${channel}-${withPing ? 'ping' : 'nopping'}`;
+	autoSaving.value = busyKey;
 	emit('message', '');
 	try {
-		await api('/admin/discord/test-webhook', { method: 'POST' });
-		emit('message', msg('webhookTestSent'));
-	} catch (e) {
-		emit('message', e instanceof Error ? e.message : msg('webhookTestFailed'), true);
-	} finally {
-		autoSaving.value = '';
-	}
-}
-
-async function testDiscordRolePing() {
-	autoSaving.value = 'discord-role-test';
-	emit('message', '');
-	try {
-		const result = await api<{ ok: boolean; roleId?: string }>(
-			'/admin/discord/test-role-ping',
-			{ method: 'POST' },
-		);
-		emit(
-			'message',
-			result.roleId
-				? `Role ping test sent for role ${result.roleId}.`
-				: 'Role ping test sent.',
-		);
+		const result = await api<{
+			ok: boolean;
+			roleId?: string;
+			channel?: string;
+			withPing?: boolean;
+		}>('/admin/discord/send', {
+			method: 'POST',
+			body: JSON.stringify({ channel, withPing }),
+		});
+		const label = channel === 'test' ? 'Test' : 'Production';
+		const pingNote = withPing
+			? result.roleId
+				? ` with role ping (${result.roleId})`
+				: ' with role ping'
+			: ' without ping';
+		emit('message', `${label} Discord message sent${pingNote}.`);
 	} catch (e) {
 		emit(
 			'message',
-			e instanceof Error ? e.message : 'Failed to send role ping test',
+			e instanceof Error ? e.message : msg('webhookTestFailed'),
 			true,
 		);
 	} finally {
@@ -370,12 +401,88 @@ async function testDiscordRolePing() {
 	}
 }
 
-function clearDiscordWebhook() {
-	discordWebhookDraft.value = '';
+function discordBusy(channel: 'test' | 'production', withPing: boolean) {
+	return autoSaving.value === `discord-${channel}-${withPing ? 'ping' : 'nopping'}`;
 }
 
-function clearDiscordRoleId() {
-	discordRoleIdDraft.value = '';
+async function saveMonthlyWrapToggle() {
+	try {
+		await patchSettings(
+			{ monthlyWrapOnPublish: monthlyWrapOnPublish.value },
+			'wrap',
+		);
+		emit(
+			'message',
+			monthlyWrapOnPublish.value
+				? '4-week wrap will send on the first Monday publish.'
+				: '4-week wrap auto-send disabled.',
+		);
+	} catch (e) {
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Failed to update wrap toggle',
+			true,
+		);
+	}
+}
+
+async function sendDiscordStandings(includeMonthlyWrap: boolean) {
+	const busyKey = includeMonthlyWrap
+		? 'discord-standings-wrap'
+		: 'discord-standings';
+	autoSaving.value = busyKey;
+	emit('message', '');
+	try {
+		await api('/admin/discord/send-standings', {
+			method: 'POST',
+			body: JSON.stringify({
+				channel: 'test',
+				includeMonthlyWrap,
+				withPing: false,
+			}),
+		});
+		emit(
+			'message',
+			includeMonthlyWrap
+				? 'Test webhook: standings + 4-week wrap sent.'
+				: 'Test webhook: standings sent.',
+		);
+	} catch (e) {
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Failed to send standings to test webhook',
+			true,
+		);
+	} finally {
+		autoSaving.value = '';
+	}
+}
+
+async function sendMonthlyWrapOnly(channel: 'test' | 'production') {
+	autoSaving.value = `discord-wrap-${channel}`;
+	emit('message', '');
+	try {
+		const result = await api<{ label?: string }>('/admin/discord/send-monthly-wrap', {
+			method: 'POST',
+			body: JSON.stringify({ channel, withPing: false }),
+		});
+		emit(
+			'message',
+			`${channel === 'test' ? 'Test' : 'Production'}: 4-week wrap sent (${result.label ?? 'ok'}).`,
+		);
+	} catch (e) {
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Failed to send monthly wrap',
+			true,
+		);
+	} finally {
+		autoSaving.value = '';
+	}
+}
+
+function openWrapPreview() {
+	window.open(apiUrl('/admin/discord/monthly-wrap-preview.svg'), '_blank');
 }
 </script>
 
@@ -497,21 +604,49 @@ function clearDiscordRoleId() {
 			<article class="card settings-card settings-card-wide">
 				<div class="settings-card-head">
 					<div>
+						<h3>Theme of the month</h3>
+						<p class="section-desc">
+							Custom monthly themes (dates, multipliers, site overhaul, featured
+							prompts) live under the <strong>Themes</strong> tab in the admin
+							sidebar.
+						</p>
+					</div>
+				</div>
+			</article>
+
+			<article class="card settings-card settings-card-wide">
+				<div class="settings-card-head">
+					<div>
 						<h3>Webhook settings</h3>
 						<p class="section-desc">
-							Weekly standings Discord webhook, optional role ping, and per-realm
+							Separate <strong>test</strong> and <strong>production</strong>
+							standings webhooks (each with its own role ping), plus per-realm
 							chat webhooks. Edit freely — click Save once when you’re done.
 						</p>
 					</div>
 				</div>
 
+				<label class="setting-toggle">
+					<input
+						v-model="monthlyWrapOnPublish"
+						type="checkbox"
+						:disabled="autoSaving === 'wrap'"
+						@change="saveMonthlyWrapToggle"
+					/>
+					<span>Also send 4-week wrap on the first Monday of each month</span>
+				</label>
+				<p class="auto-hint">
+					With weekly publish: first Monday also posts the dense last-4-weeks
+					stats image to the production webhook. Manual send buttons are below.
+				</p>
+
 				<div class="webhook-columns">
 					<div class="webhook-block">
-						<h4>Standings publish</h4>
+						<h4>Test webhook</h4>
 						<label>
-							{{ section('standings').webhookLabel }}
+							Test webhook URL
 							<input
-								v-model="discordWebhookDraft"
+								v-model="discordTestWebhookDraft"
 								type="url"
 								:placeholder="section('standings').webhookPlaceholder"
 								autocomplete="off"
@@ -520,9 +655,9 @@ function clearDiscordRoleId() {
 							/>
 						</label>
 						<label>
-							Discord role to ping (optional)
+							Test role ID (optional)
 							<input
-								v-model="discordRoleIdDraft"
+								v-model="discordTestRoleIdDraft"
 								type="text"
 								placeholder="123456789012345678"
 								autocomplete="off"
@@ -531,37 +666,21 @@ function clearDiscordRoleId() {
 								:disabled="saving"
 							/>
 						</label>
-						<div class="btn-row">
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								:disabled="saving || !discordWebhookDraft"
-								@click="clearDiscordWebhook"
-							>
-								Clear webhook
-							</button>
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								:disabled="saving || !discordRoleIdDraft"
-								@click="clearDiscordRoleId"
-							>
-								Clear role
-							</button>
+						<div class="btn-row discord-send-row">
 							<button
 								type="button"
 								class="btn btn-secondary btn-sm"
 								:disabled="
 									saving ||
-									autoSaving === 'discord-test' ||
-									!discordWebhookUrl
+									discordBusy('test', false) ||
+									!discordTestWebhookUrl
 								"
-								@click="testDiscordWebhook"
+								@click="sendDiscord('test', false)"
 							>
 								{{
-									autoSaving === 'discord-test'
-										? section('standings').testingWebhook
-										: section('standings').testWebhook
+									discordBusy('test', false)
+										? 'Sending…'
+										: 'Send test message without ping'
 								}}
 							</button>
 							<button
@@ -569,22 +688,160 @@ function clearDiscordRoleId() {
 								class="btn btn-secondary btn-sm"
 								:disabled="
 									saving ||
-									autoSaving === 'discord-role-test' ||
-									!discordRoleId
+									discordBusy('test', true) ||
+									!discordTestWebhookUrl ||
+									!discordTestRoleId
 								"
-								@click="testDiscordRolePing"
+								@click="sendDiscord('test', true)"
 							>
 								{{
-									autoSaving === 'discord-role-test'
+									discordBusy('test', true)
 										? 'Sending…'
-										: 'Test role ping'
+										: 'Send test message with ping'
+								}}
+							</button>
+							<button
+								type="button"
+								class="btn btn-secondary btn-sm"
+								:disabled="
+									saving ||
+									autoSaving === 'discord-standings' ||
+									!discordTestWebhookUrl
+								"
+								@click="sendDiscordStandings(false)"
+							>
+								{{
+									autoSaving === 'discord-standings'
+										? 'Sending…'
+										: 'Send standings'
+								}}
+							</button>
+							<button
+								type="button"
+								class="btn btn-secondary btn-sm"
+								:disabled="
+									saving ||
+									autoSaving === 'discord-standings-wrap' ||
+									!discordTestWebhookUrl
+								"
+								@click="sendDiscordStandings(true)"
+							>
+								{{
+									autoSaving === 'discord-standings-wrap'
+										? 'Sending…'
+										: 'Send standings + 4-week stats'
+								}}
+							</button>
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								:disabled="
+									saving ||
+									autoSaving === 'discord-wrap-test' ||
+									!discordTestWebhookUrl
+								"
+								@click="sendMonthlyWrapOnly('test')"
+							>
+								{{
+									autoSaving === 'discord-wrap-test'
+										? 'Sending…'
+										: 'Send 4-week wrap only'
+								}}
+							</button>
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								@click="openWrapPreview"
+							>
+								Preview wrap SVG
+							</button>
+						</div>
+					</div>
+
+					<div class="webhook-block">
+						<h4>Production webhook</h4>
+						<label>
+							Production webhook URL
+							<input
+								v-model="discordProductionWebhookDraft"
+								type="url"
+								:placeholder="section('standings').webhookPlaceholder"
+								autocomplete="off"
+								spellcheck="false"
+								:disabled="saving"
+							/>
+						</label>
+						<label>
+							Production role ID (optional)
+							<input
+								v-model="discordProductionRoleIdDraft"
+								type="text"
+								placeholder="123456789012345678"
+								autocomplete="off"
+								spellcheck="false"
+								inputmode="numeric"
+								:disabled="saving"
+							/>
+						</label>
+						<div class="btn-row discord-send-row">
+							<button
+								type="button"
+								class="btn btn-secondary btn-sm"
+								:disabled="
+									saving ||
+									discordBusy('production', false) ||
+									!discordProductionWebhookUrl
+								"
+								@click="sendDiscord('production', false)"
+							>
+								{{
+									discordBusy('production', false)
+										? 'Sending…'
+										: 'Send message without ping'
+								}}
+							</button>
+							<button
+								type="button"
+								class="btn btn-secondary btn-sm"
+								:disabled="
+									saving ||
+									discordBusy('production', true) ||
+									!discordProductionWebhookUrl ||
+									!discordProductionRoleId
+								"
+								@click="sendDiscord('production', true)"
+							>
+								{{
+									discordBusy('production', true)
+										? 'Sending…'
+										: 'Send message with ping'
 								}}
 							</button>
 						</div>
 						<p class="hint">
-							Tests use the last saved webhook/role. Save first if you just
-							edited them.
+							Weekly publish uses the <strong>production</strong> webhook + role.
+							Copy a <strong>Role ID</strong> (Developer Mode → right-click the
+							role → Copy Role ID) from the <em>same server</em> as the webhook —
+							a user ID shows as @unknown-role. Save before sending tests.
 						</p>
+						<div class="btn-row discord-send-row" style="margin-top: 0.5rem">
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								:disabled="
+									saving ||
+									autoSaving === 'discord-wrap-production' ||
+									!discordProductionWebhookUrl
+								"
+								@click="sendMonthlyWrapOnly('production')"
+							>
+								{{
+									autoSaving === 'discord-wrap-production'
+										? 'Sending…'
+										: 'Send 4-week wrap (production)'
+								}}
+							</button>
+						</div>
 					</div>
 
 					<div class="webhook-block">
@@ -761,10 +1018,6 @@ function clearDiscordRoleId() {
 					</div>
 				</section>
 
-				<p v-if="dirty" class="dirty-banner" role="status">
-					You have unsaved webhook / message changes.
-				</p>
-
 				<div class="btn-row save-row">
 					<button
 						type="button"
@@ -785,8 +1038,93 @@ function clearDiscordRoleId() {
 				</div>
 			</article>
 		</template>
+
+		<Teleport to="body">
+			<div
+				v-if="dirty"
+				class="unsaved-sticky"
+				role="status"
+				aria-live="polite"
+			>
+				<p class="unsaved-sticky-text">
+					You have unsaved settings — save or discard before you leave.
+				</p>
+				<div class="unsaved-sticky-actions">
+					<button
+						type="button"
+						class="btn btn-ghost btn-sm"
+						:disabled="saving"
+						@click="discardDrafts"
+					>
+						Discard
+					</button>
+					<button
+						type="button"
+						class="btn btn-primary btn-sm"
+						:disabled="saving"
+						@click="saveAllWebhookSettings"
+					>
+						{{ saving ? 'Saving…' : 'Save settings' }}
+					</button>
+				</div>
+			</div>
+		</Teleport>
 	</section>
 </template>
+
+<style>
+/* Teleported to body — unscoped so the sticky bar works outside the component. */
+.unsaved-sticky {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 10000;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.65rem 1rem;
+	padding: 0.7rem 1.1rem;
+	background: #8b1e1e;
+	border-bottom: 2px solid #ff6b6b;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+	color: #fff5f5;
+}
+
+.unsaved-sticky-text {
+	margin: 0;
+	font-size: 0.92rem;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+}
+
+.unsaved-sticky-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.45rem;
+	align-items: center;
+}
+
+.unsaved-sticky .btn-ghost {
+	color: #fff5f5;
+	border-color: rgba(255, 245, 245, 0.35);
+}
+
+.unsaved-sticky .btn-ghost:hover:not(:disabled) {
+	background: rgba(255, 255, 255, 0.1);
+}
+
+.unsaved-sticky .btn-primary {
+	background: #fff5f5;
+	color: #6b1212;
+	border-color: #fff5f5;
+}
+
+.unsaved-sticky .btn-primary:hover:not(:disabled) {
+	filter: brightness(0.95);
+}
+</style>
 
 <style scoped>
 .admin-settings {
@@ -954,21 +1292,23 @@ function clearDiscordRoleId() {
 	align-items: center;
 }
 
+.discord-send-row {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.discord-send-row .btn {
+	justify-content: center;
+	text-align: center;
+}
+
+
 .save-row {
 	flex-shrink: 0;
 	justify-content: flex-end;
 	margin-top: 0.25rem;
 }
 
-.dirty-banner {
-	margin: 0;
-	padding: 0.65rem 0.85rem;
-	border-radius: var(--radius);
-	border: 1px dashed color-mix(in srgb, var(--realm-accent) 50%, var(--realm-border));
-	background: color-mix(in srgb, var(--realm-accent) 12%, transparent);
-	color: var(--realm-accent-glow);
-	font-size: 0.88rem;
-}
 
 .template-editor {
 	margin-top: 0.35rem;

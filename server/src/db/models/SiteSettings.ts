@@ -4,8 +4,14 @@ const siteSettingsSchema = new Schema(
   {
     showTeamRosters: { type: Boolean, default: false },
     downtimeMode: { type: Boolean, default: false },
+    /** @deprecated Prefer discordProductionWebhookUrl — kept in sync for older docs. */
     discordWebhookUrl: { type: String, default: '' },
+    /** @deprecated Prefer discordProductionRoleId — kept in sync for older docs. */
     discordRoleId: { type: String, default: '' },
+    discordTestWebhookUrl: { type: String, default: '' },
+    discordTestRoleId: { type: String, default: '' },
+    discordProductionWebhookUrl: { type: String, default: '' },
+    discordProductionRoleId: { type: String, default: '' },
     teamChatHooksEnabled: { type: Boolean, default: false },
     /** teamId -> webhook URL */
     teamChatWebhookUrls: { type: Schema.Types.Mixed, default: {} },
@@ -24,6 +30,15 @@ const siteSettingsSchema = new Schema(
     configOverrides: { type: Schema.Types.Mixed, default: null },
     /** { slug, title, from, to, message, publishedStandingsIds[] } for a wrapped-up season */
     seasonArchive: { type: Schema.Types.Mixed, default: null },
+    /**
+     * Scheduled Theme-of-the-Month slots (draft = invisible; scheduled = live only in window).
+     * See services/monthlyEvents.ts
+     */
+    monthlyEvents: { type: Schema.Types.Mixed, default: [] },
+    /** When true, first Monday publish also sends the 4-week wrap stats image. */
+    monthlyWrapOnPublish: { type: Boolean, default: false },
+    /** Idempotency key for auto wrap, e.g. "2026-08" */
+    lastMonthlyWrapMonthKey: { type: String, default: '' },
   },
   { timestamps: true },
 )

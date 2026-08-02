@@ -21,6 +21,7 @@ import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue';
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue';
 import AdminStatsPanel from '../components/AdminStatsPanel.vue';
 import AdminSettingsPanel from '../components/AdminSettingsPanel.vue';
+import AdminMonthlyThemesPanel from '../components/AdminMonthlyThemesPanel.vue';
 import AdminAddSubmissionModal from '../components/AdminAddSubmissionModal.vue';
 import AdminCoverSearchModal from '../components/AdminCoverSearchModal.vue';
 import AdminAssignTeamsModal from '../components/AdminAssignTeamsModal.vue';
@@ -129,8 +130,12 @@ const activeTab = ref<
 	| 'prompts'
 	| 'stats'
 	| 'audit'
+	| 'themes'
 	| 'settings'
 >('inbox');
+/** Keep Settings/Themes mounted after first visit so unsaved sticky banners persist. */
+const settingsMounted = ref(false);
+const themesMounted = ref(false);
 const addSubmissionOpen = ref(false);
 const coverSearchOpen = ref(false);
 const navOpen = ref(false);
@@ -335,6 +340,7 @@ onMounted(async () => {
 			'prompts',
 			'stats',
 			'audit',
+			'themes',
 			'settings',
 		]);
 		await loadStats();
@@ -343,6 +349,8 @@ onMounted(async () => {
 		} else if (stats.value.unreadQuestions > 0) {
 			activeTab.value = 'inbox';
 		}
+		if (activeTab.value === 'settings') settingsMounted.value = true;
+		if (activeTab.value === 'themes') themesMounted.value = true;
 		await ensureTabData(activeTab.value);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('loadFailed'), true);
@@ -745,6 +753,8 @@ async function onSubmissionUpdated() {
 
 function setTab(tab: typeof activeTab.value) {
 	activeTab.value = tab;
+	if (tab === 'settings') settingsMounted.value = true;
+	if (tab === 'themes') themesMounted.value = true;
 	const url = new URL(window.location.href);
 	url.searchParams.set('tab', tab);
 	window.history.replaceState({}, '', url);
@@ -1174,6 +1184,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						@click="setTab('audit')"
 					>
 						{{ section('tabs').audit ?? 'Audit' }}
+					</button>
+					<button
+						type="button"
+						:class="{ active: activeTab === 'themes' }"
+						@click="setTab('themes')"
+					>
+						Themes
 					</button>
 					<button
 						type="button"
@@ -2460,9 +2477,28 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						</p>
 					</template>
 				</section>
-				<!-- Settings -->
-				<section v-if="activeTab === 'settings'" class="admin-section">
-					<AdminSettingsPanel @message="showMessage" />
+				<!-- Theme of the month (v-show keeps drafts + sticky unsaved banner alive) -->
+				<section
+					v-show="activeTab === 'themes'"
+					class="admin-section"
+					:hidden="activeTab !== 'themes'"
+				>
+					<AdminMonthlyThemesPanel
+						v-if="themesMounted"
+						@message="showMessage"
+					/>
+				</section>
+
+				<!-- Settings (v-show keeps drafts + sticky unsaved banner alive) -->
+				<section
+					v-show="activeTab === 'settings'"
+					class="admin-section"
+					:hidden="activeTab !== 'settings'"
+				>
+					<AdminSettingsPanel
+						v-if="settingsMounted"
+						@message="showMessage"
+					/>
 				</section>
 
 

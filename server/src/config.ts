@@ -11,6 +11,8 @@ export type Prompt = {
   description: string
   points: number
   link?: string
+  /** Set when an active monthly theme features this prompt. */
+  featured?: boolean
 }
 
 export type PromptXpTier = {
@@ -54,6 +56,15 @@ export type RealmathonConfig = {
       to: string
       message: string
       publishedStandingsIds: string[]
+    } | null
+    activeMonthlyEvent?: {
+      id: string
+      title: string
+      blurb: string
+      from: string
+      to: string
+      featuredPromptIds: string[]
+      multipliers: { prompts: number; bonuses: number; pageBonus: number }
     } | null
   }
 }

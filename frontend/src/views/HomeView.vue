@@ -22,6 +22,8 @@ const changelogOpen = ref(false)
 
 const canSubmit = computed(() => user.value?.status === 'assigned')
 
+const activeTheme = computed(() => config.value?.site?.activeMonthlyEvent ?? null)
+
 const profilePath = computed(() =>
   user.value ? `/readers/${user.value.id}` : '/login',
 )
@@ -95,6 +97,13 @@ onMounted(async () => {
     </section>
 
     <ChangelogModal v-model:open="changelogOpen" />
+
+    <section v-if="activeTheme" class="theme-banner" aria-label="Theme of the month">
+      <p class="theme-eyebrow">Theme of the month</p>
+      <h2>{{ activeTheme.title || 'Special month' }}</h2>
+      <p v-if="activeTheme.blurb">{{ activeTheme.blurb }}</p>
+      <p class="theme-dates">{{ activeTheme.from }} → {{ activeTheme.to }}</p>
+    </section>
 
     <section class="lore">
       <h2>{{ config.event.loreTitle }}</h2>
@@ -257,6 +266,47 @@ details[open] > .collapse-summary::after {
 
 .changelog-btn {
   border: 1px solid var(--realm-border);
+}
+
+.theme-banner {
+  margin: 0 0 2rem;
+  padding: 1.25rem 1.5rem;
+  text-align: center;
+  border-top: 1px solid var(--realm-border);
+  border-bottom: 1px solid var(--realm-border);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--realm-accent) 12%, transparent),
+    transparent
+  );
+}
+
+.theme-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--realm-accent);
+}
+
+.theme-banner h2 {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 3vw, 1.85rem);
+  color: var(--realm-text);
+}
+
+.theme-banner p {
+  margin: 0 auto;
+  max-width: 36rem;
+  color: var(--realm-text-muted);
+}
+
+.theme-dates {
+  margin-top: 0.5rem !important;
+  font-size: 0.85rem;
+  opacity: 0.85;
 }
 
 .submit-banner {

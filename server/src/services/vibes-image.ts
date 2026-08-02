@@ -1,6 +1,6 @@
-import { getStaticConfig } from '../config.js'
 import { SVG_FONT_SANS } from '../lib/svgFonts.js'
 import type { PublicStandingsVibes } from './adminAnalytics.js'
+import { getSvgEventName, getSvgTheme, type SvgTheme } from './svgTheme.js'
 
 function escapeXml(s: string): string {
 	return s
@@ -27,25 +27,27 @@ function statCardSvg(
 	w: number,
 	h: number,
 	card: StatCard,
+	theme: SvgTheme,
 ): string {
 	const cx = x + w / 2
 	const line1 = card.lines[0] ?? ''
 	const line2 = card.lines[1]
 	return `
-  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="#1a1822" stroke="#2a2733"/>
-  <text x="${cx}" y="${y + 22}" text-anchor="middle" fill="#9a9188" font-size="11" font-family="${SVG_FONT_SANS}" letter-spacing="0.06em">${escapeXml(card.kicker.toUpperCase())}</text>
+  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="${theme.surface}" stroke="${theme.border}"/>
+  <text x="${cx}" y="${y + 22}" text-anchor="middle" fill="${theme.textMuted}" font-size="11" font-family="${SVG_FONT_SANS}" letter-spacing="0.06em">${escapeXml(card.kicker.toUpperCase())}</text>
   <text x="${cx}" y="${y + 58}" text-anchor="middle" fill="${card.valueColor}" font-size="32" font-family="${SVG_FONT_SANS}" font-weight="700">${escapeXml(card.value)}</text>
-  <text x="${cx}" y="${y + 82}" text-anchor="middle" fill="#c9c2b8" font-size="12" font-family="${SVG_FONT_SANS}">${escapeXml(line1)}</text>
+  <text x="${cx}" y="${y + 82}" text-anchor="middle" fill="${theme.textSoft}" font-size="12" font-family="${SVG_FONT_SANS}">${escapeXml(line1)}</text>
   ${
 		line2
-			? `<text x="${cx}" y="${y + 98}" text-anchor="middle" fill="#9a9188" font-size="11" font-family="${SVG_FONT_SANS}">${escapeXml(line2)}</text>`
+			? `<text x="${cx}" y="${y + 98}" text-anchor="middle" fill="${theme.textMuted}" font-size="11" font-family="${SVG_FONT_SANS}">${escapeXml(line2)}</text>`
 			: ''
 	}`
 }
 
 /** Compact weekly vibes card for Discord + optional web use. */
 export function generateVibesSvg(vibes: PublicStandingsVibes): string {
-	const eventName = getStaticConfig().event.name as string
+	const theme = getSvgTheme()
+	const eventName = getSvgEventName()
 	const width = 840
 	const pad = 24
 	const gap = 14
@@ -71,7 +73,7 @@ export function generateVibesSvg(vibes: PublicStandingsVibes): string {
 	const cards: StatCard[] = [
 		{
 			value: String(o.submissions),
-			valueColor: '#f4efe8',
+			valueColor: theme.text,
 			kicker: 'Books',
 			lines: [
 				`${formatPages(o.totalPages)} pages`,
@@ -80,19 +82,19 @@ export function generateVibesSvg(vibes: PublicStandingsVibes): string {
 		},
 		{
 			value: `${o.chaosRatio}%`,
-			valueColor: '#ff8a6a',
+			valueColor: theme.accentGlow,
 			kicker: 'Sabotage',
-			lines: [`${o.sabotageCount} attacks · ${o.addCount} adds`],
+			lines: [`${o.sabotageCount} attacks - ${o.addCount} adds`],
 		},
 		{
 			value: `${o.competitionRate}%`,
-			valueColor: '#f4efe8',
+			valueColor: theme.text,
 			kicker: 'Competition bonus',
 			lines: ['of books used it'],
 		},
 		{
 			value: String(o.activeReaders),
-			valueColor: '#f4efe8',
+			valueColor: theme.text,
 			kicker: 'Active readers',
 			lines: ['logged at least one book'],
 		},
@@ -108,7 +110,7 @@ export function generateVibesSvg(vibes: PublicStandingsVibes): string {
 	const statCards = cards
 		.map((card, i) => {
 			const p = positions[i]!
-			return statCardSvg(p.x, p.y, colW, cardH, card)
+			return statCardSvg(p.x, p.y, colW, cardH, card, theme)
 		})
 		.join('\n')
 
@@ -119,38 +121,39 @@ export function generateVibesSvg(vibes: PublicStandingsVibes): string {
 		? formats
 				.map((f, i) => {
 					const y = bodyStart + i * formatRowH
-					return `<text x="${leftX + 14}" y="${y}" fill="#c9c2b8" font-size="14" font-family="${SVG_FONT_SANS}">${escapeXml(f.label)}</text>
-      <text x="${leftX + colW - 14}" y="${y}" text-anchor="end" fill="#f4efe8" font-size="14" font-family="${SVG_FONT_SANS}" font-weight="600">${f.count}</text>`
+					return `<text x="${leftX + 14}" y="${y}" fill="${theme.textSoft}" font-size="14" font-family="${SVG_FONT_SANS}">${escapeXml(f.label)}</text>
+      <text x="${leftX + colW - 14}" y="${y}" text-anchor="end" fill="${theme.text}" font-size="14" font-family="${SVG_FONT_SANS}" font-weight="600">${f.count}</text>`
 				})
 				.join('\n')
-		: `<text x="${leftX + 14}" y="${bodyStart}" fill="#9a9188" font-size="14" font-family="${SVG_FONT_SANS}">No books this week</text>`
+		: `<text x="${leftX + 14}" y="${bodyStart}" fill="${theme.textMuted}" font-size="14" font-family="${SVG_FONT_SANS}">No books this week</text>`
 
 	const teamLines = teams.length
 		? teams
 				.map((t, i) => {
 					const y = bodyStart + i * teamRowH
 					return `
-      <text x="${rightX + 14}" y="${y}" fill="#f4efe8" font-size="15" font-family="${SVG_FONT_SANS}" font-weight="600">${escapeXml(t.teamName)}</text>
-      <text x="${rightX + 14}" y="${y + 18}" fill="#9a9188" font-size="12" font-family="${SVG_FONT_SANS}">${t.hitCount} hits · −${t.damageTaken} dmg · ${t.booksLogged} books</text>`
+      <text x="${rightX + 14}" y="${y}" fill="${theme.text}" font-size="15" font-family="${SVG_FONT_SANS}" font-weight="600">${escapeXml(t.teamName)}</text>
+      <text x="${rightX + 14}" y="${y + 18}" fill="${theme.textMuted}" font-size="12" font-family="${SVG_FONT_SANS}">${t.hitCount} hits -${t.damageTaken} dmg - ${t.booksLogged} books</text>`
 				})
 				.join('\n')
-		: `<text x="${rightX + 14}" y="${bodyStart}" fill="#9a9188" font-size="14" font-family="${SVG_FONT_SANS}">No sabotage hits</text>`
+		: `<text x="${rightX + 14}" y="${bodyStart}" fill="${theme.textMuted}" font-size="14" font-family="${SVG_FONT_SANS}">No sabotage hits</text>`
 
 	const panelH = sectionHeaderH + bodyH + 16
 
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect width="100%" height="100%" fill="#0f0e14"/>
-  <text x="${width / 2}" y="32" text-anchor="middle" fill="#d4634a" font-size="20" font-family="${SVG_FONT_SANS}" font-weight="700">${escapeXml(eventName)} — ${escapeXml(vibes.weekLabel)}</text>
-  <text x="${width / 2}" y="54" text-anchor="middle" fill="#9a9188" font-size="13" font-family="${SVG_FONT_SANS}">Weekly reading vibes</text>
+  <rect width="100%" height="100%" fill="${theme.background}"/>
+  <rect x="0" y="0" width="${width}" height="4" fill="${theme.accent}"/>
+  <text x="${width / 2}" y="32" text-anchor="middle" fill="${theme.accent}" font-size="20" font-family="${SVG_FONT_SANS}" font-weight="700">${escapeXml(eventName)} - ${escapeXml(vibes.weekLabel)}</text>
+  <text x="${width / 2}" y="54" text-anchor="middle" fill="${theme.textMuted}" font-size="13" font-family="${SVG_FONT_SANS}">Weekly reading vibes</text>
 
   ${statCards}
 
-  <rect x="${leftX}" y="${sectionY}" width="${colW}" height="${panelH}" rx="10" fill="#1a1822" stroke="#2a2733"/>
-  <text x="${leftX + 14}" y="${sectionY + 22}" fill="#d4634a" font-size="12" font-family="${SVG_FONT_SANS}" font-weight="700" letter-spacing="0.06em">FORMATS</text>
+  <rect x="${leftX}" y="${sectionY}" width="${colW}" height="${panelH}" rx="10" fill="${theme.surface}" stroke="${theme.border}"/>
+  <text x="${leftX + 14}" y="${sectionY + 22}" fill="${theme.accent}" font-size="12" font-family="${SVG_FONT_SANS}" font-weight="700" letter-spacing="0.06em">FORMATS</text>
   ${formatLines}
 
-  <rect x="${rightX}" y="${sectionY}" width="${colW}" height="${panelH}" rx="10" fill="#1a1822" stroke="#2a2733"/>
-  <text x="${rightX + 14}" y="${sectionY + 22}" fill="#d4634a" font-size="12" font-family="${SVG_FONT_SANS}" font-weight="700" letter-spacing="0.06em">MOST SABOTAGED</text>
+  <rect x="${rightX}" y="${sectionY}" width="${colW}" height="${panelH}" rx="10" fill="${theme.surface}" stroke="${theme.border}"/>
+  <text x="${rightX + 14}" y="${sectionY + 22}" fill="${theme.accent}" font-size="12" font-family="${SVG_FONT_SANS}" font-weight="700" letter-spacing="0.06em">MOST SABOTAGED</text>
   ${teamLines}
 </svg>`
 }

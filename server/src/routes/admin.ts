@@ -46,7 +46,12 @@ import {
 } from '../services/siteSettings.js'
 import { publishStandings } from '../services/standingsPublish.js'
 import { buildStandingsDigestDraft } from '../services/standingsDigest.js'
-import { sendDiscordRolePingTest, sendDiscordWebhookTest } from '../services/discord.js'
+import {
+  sendDiscordChannelMessage,
+  sendDiscordMonthlyWrap,
+} from '../services/discord.js'
+import { sendLiveStandingsToDiscord } from '../services/standingsDiscordPreview.js'
+import { buildMonthlyWrapSvg } from '../services/monthlyWrap.js'
 import { submissionsCreatedTotal } from '../services/metrics.js'
 import {
   createPrompt,
@@ -140,6 +145,10 @@ adminRoutes.patch('/settings', async (c) => {
     downtimeMode?: boolean
     discordWebhookUrl?: string
     discordRoleId?: string
+    discordTestWebhookUrl?: string
+    discordTestRoleId?: string
+    discordProductionWebhookUrl?: string
+    discordProductionRoleId?: string
     teamChatHooksEnabled?: boolean
     teamChatWebhookUrls?: Record<string, string>
     teamChatAddTemplates?: string[]
@@ -148,6 +157,8 @@ adminRoutes.patch('/settings', async (c) => {
     scheduledPublishDay?: number
     scheduledPublishHour?: number
     scheduledPublishTimezone?: string
+    monthlyEvents?: unknown
+    monthlyWrapOnPublish?: boolean
   }>()
   try {
     const before = getSiteSettingsAdminSync()
@@ -177,27 +188,138 @@ adminRoutes.patch('/settings', async (c) => {
     if (e instanceof Error && e.message === 'Invalid Discord webhook URL') {
       return c.json({ error: e.message }, 400)
     }
-    if (e instanceof Error && e.message === 'Invalid Discord role ID') {
+    if (
+      e instanceof Error &&
+      (e.message === 'Invalid Discord role ID' ||
+        e.message.startsWith('Invalid Discord role ID') ||
+        e.message.includes('Scheduled themes overlap') ||
+        e.message.includes('monthly event') ||
+        e.message.includes('ends before it starts') ||
+        e.message.includes('valid from/to'))
+    ) {
       return c.json({ error: e.message }, 400)
     }
     throw e
   }
 })
 
-/** Smoke-test the standings Discord webhook. Never pings a role. */
+/**
+ * Send to test or production standings webhook.
+ * body: { channel: 'test'|'production', withPing: boolean }
+ * - test channel → short “test message”
+ * - production channel → sample standings announce line
+ */
+adminRoutes.post('/discord/send', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{
+    channel?: string
+    withPing?: boolean
+  }>()
+  const channel = body.channel === 'test' ? 'test' : 'production'
+  const withPing = Boolean(body.withPing)
+  const result = await sendDiscordChannelMessage({
+    channel,
+    withPing,
+    kind: channel === 'test' ? 'test' : 'announce',
+  })
+  if (!result.sent) {
+    return c.json(
+      {
+        error: result.error ?? 'Failed to send Discord message',
+        roleId: result.roleId,
+        channel: result.channel,
+        withPing: result.withPing,
+      },
+      400,
+    )
+  }
+  return c.json({
+    ok: true,
+    roleId: result.roleId,
+    channel: result.channel,
+    withPing: result.withPing,
+  })
+})
+
+/**
+ * Send live standings images (optional + 4-week wrap) to test or production webhook.
+ * Does not publish/unpublish standings in the DB.
+ * body: { channel?: 'test'|'production', includeMonthlyWrap?: boolean, withPing?: boolean }
+ */
+adminRoutes.post('/discord/send-standings', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{
+    channel?: string
+    includeMonthlyWrap?: boolean
+    withPing?: boolean
+  }>()
+  const channel = body.channel === 'production' ? 'production' : 'test'
+  const result = await sendLiveStandingsToDiscord({
+    channel,
+    includeMonthlyWrap: Boolean(body.includeMonthlyWrap),
+    withPing: Boolean(body.withPing),
+  })
+  if (!result.sent) {
+    return c.json({ error: result.error ?? 'Failed to send standings' }, 400)
+  }
+  return c.json({
+    ok: true,
+    channel,
+    includeMonthlyWrap: Boolean(body.includeMonthlyWrap),
+  })
+})
+
+/** Send only the dense 4-week wrap image. */
+adminRoutes.post('/discord/send-monthly-wrap', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{
+    channel?: string
+    withPing?: boolean
+  }>()
+  const channel = body.channel === 'production' ? 'production' : 'test'
+  const wrap = await buildMonthlyWrapSvg()
+  const result = await sendDiscordMonthlyWrap({
+    channel,
+    wrapSvg: wrap.svg,
+    label: wrap.label,
+    withPing: Boolean(body.withPing),
+  })
+  if (!result.sent) {
+    return c.json({ error: result.error ?? 'Failed to send monthly wrap' }, 400)
+  }
+  return c.json({ ok: true, channel, label: wrap.label })
+})
+
+adminRoutes.get('/discord/monthly-wrap-preview.svg', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const wrap = await buildMonthlyWrapSvg()
+  c.header('Content-Type', 'image/svg+xml; charset=utf-8')
+  c.header('Cache-Control', 'no-store')
+  return c.body(wrap.svg)
+})
+
+/** @deprecated Prefer POST /discord/send */
 adminRoutes.post('/discord/test-webhook', async (c) => {
   requireAdmin(await getSessionUser(c))
-  const result = await sendDiscordWebhookTest()
+  const result = await sendDiscordChannelMessage({
+    channel: 'production',
+    withPing: false,
+    kind: 'test',
+  })
   if (!result.sent) {
     return c.json({ error: result.error ?? 'Failed to send test message' }, 400)
   }
   return c.json({ ok: true })
 })
 
-/** Test that the configured role ID resolves in the webhook's guild. */
+/** @deprecated Prefer POST /discord/send */
 adminRoutes.post('/discord/test-role-ping', async (c) => {
   requireAdmin(await getSessionUser(c))
-  const result = await sendDiscordRolePingTest()
+  const result = await sendDiscordChannelMessage({
+    channel: 'production',
+    withPing: true,
+    kind: 'test',
+  })
   if (!result.sent) {
     return c.json(
       { error: result.error ?? 'Failed to send role ping test', roleId: result.roleId },
@@ -707,6 +829,7 @@ adminRoutes.get('/standings/preview.svg', async (c) => {
     preset: c.req.query('preset'),
     from: c.req.query('from'),
     to: c.req.query('to'),
+    timeZone: getSiteSettingsAdminSync().scheduledPublishTimezone || 'Europe/Amsterdam',
   })
   const { weekKey, weekLabel } = range
 

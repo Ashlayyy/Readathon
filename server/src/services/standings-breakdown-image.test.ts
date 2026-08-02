@@ -58,7 +58,8 @@ describe('generateBreakdownSvg', () => {
 		const eventName = getStaticConfig().event.name as string
 
 		assert.match(svg, /^<\?xml version="1\.0"/)
-		assert.match(svg, new RegExp(`${eventName} - Week of Jul 13, 2026 · Score breakdown`))
+		assert.match(svg, new RegExp(`${eventName} - Score breakdown`))
+		assert.match(svg, /Week of Jul 13, 2026/)
 		assert.match(svg, />Wielders</)
 		assert.match(svg, />Ash</)
 		assert.match(svg, />Attacked by rivals</)

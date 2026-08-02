@@ -25,15 +25,18 @@ describe('Discord webhook test sender', () => {
 
   it('reads normalized webhook and role settings', async () => {
     await updateSiteSettings({
-      discordWebhookUrl: ' https://discord.com/api/webhooks/123/token ',
-      discordRoleId: ' <@&123456789> ',
+      discordProductionWebhookUrl: ' https://discord.com/api/webhooks/123/token ',
+      discordProductionRoleId: ' <@&123456789012345678> ',
+      discordTestWebhookUrl: 'https://discord.com/api/webhooks/999/test',
+      discordTestRoleId: '999999999999999999',
     })
 
     assert.equal(getDiscordWebhookUrl(), 'https://discord.com/api/webhooks/123/token')
-    assert.equal(getDiscordRoleId(), '123456789')
+    assert.equal(getDiscordRoleId(), '123456789012345678')
   })
 
   it('sends the safe test content and disables mentions', async () => {
+    const { sendDiscordChannelMessage } = await import('./discord.js')
     const originalFetch = globalThis.fetch
     const calls: Array<{ url: string; init?: RequestInit }> = []
     globalThis.fetch = mock.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -42,15 +45,44 @@ describe('Discord webhook test sender', () => {
     }) as typeof fetch
 
     try {
-      const result = await sendDiscordWebhookTest()
+      const result = await sendDiscordChannelMessage({
+        channel: 'test',
+        withPing: false,
+      })
 
-      assert.deepEqual(result, { sent: true })
+      assert.equal(result.sent, true)
       assert.equal(calls.length, 1)
-      assert.equal(calls[0]!.url, 'https://discord.com/api/webhooks/123/token?wait=true')
+      assert.equal(calls[0]!.url, 'https://discord.com/api/webhooks/999/test?wait=true')
       assert.deepEqual(JSON.parse(String(calls[0]!.init!.body)), {
         content: DISCORD_TEST_WEBHOOK_CONTENT,
         allowed_mentions: { parse: [] },
       })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('pings the configured role when withPing is true', async () => {
+    const { sendDiscordChannelMessage } = await import('./discord.js')
+    const originalFetch = globalThis.fetch
+    const calls: Array<{ url: string; init?: RequestInit }> = []
+    globalThis.fetch = mock.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: url.toString(), init })
+      return new Response('{}', { status: 200 })
+    }) as typeof fetch
+
+    try {
+      const result = await sendDiscordChannelMessage({
+        channel: 'production',
+        withPing: true,
+      })
+      assert.equal(result.sent, true)
+      const body = JSON.parse(String(calls[0]!.init!.body)) as {
+        content: string
+        allowed_mentions: { roles: string[] }
+      }
+      assert.match(body.content, /^<@&123456789012345678> /)
+      assert.deepEqual(body.allowed_mentions, { roles: ['123456789012345678'] })
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -61,10 +93,11 @@ describe('Discord webhook test sender', () => {
     globalThis.fetch = mock.fn(async () => new Response('bad webhook', { status: 401 })) as typeof fetch
 
     try {
-      assert.deepEqual(await sendDiscordWebhookTest(), {
-        sent: false,
-        error: 'Discord returned 401',
-      })
+      const result = await sendDiscordWebhookTest()
+      assert.equal(result.sent, false)
+      assert.equal(result.error, 'Discord returned 401')
+      assert.equal(result.channel, 'production')
+      assert.equal(result.withPing, false)
     } finally {
       globalThis.fetch = originalFetch
     }

@@ -8,7 +8,7 @@ function vibesFixture(): PublicStandingsVibes {
 	return {
 		weekKey: '2026-W29',
 		weekLabel: 'Week of Jul 13, 2026',
-		rangeLabel: 'Jul 13 – Jul 19',
+		rangeLabel: 'Jul 13 - Jul 19',
 		overview: {
 			submissions: 10,
 			activeReaders: 6,
@@ -51,7 +51,7 @@ describe('generateVibesSvg', () => {
 		const eventName = getStaticConfig().event.name as string
 
 		assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/)
-		assert.match(svg, new RegExp(`${eventName} — Week of Jul 13, 2026`))
+		assert.match(svg, new RegExp(`${eventName} - Week of Jul 13, 2026`))
 		assert.match(svg, />FORMATS</)
 		assert.match(svg, />MOST SABOTAGED</)
 		assert.match(svg, />Paperback</)

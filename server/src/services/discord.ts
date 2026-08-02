@@ -1,12 +1,24 @@
 import { File } from 'node:buffer'
-import { getDiscordRoleId, getDiscordWebhookUrl, getSiteSettingsAdminSync } from './siteSettings.js'
+import {
+  getDiscordChannelConfig,
+  getDiscordRoleId,
+  getDiscordWebhookUrl,
+  getSiteSettingsAdminSync,
+  type DiscordWebhookChannel,
+} from './siteSettings.js'
 import { svgToPng, isPngBuffer } from './svgToPng.js'
 import { discordWebhookTotal } from './metrics.js'
 
+/** Fallback when a publish label wasn't provided (legacy ISO key → "Week 30"). */
 function weekNumberLabel(weekKey: string): string {
   const match = weekKey.match(/W(\d+)$/i)
   if (!match) return weekKey
   return `Week ${parseInt(match[1]!, 10)}`
+}
+
+function discordWeekHeading(weekKey: string, weekLabel?: string | null): string {
+  const trimmed = weekLabel?.trim()
+  return trimmed || weekNumberLabel(weekKey)
 }
 
 function webhookUrlWithWait(webhookUrl: string): string {
@@ -144,153 +156,211 @@ async function postWebhookImage(
 }
 
 /**
- * Plain text webhook smoke test. Never mentions a role — even if one is configured.
- * Uses allowed_mentions.parse = [] so Discord will not expand any pings.
+ * Plain text webhook smoke test content (test channel).
+ * Production “message” buttons use a standings-style sample announce.
  */
 export const DISCORD_TEST_WEBHOOK_CONTENT = 'This is a test message!'
 
-export async function sendDiscordWebhookTest(): Promise<{ sent: boolean; error?: string }> {
-  const webhookUrl = getDiscordWebhookUrl()
-  if (!webhookUrl) {
-    return { sent: false, error: 'No Discord webhook URL configured' }
-  }
+export const DISCORD_SAMPLE_ANNOUNCE_CONTENT =
+  '**Sample standings announce** - production webhook check (no images).'
 
-  try {
-    const res = await fetch(webhookUrlWithWait(webhookUrl), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: DISCORD_TEST_WEBHOOK_CONTENT,
-        allowed_mentions: { parse: [] },
-      }),
-    })
-    const bodyText = await res.text()
-    if (!res.ok) {
-      console.error('[discord] test webhook failed', {
-        status: res.status,
-        body: bodyText.slice(0, 300),
-      })
-      discordWebhookTotal.labels('test', 'fail').inc()
-      return {
-        sent: false,
-        error: `Discord returned ${res.status}`,
-      }
-    }
-    console.log('[discord] test webhook sent OK (no role ping)')
-    discordWebhookTotal.labels('test', 'ok').inc()
-    return { sent: true }
-  } catch (e) {
-    console.error('[discord] test webhook error:', e)
-    discordWebhookTotal.labels('test', 'fail').inc()
-    return {
-      sent: false,
-      error: e instanceof Error ? e.message : 'Failed to send test message',
-    }
-  }
-}
-
-/** Posts a real role mention so you can verify the configured role ID in-guild. */
-export async function sendDiscordRolePingTest(): Promise<{
+export type DiscordSendResult = {
   sent: boolean
   error?: string
   roleId?: string
-}> {
-  const webhookUrl = getDiscordWebhookUrl()
+  channel?: DiscordWebhookChannel
+  withPing?: boolean
+}
+
+/**
+ * Send a plain text message to the test or production standings webhook.
+ * When `withPing` is true, prefixes `<@&roleId>` and sets allowed_mentions.roles.
+ */
+export async function sendDiscordChannelMessage(opts: {
+  channel: DiscordWebhookChannel
+  withPing: boolean
+  /** test = short smoke string; announce = sample standings-style line */
+  kind?: 'test' | 'announce'
+}): Promise<DiscordSendResult> {
+  const channel = opts.channel === 'test' ? 'test' : 'production'
+  const withPing = Boolean(opts.withPing)
+  const kind = opts.kind ?? (channel === 'test' ? 'test' : 'announce')
+  const { webhookUrl, roleId } = getDiscordChannelConfig(channel)
+
   if (!webhookUrl) {
-    return { sent: false, error: 'No Discord webhook URL configured' }
+    return {
+      sent: false,
+      error: `No ${channel} Discord webhook URL configured (save settings first).`,
+      channel,
+      withPing,
+    }
   }
-  const roleId = getDiscordRoleId()
-  if (!roleId) {
-    return { sent: false, error: 'No Discord role ID configured' }
+  if (withPing && !roleId) {
+    return {
+      sent: false,
+      error: `No ${channel} Discord role ID configured — copy Role ID (Developer Mode → right-click the role), not a user ID.`,
+      channel,
+      withPing,
+    }
   }
+
+  const bodyText =
+    kind === 'announce' ? DISCORD_SAMPLE_ANNOUNCE_CONTENT : DISCORD_TEST_WEBHOOK_CONTENT
+  const content = withPing && roleId ? `<@&${roleId}> ${bodyText}` : bodyText
+  const payload: {
+    content: string
+    allowed_mentions: { parse?: string[]; roles?: string[] }
+  } = withPing && roleId
+    ? { content, allowed_mentions: { roles: [roleId] } }
+    : { content, allowed_mentions: { parse: [] } }
+
+  const metric = `${channel}_${withPing ? 'ping' : 'nopping'}`
 
   try {
     const res = await fetch(webhookUrlWithWait(webhookUrl), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: `<@&${roleId}> Role ping test — if you see @unknown-role, this ID is not a role in this server.`,
-        allowed_mentions: { roles: [roleId] },
-      }),
+      body: JSON.stringify(payload),
     })
-    const bodyText = await res.text()
+    const responseText = await res.text()
     if (!res.ok) {
-      console.error('[discord] role ping test failed', {
+      console.error('[discord] channel send failed', {
+        channel,
+        withPing,
         status: res.status,
-        body: bodyText.slice(0, 300),
-        roleId,
+        body: responseText.slice(0, 300),
+        roleId: roleId || null,
       })
-      discordWebhookTotal.labels('role_ping_test', 'fail').inc()
+      discordWebhookTotal.labels(metric, 'fail').inc()
       return {
         sent: false,
         error: `Discord returned ${res.status}`,
-        roleId,
+        roleId: roleId || undefined,
+        channel,
+        withPing,
       }
     }
-    console.log('[discord] role ping test sent OK', { roleId })
-    discordWebhookTotal.labels('role_ping_test', 'ok').inc()
-    return { sent: true, roleId }
+    console.log('[discord] channel send OK', { channel, withPing, roleId: roleId || null })
+    discordWebhookTotal.labels(metric, 'ok').inc()
+    return { sent: true, roleId: roleId || undefined, channel, withPing }
   } catch (e) {
-    console.error('[discord] role ping test error:', e)
-    discordWebhookTotal.labels('role_ping_test', 'fail').inc()
+    console.error('[discord] channel send error:', e)
+    discordWebhookTotal.labels(metric, 'fail').inc()
     return {
       sent: false,
-      error: e instanceof Error ? e.message : 'Failed to send role ping test',
-      roleId,
+      error: e instanceof Error ? e.message : 'Failed to send Discord message',
+      roleId: roleId || undefined,
+      channel,
+      withPing,
     }
   }
 }
 
+/** @deprecated Prefer sendDiscordChannelMessage({ channel: 'production', withPing: false }) */
+export async function sendDiscordWebhookTest(): Promise<{ sent: boolean; error?: string }> {
+  return sendDiscordChannelMessage({ channel: 'production', withPing: false, kind: 'test' })
+}
+
+/** @deprecated Prefer sendDiscordChannelMessage({ channel: 'production', withPing: true }) */
+export async function sendDiscordRolePingTest(): Promise<DiscordSendResult> {
+  return sendDiscordChannelMessage({ channel: 'production', withPing: true, kind: 'test' })
+}
+
+export type DiscordStandingsBundleOpts = {
+  weekKey: string
+  standingsSvg: string
+  breakdownSvg?: string
+  vibesSvg?: string
+  weekLabel?: string | null
+  /** Defaults to production (real publishes). */
+  channel?: DiscordWebhookChannel
+  /** When false, skip role ping even if configured (test previews). Default true for production. */
+  withPing?: boolean
+  /** Optional 4-week wrap image after vibes. */
+  monthlyWrapSvg?: string | null
+  monthlyWrapLabel?: string | null
+}
+
+/**
+ * Post standings (+ optional breakdown/vibes/monthly wrap) to test or production webhook.
+ */
 export async function notifyDiscordStandingsPublished(
-  weekKey: string,
-  standingsSvg: string,
+  weekKeyOrOpts: string | DiscordStandingsBundleOpts,
+  standingsSvg?: string,
   breakdownSvg?: string,
   vibesSvg?: string,
-): Promise<{ sent: boolean }> {
-  const webhookUrl = getDiscordWebhookUrl()
+  weekLabel?: string | null,
+): Promise<{ sent: boolean; error?: string }> {
+  const opts: DiscordStandingsBundleOpts =
+    typeof weekKeyOrOpts === 'string'
+      ? {
+          weekKey: weekKeyOrOpts,
+          standingsSvg: standingsSvg ?? '',
+          breakdownSvg,
+          vibesSvg,
+          weekLabel,
+          channel: 'production',
+          withPing: true,
+        }
+      : weekKeyOrOpts
+
+  const channel = opts.channel === 'test' ? 'test' : 'production'
+  const { webhookUrl, roleId } = getDiscordChannelConfig(channel)
   if (!webhookUrl) {
-    console.log('[discord] publish skipped: no webhook URL configured')
-    return { sent: false }
+    console.log(`[discord] publish skipped: no ${channel} webhook URL configured`)
+    return { sent: false, error: `No ${channel} Discord webhook URL configured.` }
   }
 
-  const weekLabel = weekNumberLabel(weekKey)
-  const roleId = getDiscordRoleId()
-  const mention = roleId ? `<@&${roleId}> ` : ''
-  const standingsFilename = `standings-${weekKey.toLowerCase()}.png`
-  const breakdownFilename = `standings-breakdown-${weekKey.toLowerCase()}.png`
-  const vibesFilename = `standings-vibes-${weekKey.toLowerCase()}.png`
-  const hasBreakdown = Boolean(breakdownSvg?.trim())
-  const hasVibes = Boolean(vibesSvg?.trim())
+  const heading = discordWeekHeading(opts.weekKey, opts.weekLabel)
+  const usePing = opts.withPing !== false && Boolean(roleId)
+  const mention = usePing && roleId ? `<@&${roleId}> ` : ''
+  const standingsFilename = `standings-${opts.weekKey.toLowerCase()}.png`
+  const breakdownFilename = `standings-breakdown-${opts.weekKey.toLowerCase()}.png`
+  const vibesFilename = `standings-vibes-${opts.weekKey.toLowerCase()}.png`
+  const wrapFilename = `standings-wrap-${opts.weekKey.toLowerCase()}.png`
+  const hasBreakdown = Boolean(opts.breakdownSvg?.trim())
+  const hasVibes = Boolean(opts.vibesSvg?.trim())
+  const hasWrap = Boolean(opts.monthlyWrapSvg?.trim())
 
   console.log('[discord] publish started', {
-    weekKey,
-    weekLabel,
+    channel,
+    weekKey: opts.weekKey,
+    weekLabel: heading,
     hasBreakdown,
     hasVibes,
-    standingsSvgChars: standingsSvg.length,
-    breakdownSvgChars: breakdownSvg?.length ?? 0,
-    vibesSvgChars: vibesSvg?.length ?? 0,
+    hasWrap,
+    standingsSvgChars: opts.standingsSvg.length,
+    breakdownSvgChars: opts.breakdownSvg?.length ?? 0,
+    vibesSvgChars: opts.vibesSvg?.length ?? 0,
+    wrapSvgChars: opts.monthlyWrapSvg?.length ?? 0,
     roleConfigured: Boolean(roleId),
+    withPing: usePing,
   })
 
   try {
     console.log('[discord] standings: rasterizing SVG to PNG…')
-    const standingsPng = svgToPng(standingsSvg)
-    const standingsContent = `${mention}**${weekLabel} standings are live!**`
+    const standingsPng = svgToPng(opts.standingsSvg)
+    const standingsContent =
+      channel === 'test'
+        ? `${mention}**[TEST]** ${heading} standings preview`
+        : `${mention}**${heading} standings are live!**`
     const standingsSent = await postWebhookImage(
       'standings',
       webhookUrl,
       standingsPng,
       standingsFilename,
       standingsContent,
-      roleId || undefined,
+      usePing ? roleId || undefined : undefined,
     )
-    if (!standingsSent) return { sent: false }
+    if (!standingsSent) return { sent: false, error: 'Discord rejected standings image' }
 
-    if (hasBreakdown && breakdownSvg) {
+    if (hasBreakdown && opts.breakdownSvg) {
       console.log('[discord] breakdown: rasterizing SVG to PNG…')
-      const breakdownPng = svgToPng(breakdownSvg)
-      const breakdownContent = `**${weekLabel} score breakdown**`
+      const breakdownPng = svgToPng(opts.breakdownSvg)
+      const breakdownContent =
+        channel === 'test'
+          ? `**[TEST]** ${heading} score breakdown`
+          : `**${heading} score breakdown**`
       const breakdownSent = await postWebhookImage(
         'breakdown',
         webhookUrl,
@@ -300,16 +370,19 @@ export async function notifyDiscordStandingsPublished(
       )
       if (!breakdownSent) {
         console.error('[discord] breakdown failed after standings was sent successfully')
-        return { sent: false }
+        return { sent: false, error: 'Discord rejected breakdown image' }
       }
     } else {
       console.log('[discord] breakdown: skipped (no breakdown SVG)')
     }
 
-    if (hasVibes && vibesSvg) {
+    if (hasVibes && opts.vibesSvg) {
       console.log('[discord] vibes: rasterizing SVG to PNG…')
-      const vibesPng = svgToPng(vibesSvg)
-      const vibesContent = `**${weekLabel} reading vibes**`
+      const vibesPng = svgToPng(opts.vibesSvg)
+      const vibesContent =
+        channel === 'test'
+          ? `**[TEST]** ${heading} reading vibes`
+          : `**${heading} reading vibes**`
       const vibesSent = await postWebhookImage(
         'vibes',
         webhookUrl,
@@ -319,17 +392,89 @@ export async function notifyDiscordStandingsPublished(
       )
       if (!vibesSent) {
         console.error('[discord] vibes failed after earlier posts succeeded')
-        return { sent: false }
+        return { sent: false, error: 'Discord rejected vibes image' }
       }
     } else {
       console.log('[discord] vibes: skipped (no vibes SVG)')
+    }
+
+    if (hasWrap && opts.monthlyWrapSvg) {
+      console.log('[discord] monthly wrap: rasterizing SVG to PNG…')
+      const wrapPng = svgToPng(opts.monthlyWrapSvg)
+      const wrapLabel = opts.monthlyWrapLabel?.trim() || 'Last 4 weeks'
+      const wrapContent =
+        channel === 'test'
+          ? `**[TEST]** 4-week wrap · ${wrapLabel}`
+          : `**4-week wrap** · ${wrapLabel}`
+      const wrapSent = await postWebhookImage(
+        'monthly_wrap',
+        webhookUrl,
+        wrapPng,
+        wrapFilename,
+        wrapContent,
+      )
+      if (!wrapSent) {
+        console.error('[discord] monthly wrap failed after earlier posts succeeded')
+        return { sent: false, error: 'Discord rejected monthly wrap image' }
+      }
     }
 
     console.log('[discord] publish finished successfully')
     return { sent: true }
   } catch (e) {
     console.error('[discord] publish error before/during webhook post:', e)
-    return { sent: false }
+    return {
+      sent: false,
+      error: e instanceof Error ? e.message : 'Failed to send Discord standings',
+    }
+  }
+}
+
+/** Send only the 4-week wrap image to a webhook channel. */
+export async function sendDiscordMonthlyWrap(opts: {
+  channel: DiscordWebhookChannel
+  wrapSvg: string
+  label?: string
+  withPing?: boolean
+}): Promise<DiscordSendResult> {
+  const channel = opts.channel === 'test' ? 'test' : 'production'
+  const { webhookUrl, roleId } = getDiscordChannelConfig(channel)
+  if (!webhookUrl) {
+    return {
+      sent: false,
+      error: `No ${channel} Discord webhook URL configured.`,
+      channel,
+    }
+  }
+  const usePing = Boolean(opts.withPing && roleId)
+  const mention = usePing && roleId ? `<@&${roleId}> ` : ''
+  const label = opts.label?.trim() || 'Last 4 weeks'
+  try {
+    const png = svgToPng(opts.wrapSvg)
+    const content =
+      channel === 'test'
+        ? `${mention}**[TEST]** 4-week wrap · ${label}`
+        : `${mention}**4-week wrap** · ${label}`
+    const ok = await postWebhookImage(
+      'monthly_wrap',
+      webhookUrl,
+      png,
+      `standings-wrap-${Date.now()}.png`,
+      content,
+      usePing ? roleId : undefined,
+    )
+    return {
+      sent: ok,
+      error: ok ? undefined : 'Discord rejected monthly wrap image',
+      channel,
+      roleId: roleId || undefined,
+    }
+  } catch (e) {
+    return {
+      sent: false,
+      error: e instanceof Error ? e.message : 'Failed to send monthly wrap',
+      channel,
+    }
   }
 }
 

@@ -11,6 +11,15 @@ import { notifyDiscordStandingsPublished } from './discord.js'
 import { logAudit, type AuditActor } from './audit.js'
 import { getWeekInfo, resolvePublishRange } from '../utils/week.js'
 import {
+  getSiteSettingsAdminSync,
+  updateSiteSettings,
+} from './siteSettings.js'
+import { buildMonthlyWrapSvg } from './monthlyWrap.js'
+import {
+  isFirstMondayOfMonth,
+  monthlyWrapMonthKey,
+} from './monthlyEvents.js'
+import {
   discordWebhookTotal,
   emailsSentTotal,
   standingsPublishTotal,
@@ -55,6 +64,7 @@ export async function publishStandings(
     preset: options.preset,
     from: options.from,
     to: options.to,
+    timeZone: getSiteSettingsAdminSync().scheduledPublishTimezone || 'Europe/Amsterdam',
   })
   const { weekKey, weekLabel } = range
 
@@ -109,15 +119,50 @@ export async function publishStandings(
     return { sent: 0, skipped: 0 }
   })
 
-  const discordResult = await notifyDiscordStandingsPublished(
+  const settings = getSiteSettingsAdminSync()
+  const tz = settings.scheduledPublishTimezone || 'Europe/Amsterdam'
+  const now = new Date()
+  const shouldAutoWrap =
+    settings.monthlyWrapOnPublish &&
+    isFirstMondayOfMonth(now, tz) &&
+    settings.lastMonthlyWrapMonthKey !== monthlyWrapMonthKey(now, tz)
+
+  let monthlyWrapSvg: string | undefined
+  let monthlyWrapLabel: string | undefined
+  if (shouldAutoWrap) {
+    try {
+      const wrap = await buildMonthlyWrapSvg({ now, timeZone: tz })
+      monthlyWrapSvg = wrap.svg
+      monthlyWrapLabel = wrap.label
+    } catch (e) {
+      console.error('[discord] Failed to build monthly wrap for publish:', e)
+    }
+  }
+
+  const discordResult = await notifyDiscordStandingsPublished({
     weekKey,
-    svg,
+    standingsSvg: svg,
     breakdownSvg,
     vibesSvg,
-  ).catch((e) => {
+    weekLabel,
+    channel: 'production',
+    withPing: true,
+    monthlyWrapSvg,
+    monthlyWrapLabel,
+  }).catch((e) => {
     console.error('[discord] Standings webhook failed:', e)
     return { sent: false }
   })
+
+  if (shouldAutoWrap && monthlyWrapSvg && discordResult.sent) {
+    try {
+      await updateSiteSettings({
+        lastMonthlyWrapMonthKey: monthlyWrapMonthKey(now, tz),
+      })
+    } catch (e) {
+      console.error('[discord] Failed to persist lastMonthlyWrapMonthKey:', e)
+    }
+  }
 
   await logAudit({
     actor,
@@ -130,6 +175,7 @@ export async function publishStandings(
       rangeFrom: range.fromInput,
       rangeTo: range.toInput,
       rangePreset: range.preset,
+      monthlyWrap: Boolean(monthlyWrapSvg),
     },
   })
 

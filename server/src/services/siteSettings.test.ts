@@ -27,11 +27,14 @@ describe('site settings cache', () => {
       showTeamRosters: false,
       downtimeMode: false,
       seasonArchive: null,
+      activeMonthlyEvent: null,
     })
     const settings = getSiteSettingsAdminSync()
     assert.equal(settings.discordWebhookUrl, '')
     assert.equal(settings.scheduledPublishTimezone, 'Europe/Amsterdam')
     assert.ok(settings.teamChatAddTemplates.length > 0)
+    assert.deepEqual(settings.monthlyEvents, [])
+    assert.equal(settings.monthlyWrapOnPublish, false)
   })
 
   it('updates the in-memory cache and returns defensive copies', async () => {
