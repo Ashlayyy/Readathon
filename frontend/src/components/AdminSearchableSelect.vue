@@ -29,7 +29,9 @@ const open = ref(false)
 const query = ref('')
 const rootEl = ref<HTMLElement | null>(null)
 const inputEl = ref<HTMLInputElement | null>(null)
+const menuEl = ref<HTMLElement | null>(null)
 const activeIndex = ref(0)
+const menuStyle = ref<Record<string, string>>({})
 
 const selected = computed(() => props.options.find((o) => o.id === props.modelValue) ?? null)
 
@@ -58,6 +60,27 @@ function displayValue() {
 	return selected.value?.label ?? ''
 }
 
+function positionMenu() {
+	const el = rootEl.value
+	if (!el) return
+	const rect = el.getBoundingClientRect()
+	const maxH = 224
+	const spaceBelow = window.innerHeight - rect.bottom - 8
+	const spaceAbove = rect.top - 8
+	const openUp = spaceBelow < Math.min(maxH, 160) && spaceAbove > spaceBelow
+	const height = Math.min(maxH, openUp ? spaceAbove : spaceBelow)
+	menuStyle.value = {
+		position: 'fixed',
+		left: `${Math.max(8, rect.left)}px`,
+		width: `${Math.max(rect.width, 12)}px`,
+		maxHeight: `${Math.max(120, height)}px`,
+		zIndex: '10050',
+		...(openUp
+			? { bottom: `${window.innerHeight - rect.top + 4}px`, top: 'auto' }
+			: { top: `${rect.bottom + 4}px`, bottom: 'auto' }),
+	}
+}
+
 function openMenu() {
 	if (props.disabled) return
 	open.value = true
@@ -66,7 +89,10 @@ function openMenu() {
 		0,
 		filtered.value.findIndex((o) => o.id === props.modelValue),
 	)
-	nextTick(() => inputEl.value?.focus())
+	nextTick(() => {
+		positionMenu()
+		inputEl.value?.focus()
+	})
 }
 
 function closeMenu() {
@@ -83,6 +109,7 @@ function onInput(e: Event) {
 	query.value = (e.target as HTMLInputElement).value
 	open.value = true
 	activeIndex.value = 0
+	nextTick(positionMenu)
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -116,12 +143,26 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 function onDocPointer(e: MouseEvent) {
-	if (!open.value || !rootEl.value) return
-	if (!rootEl.value.contains(e.target as Node)) closeMenu()
+	if (!open.value) return
+	const t = e.target as Node
+	if (rootEl.value?.contains(t) || menuEl.value?.contains(t)) return
+	closeMenu()
 }
 
-onMounted(() => document.addEventListener('mousedown', onDocPointer))
-onBeforeUnmount(() => document.removeEventListener('mousedown', onDocPointer))
+function onViewportChange() {
+	if (open.value) positionMenu()
+}
+
+onMounted(() => {
+	document.addEventListener('mousedown', onDocPointer)
+	window.addEventListener('resize', onViewportChange)
+	window.addEventListener('scroll', onViewportChange, true)
+})
+onBeforeUnmount(() => {
+	document.removeEventListener('mousedown', onDocPointer)
+	window.removeEventListener('resize', onViewportChange)
+	window.removeEventListener('scroll', onViewportChange, true)
+})
 </script>
 
 <template>
@@ -141,21 +182,29 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocPointer))
 			@input="onInput"
 			@keydown="onKeydown"
 		/>
-		<ul v-if="open" class="searchable-select-menu" role="listbox">
-			<li v-if="!filtered.length" class="searchable-select-empty">No servers match</li>
-			<li
-				v-for="(opt, i) in filtered"
-				:key="opt.id"
-				role="option"
-				class="searchable-select-option"
-				:class="{ active: i === activeIndex, selected: opt.id === modelValue }"
-				:aria-selected="opt.id === modelValue"
-				@mousedown.prevent="pick(opt.id)"
-				@mouseenter="activeIndex = i"
+		<Teleport to="body">
+			<ul
+				v-if="open"
+				ref="menuEl"
+				class="searchable-select-menu"
+				role="listbox"
+				:style="menuStyle"
 			>
-				{{ opt.label }}
-			</li>
-		</ul>
+				<li v-if="!filtered.length" class="searchable-select-empty">No servers match</li>
+				<li
+					v-for="(opt, i) in filtered"
+					:key="opt.id"
+					role="option"
+					class="searchable-select-option"
+					:class="{ active: i === activeIndex, selected: opt.id === modelValue }"
+					:aria-selected="opt.id === modelValue"
+					@mousedown.prevent="pick(opt.id)"
+					@mouseenter="activeIndex = i"
+				>
+					{{ opt.label }}
+				</li>
+			</ul>
+		</Teleport>
 	</div>
 </template>
 
@@ -163,6 +212,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocPointer))
 .searchable-select {
 	position: relative;
 	width: 100%;
+	min-width: 0;
 }
 
 .searchable-select.disabled {
@@ -171,6 +221,8 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocPointer))
 
 .searchable-select-input {
 	width: 100%;
+	max-width: 100%;
+	min-width: 0;
 	padding: 0.55rem 0.65rem;
 	border-radius: var(--radius);
 	border: 1px solid var(--realm-border);
@@ -184,40 +236,39 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocPointer))
 	outline: 2px solid color-mix(in srgb, var(--realm-accent) 45%, transparent);
 	outline-offset: 1px;
 }
+</style>
 
+<!-- Teleported menu lives on body; keep styles global for this component. -->
+<style>
 .searchable-select-menu {
-	position: absolute;
-	z-index: 40;
-	left: 0;
-	right: 0;
-	top: calc(100% + 0.25rem);
 	margin: 0;
 	padding: 0.25rem;
 	list-style: none;
-	max-height: 14rem;
 	overflow: auto;
-	border-radius: var(--radius);
-	border: 1px solid var(--realm-border);
-	background: var(--realm-surface, var(--realm-bg));
+	border-radius: var(--radius, 10px);
+	border: 1px solid var(--realm-border, #2e2a3d);
+	background: var(--realm-surface, #12101a);
 	box-shadow: 0 8px 24px color-mix(in srgb, #000 22%, transparent);
+	box-sizing: border-box;
 }
 
 .searchable-select-option,
 .searchable-select-empty {
 	padding: 0.45rem 0.55rem;
-	border-radius: calc(var(--radius) - 2px);
+	border-radius: calc(var(--radius, 10px) - 2px);
 	font-size: 0.88rem;
 	cursor: pointer;
+	color: var(--realm-text, #f4efe8);
 }
 
 .searchable-select-empty {
 	cursor: default;
-	color: var(--realm-text-muted);
+	color: var(--realm-text-muted, #9a9188);
 }
 
 .searchable-select-option.active,
 .searchable-select-option:hover {
-	background: color-mix(in srgb, var(--realm-accent) 16%, transparent);
+	background: color-mix(in srgb, var(--realm-accent, #d4634a) 16%, transparent);
 }
 
 .searchable-select-option.selected {

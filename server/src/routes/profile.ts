@@ -70,6 +70,7 @@ profileRoutes.get('/', async (c) => {
       ...userToPublic(user),
       notifyStandings: user.notifyStandings ?? false,
       notifyAnswers: user.notifyAnswers ?? false,
+      preferEventThemes: user.preferEventThemes !== false,
       currentlyReading: user.currentlyReadingTitle?.trim()
         ? {
             title: user.currentlyReadingTitle.trim(),
@@ -104,6 +105,7 @@ profileRoutes.patch('/settings', async (c) => {
   const body = await c.req.json<{
     notifyStandings?: boolean
     notifyAnswers?: boolean
+    preferEventThemes?: boolean
     currentlyReading?: {
       title?: string | null
       author?: string | null
@@ -114,6 +116,7 @@ profileRoutes.patch('/settings', async (c) => {
 
   if (typeof body.notifyStandings === 'boolean') user.notifyStandings = body.notifyStandings
   if (typeof body.notifyAnswers === 'boolean') user.notifyAnswers = body.notifyAnswers
+  if (typeof body.preferEventThemes === 'boolean') user.preferEventThemes = body.preferEventThemes
 
   if (body.currentlyReading) {
     if (body.currentlyReading.clear) {
@@ -142,6 +145,7 @@ profileRoutes.patch('/settings', async (c) => {
     settings: {
       notifyStandings: user.notifyStandings,
       notifyAnswers: user.notifyAnswers,
+      preferEventThemes: user.preferEventThemes !== false,
       currentlyReading: user.currentlyReadingTitle?.trim()
         ? {
             title: user.currentlyReadingTitle.trim(),

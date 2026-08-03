@@ -20,6 +20,8 @@ const siteSettingsSchema = new Schema(
     discordBotTokenEnc: { type: String, default: '' },
     /** Active guild for auto-publish / realm chat */
     discordPrimaryGuildId: { type: String, default: '' },
+    /** Guild used for Admin “Send tests to” / verify test role */
+    discordSendTargetGuildId: { type: String, default: '' },
     /** guildId -> per-server Discord destinations & roles */
     discordGuildConfigs: { type: Schema.Types.Mixed, default: {} },
     /** @deprecated Prefer discordPrimaryGuildId / discordGuildConfigs */

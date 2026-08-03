@@ -66,6 +66,8 @@ export function userToPublic(user: IUser) {
 		isAdmin: userIsAdmin(user),
 		avatarUrl: effectiveAvatarUrl(user),
 		hasCustomAvatar: Boolean(user.avatarUrl?.trim()),
+		// Missing field on older docs → opted in (default on).
+		preferEventThemes: user.preferEventThemes !== false,
 	};
 }
 

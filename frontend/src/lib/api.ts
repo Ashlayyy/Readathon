@@ -45,6 +45,8 @@ export type PublicUser = {
   /** True when the user uploaded a custom photo (vs Google default). */
   hasCustomAvatar?: boolean
   unreadAnswers?: number
+  /** When true (default), use live host event light/dark palettes. */
+  preferEventThemes?: boolean
 }
 
 export type AdminUser = PublicUser & {
@@ -92,7 +94,12 @@ export type MonthlyEventMultipliers = {
 export type MonthlyEventSiteOverride = {
   event?: Record<string, unknown>
   copy?: Record<string, unknown>
-  branding?: { theme?: Record<string, string> }
+  branding?: {
+    /** @deprecated Prefer themeDark; kept in sync for SVG / Discord / legacy. */
+    theme?: Record<string, string>
+    themeDark?: Record<string, string>
+    themeLight?: Record<string, string>
+  }
 }
 
 export type MonthlyDiscordTemplates = {
@@ -213,6 +220,8 @@ export type AdminSiteSettings = {
   discordBotTokenConfigured: boolean
   /** Primary guild for auto-publish / realm chat */
   discordPrimaryGuildId: string
+  /** Guild for Admin “Send tests to” / verify test role */
+  discordSendTargetGuildId: string
   /** Per-server Discord destinations */
   discordGuildConfigs: Record<string, DiscordGuildConfig>
   /** Cached Discord servers the bot is in (from last refresh) */
@@ -282,6 +291,8 @@ export type RealmathonConfig = {
   schedule: Record<string, unknown>
   branding: {
     theme: Record<string, string>
+    themeDark?: Record<string, string>
+    themeLight?: Record<string, string>
   }
   teams: TeamConfig[]
   pageCountBonuses: { min: number; max: number | null; points: number; label: string }[]

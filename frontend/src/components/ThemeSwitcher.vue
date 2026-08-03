@@ -68,6 +68,7 @@ function handleSave() {
   <div v-else class="theme-editor">
     <p class="theme-editor-lead">
       Pick dark or light, or build a custom palette. Saved themes stay on this device.
+      When a host event theme is live and you’ve opted in, dark/light uses that event’s pair.
     </p>
 
     <div class="theme-mode-row" role="radiogroup" aria-label="Theme mode">

@@ -179,20 +179,34 @@ export function mergeActiveMonthlyEvent(
 			),
 		};
 	}
-	const theme = slot.siteOverride.branding?.theme;
-	if (theme && Object.keys(theme).length > 0) {
-		const branding = (next.branding ?? {}) as Record<string, unknown>;
+	const brandingOverride = slot.siteOverride.branding
+	const themeDark = brandingOverride?.themeDark ?? brandingOverride?.theme
+	const themeLight = brandingOverride?.themeLight
+	if (
+		(themeDark && Object.keys(themeDark).length > 0) ||
+		(themeLight && Object.keys(themeLight).length > 0)
+	) {
+		const branding = (next.branding ?? {}) as Record<string, unknown>
 		const baseTheme =
 			branding.theme && typeof branding.theme === 'object'
 				? (branding.theme as Record<string, string>)
-				: {};
+				: {}
+		const mergedDark =
+			themeDark && Object.keys(themeDark).length > 0
+				? { ...baseTheme, ...themeDark }
+				: undefined
 		next = {
 			...next,
 			branding: {
 				...branding,
-				theme: { ...baseTheme, ...theme },
+				...(mergedDark
+					? { theme: mergedDark, themeDark: mergedDark }
+					: {}),
+				...(themeLight && Object.keys(themeLight).length > 0
+					? { themeLight: { ...themeLight } }
+					: {}),
 			},
-		};
+		}
 	}
 
 	const featured = new Set(slot.featuredPromptIds);

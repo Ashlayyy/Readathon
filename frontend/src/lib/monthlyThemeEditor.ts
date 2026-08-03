@@ -219,6 +219,162 @@ export const COLOR_PRESETS: ColorPreset[] = [
   },
 ]
 
+/** Light counterparts of COLOR_PRESETS (same ids / feel, daylight surfaces). */
+export const COLOR_PRESETS_LIGHT: ColorPreset[] = [
+  {
+    id: 'crucible',
+    label: 'Crucible',
+    hint: 'Base light + coral',
+    colors: {
+      background: '#f1ece2',
+      surface: '#fbf8f2',
+      surfaceAlt: '#e8e1d3',
+      text: '#2b2620',
+      textMuted: '#6b6255',
+      accent: '#c8563d',
+      accentGlow: '#a8442e',
+      border: '#d5cbb8',
+      success: '#2f7a4f',
+    },
+  },
+  {
+    id: 'ember',
+    label: 'Ember',
+    hint: 'Warm fire day',
+    colors: {
+      background: '#f6ebe4',
+      surface: '#fdf7f3',
+      surfaceAlt: '#edd9cf',
+      text: '#2c1812',
+      textMuted: '#7a5548',
+      accent: '#d44e2e',
+      accentGlow: '#b03a1e',
+      border: '#e0c4b4',
+      success: '#2f7a4f',
+    },
+  },
+  {
+    id: 'frost',
+    label: 'Frost',
+    hint: 'Cool steel day',
+    colors: {
+      background: '#e8eef5',
+      surface: '#f5f8fc',
+      surfaceAlt: '#d5e0ec',
+      text: '#152033',
+      textMuted: '#5a6e86',
+      accent: '#3a8fc4',
+      accentGlow: '#2a6f9a',
+      border: '#b8c8da',
+      success: '#2f7a4f',
+    },
+  },
+  {
+    id: 'poison',
+    label: 'Poison',
+    hint: 'Toxic green day',
+    colors: {
+      background: '#e8f2ea',
+      surface: '#f4faf5',
+      surfaceAlt: '#d4e6d8',
+      text: '#142018',
+      textMuted: '#4f6a56',
+      accent: '#2f9a4a',
+      accentGlow: '#217838',
+      border: '#b4d0ba',
+      success: '#2f7a4f',
+    },
+  },
+  {
+    id: 'royal',
+    label: 'Royal',
+    hint: 'Violet court day',
+    colors: {
+      background: '#efeaf6',
+      surface: '#f8f5fc',
+      surfaceAlt: '#ddd4ec',
+      text: '#1e1530',
+      textMuted: '#655878',
+      accent: '#7a52c7',
+      accentGlow: '#5e3a9e',
+      border: '#c8bddc',
+      success: '#2f7a4f',
+    },
+  },
+  {
+    id: 'bloodmoon',
+    label: 'Blood moon',
+    hint: 'Horror rose day',
+    colors: {
+      background: '#f5e8ea',
+      surface: '#fcf4f5',
+      surfaceAlt: '#ebd4d8',
+      text: '#2a1218',
+      textMuted: '#7a5058',
+      accent: '#c02848',
+      accentGlow: '#9a1c38',
+      border: '#dfc0c8',
+      success: '#2f7a4f',
+    },
+  },
+  {
+    id: 'harvest',
+    label: 'Harvest',
+    hint: 'Autumn gold day',
+    colors: {
+      background: '#f4eee2',
+      surface: '#fbf7ee',
+      surfaceAlt: '#e8dcc8',
+      text: '#2a2214',
+      textMuted: '#6e6248',
+      accent: '#c48420',
+      accentGlow: '#9e6810',
+      border: '#d8c8a8',
+      success: '#2f7a4f',
+    },
+  },
+  {
+    id: 'midnight',
+    label: 'Midnight ink',
+    hint: 'Quiet navy day',
+    colors: {
+      background: '#e8ecf4',
+      surface: '#f4f6fb',
+      surfaceAlt: '#d4dae8',
+      text: '#141a28',
+      textMuted: '#556078',
+      accent: '#4a6ad4',
+      accentGlow: '#3550b0',
+      border: '#b8c0d4',
+      success: '#2f7a4f',
+    },
+  },
+]
+
+export type ThemePaletteKind = 'dark' | 'light'
+
+function readPalette(
+  branding: MonthlyEventSiteOverride['branding'] | undefined,
+  kind: ThemePaletteKind,
+): Record<string, string> {
+  if (!branding) return {}
+  if (kind === 'dark') return branding.themeDark ?? branding.theme ?? {}
+  return branding.themeLight ?? {}
+}
+
+function writeBranding(
+  themeDark: Record<string, string> | undefined,
+  themeLight: Record<string, string> | undefined,
+): MonthlyEventSiteOverride['branding'] | undefined {
+  const dark = themeDark && Object.keys(themeDark).length > 0 ? themeDark : undefined
+  const light = themeLight && Object.keys(themeLight).length > 0 ? themeLight : undefined
+  if (!dark && !light) return undefined
+  return {
+    ...(dark ? { theme: dark, themeDark: dark } : {}),
+    ...(light ? { themeLight: light } : {}),
+  }
+}
+
 export function loreToText(lore: unknown): string {
   if (Array.isArray(lore)) {
     return lore.filter((x): x is string => typeof x === 'string').join('\n\n')
@@ -269,8 +425,9 @@ export function setOverrideString(
 
 export function getThemeColors(
   override: MonthlyEventSiteOverride,
+  kind: ThemePaletteKind = 'dark',
 ): Partial<Record<ThemeColorKey, string>> {
-  const theme = override.branding?.theme ?? {}
+  const theme = readPalette(override.branding, kind)
   const out: Partial<Record<ThemeColorKey, string>> = {}
   for (const key of THEME_COLOR_KEYS) {
     const v = theme[key]
@@ -283,35 +440,64 @@ export function setThemeColor(
   override: MonthlyEventSiteOverride,
   key: ThemeColorKey,
   value: string,
+  kind: ThemePaletteKind = 'dark',
 ): MonthlyEventSiteOverride {
-  const theme = { ...(override.branding?.theme ?? {}) }
+  const dark = { ...readPalette(override.branding, 'dark') }
+  const light = { ...readPalette(override.branding, 'light') }
+  const target = kind === 'dark' ? dark : light
   const trimmed = value.trim()
-  if (!trimmed) delete theme[key]
-  else theme[key] = trimmed
-  if (Object.keys(theme).length === 0) {
-    const next = { ...override }
-    delete next.branding
-    return next
-  }
-  return { ...override, branding: { theme } }
+  if (!trimmed) delete target[key]
+  else target[key] = trimmed
+  const branding = writeBranding(
+    Object.keys(dark).length ? dark : undefined,
+    Object.keys(light).length ? light : undefined,
+  )
+  const next = { ...override }
+  if (!branding) delete next.branding
+  else next.branding = branding
+  return next
 }
 
 export function clearThemeColors(
   override: MonthlyEventSiteOverride,
+  kind?: ThemePaletteKind,
 ): MonthlyEventSiteOverride {
   const next = { ...override }
-  delete next.branding
+  if (!kind) {
+    delete next.branding
+    return next
+  }
+  const dark = kind === 'dark' ? undefined : { ...readPalette(override.branding, 'dark') }
+  const light = kind === 'light' ? undefined : { ...readPalette(override.branding, 'light') }
+  const branding = writeBranding(
+    dark && Object.keys(dark).length ? dark : undefined,
+    light && Object.keys(light).length ? light : undefined,
+  )
+  if (!branding) delete next.branding
+  else next.branding = branding
   return next
 }
 
-/** Apply a full palette preset onto siteOverride.branding.theme. */
+/** Apply a full palette preset onto siteOverride.branding.themeDark or themeLight. */
 export function applyColorPreset(
   override: MonthlyEventSiteOverride,
   preset: ColorPreset,
+  kind: ThemePaletteKind = 'dark',
 ): MonthlyEventSiteOverride {
+  const dark =
+    kind === 'dark'
+      ? { ...preset.colors }
+      : { ...readPalette(override.branding, 'dark') }
+  const light =
+    kind === 'light'
+      ? { ...preset.colors }
+      : { ...readPalette(override.branding, 'light') }
   return {
     ...override,
-    branding: { theme: { ...preset.colors } },
+    branding: writeBranding(
+      Object.keys(dark).length ? dark : undefined,
+      Object.keys(light).length ? light : undefined,
+    ),
   }
 }
 

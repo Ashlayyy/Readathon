@@ -60,6 +60,15 @@ const previewLoading = ref(false);
 const publishPreset = ref<PublishRangePreset>('lastMonToThisMon');
 const publishFrom = ref(''); // YYYY-MM-DD
 const publishTo = ref(''); // YYYY-MM-DD
+const includeMonthlyWrapOnPublish = ref(false);
+const wrapStatus = ref<{
+	enabled: boolean
+	isFirstMonday: boolean
+	alreadySentThisMonth: boolean
+	monthKey: string
+	atypical: boolean
+	reasons: string[]
+} | null>(null);
 const PUBLISH_PRESETS: { value: PublishRangePreset; label: string }[] = [
 	{ value: 'lastMonToThisMon', label: 'Last Mon → this Mon' },
 	{ value: 'thisWeek', label: 'This week' },
@@ -120,6 +129,7 @@ function primarySortDir(key: SubmissionSortKey): 'asc' | 'desc' {
 }
 const message = ref('');
 const messageIsError = ref(false);
+let messageClearTimer: ReturnType<typeof setTimeout> | null = null;
 const loading = ref('');
 const activeTab = ref<
 	| 'inbox'
@@ -139,9 +149,12 @@ const themesMounted = ref(false);
 const addSubmissionOpen = ref(false);
 const coverSearchOpen = ref(false);
 const navOpen = ref(false);
+const assignTeamsOpen = ref(false);
 
 const anyModalOpen = computed(
 	() =>
+		(Boolean(message.value) && messageIsError.value) ||
+		assignTeamsOpen.value ||
 		addUserOpen.value ||
 		!!answerModal.value ||
 		!!editSubmission.value ||
@@ -156,12 +169,17 @@ const answerModalRef = ref<HTMLElement | null>(null);
 const addUserModalRef = ref<HTMLElement | null>(null);
 const deleteModalRef = ref<HTMLElement | null>(null);
 const previewModalRef = ref<HTMLElement | null>(null);
+const messageModalRef = ref<HTMLElement | null>(null);
 const answerModalActive = computed(() => !!answerModal.value);
 const deleteModalActive = computed(() => !!deleteTarget.value);
+const messageModalActive = computed(
+	() => Boolean(message.value) && messageIsError.value,
+);
 useFocusTrap(answerModalActive, answerModalRef);
 useFocusTrap(addUserOpen, addUserModalRef);
 useFocusTrap(deleteModalActive, deleteModalRef);
 useFocusTrap(previewOpen, previewModalRef);
+useFocusTrap(messageModalActive, messageModalRef);
 
 const filteredSubmissions = computed(() => {
 	const q = submissionSearch.value.trim().toLowerCase();
@@ -612,8 +630,9 @@ async function ensureTabData(tab: typeof activeTab.value) {
 	else if (tab === 'users') await loadUsers();
 	else if (tab === 'submissions')
 		await Promise.all([loadSubmissions(), loadUsers()]);
-	else if (tab === 'standings') await loadStandings(true);
-	else if (tab === 'audit') await loadAuditLog();
+	else if (tab === 'standings') {
+		await Promise.all([loadStandings(true), loadWrapStatus()]);
+	}	else if (tab === 'audit') await loadAuditLog();
 	// prompts: AdminPromptsPanel loads itself when mounted (v-if)
 }
 
@@ -780,9 +799,28 @@ const filteredQuestions = computed(() => {
 function showMessage(msg: string, isError = false) {
 	message.value = msg;
 	messageIsError.value = isError && !!msg;
+	if (messageClearTimer) {
+		clearTimeout(messageClearTimer);
+		messageClearTimer = null;
+	}
+	// Success toasts auto-dismiss; errors stay until dismissed.
+	if (msg && !isError) {
+		messageClearTimer = setTimeout(() => {
+			message.value = '';
+			messageIsError.value = false;
+			messageClearTimer = null;
+		}, 4500);
+	}
 }
 
-const assignTeamsOpen = ref(false);
+function clearMessage() {
+	if (messageClearTimer) {
+		clearTimeout(messageClearTimer);
+		messageClearTimer = null;
+	}
+	message.value = '';
+	messageIsError.value = false;
+}
 
 const canOpenAssignPreview = computed(() => {
 	if (!usersLoaded.value) return stats.value.totalUsers > 0;
@@ -1015,7 +1053,54 @@ async function confirmPublishFromPreview() {
 	await publishThisWeek();
 }
 
+async function loadWrapStatus() {
+	try {
+		const data = await api<{
+			wrap: {
+				enabled: boolean
+				isFirstMonday: boolean
+				alreadySentThisMonth: boolean
+				monthKey: string
+				atypical: boolean
+				reasons: string[]
+			}
+		}>('/admin/standings/wrap-status');
+		wrapStatus.value = data.wrap;
+		// Default on only when it's the normal first-Monday slot and not yet sent
+		if (
+			data.wrap.enabled &&
+			data.wrap.isFirstMonday &&
+			!data.wrap.alreadySentThisMonth
+		) {
+			includeMonthlyWrapOnPublish.value = true;
+		}
+	} catch {
+		wrapStatus.value = null;
+	}
+}
+
+function confirmAtypicalWrapIfNeeded(): boolean {
+	if (!includeMonthlyWrapOnPublish.value || !wrapStatus.value?.atypical) {
+		return true;
+	}
+	const reasons = wrapStatus.value.reasons.length
+		? `\n\n• ${wrapStatus.value.reasons.join('\n• ')}`
+		: '';
+	return confirm(
+		`You’re about to attach the 4-week wrap outside the normal first-Monday publish.${reasons}\n\nPublish with the wrap anyway?`,
+	);
+}
+
 async function publishThisWeek() {
+	if (includeMonthlyWrapOnPublish.value && wrapStatus.value && !wrapStatus.value.enabled) {
+		showMessage(
+			'4-week wrap is disabled in Settings. Enable it under Discord settings, or turn off the wrap toggle.',
+			true,
+		);
+		return;
+	}
+	if (!confirmAtypicalWrapIfNeeded()) return;
+
 	loading.value = 'publish';
 	showMessage('');
 	try {
@@ -1023,22 +1108,31 @@ async function publishThisWeek() {
 			weekLabel: string;
 			emailsSent?: number;
 			discordSent?: boolean;
+			monthlyWrap?: boolean;
 		}>('/admin/standings/publish', {
 			method: 'POST',
 			body: JSON.stringify({
 				preset: publishPreset.value,
 				from: publishFrom.value,
 				to: publishTo.value,
+				includeMonthlyWrap: Boolean(
+					wrapStatus.value?.enabled && includeMonthlyWrapOnPublish.value,
+				),
+				confirmAtypicalWrap: Boolean(
+					includeMonthlyWrapOnPublish.value && wrapStatus.value?.atypical,
+				),
 			}),
 		});
 		const emailNote = result.emailsSent
 			? msg('emailNote', { count: result.emailsSent })
 			: '';
 		const discordNote = result.discordSent ? msg('discordNote') : '';
+		const wrapNote = result.monthlyWrap ? ' 4-week wrap included.' : '';
 		showMessage(
-			msg('published', { weekLabel: result.weekLabel, emailNote, discordNote }),
+			msg('published', { weekLabel: result.weekLabel, emailNote, discordNote }) +
+				wrapNote,
 		);
-		await loadStandings(true);
+		await Promise.all([loadStandings(true), loadWrapStatus()]);
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('publishFailed'), true);
 	} finally {
@@ -1106,13 +1200,51 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 			</button>
 		</header>
 
-		<div
-			v-if="message"
-			class="alert"
-			:class="messageIsError ? 'alert-error' : 'alert-success'"
-		>
-			{{ message }}
-		</div>
+		<Teleport to="body">
+			<div
+				v-if="message && messageIsError"
+				class="modal-backdrop admin-message-backdrop"
+				@click.self="clearMessage"
+				@keydown.esc="clearMessage"
+			>
+				<div
+					ref="messageModalRef"
+					class="modal card admin-message-modal"
+					role="alertdialog"
+					aria-modal="true"
+					aria-labelledby="admin-message-title"
+					tabindex="-1"
+				>
+					<h2 id="admin-message-title" class="admin-message-title">
+						Something went wrong
+					</h2>
+					<p class="admin-message-body is-error">
+						{{ message }}
+					</p>
+					<div class="modal-actions">
+						<button type="button" class="btn btn-primary" @click="clearMessage">
+							OK
+						</button>
+					</div>
+				</div>
+			</div>
+			<div
+				v-else-if="message"
+				class="admin-success-toast"
+				role="status"
+				aria-live="polite"
+			>
+				{{ message }}
+				<button
+					type="button"
+					class="admin-success-toast-dismiss"
+					aria-label="Dismiss"
+					@click="clearMessage"
+				>
+					×
+				</button>
+			</div>
+		</Teleport>
 
 		<div class="admin-layout">
 			<aside
@@ -1594,34 +1726,69 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 									{{ section('standings').currentLead }}
 								</p>
 							</div>
-							<div class="btn-row">
-								<button
-									class="btn btn-secondary"
-									:disabled="previewLoading || !standings?.length"
-									@click="openPublishPreview"
+							<div class="publish-actions">
+								<label
+									v-if="wrapStatus?.enabled"
+									class="setting-toggle wrap-publish-toggle"
+									:title="
+										wrapStatus.atypical
+											? wrapStatus.reasons.join(' ')
+											: 'Attach the dense 4-week wrap image to this Discord publish'
+									"
 								>
-									{{ previewLoading ? 'Loading preview…' : 'Preview' }}
-								</button>
-								<button
-									class="btn btn-primary"
-									:disabled="loading === 'publish' || !standings?.length"
-									@click="publishThisWeek"
-								>
-									{{
-										loading === 'publish'
-											? section('standings').publishing
-											: section('standings').publish
-									}}
-								</button>
-								<button
-									class="btn btn-secondary"
-									:disabled="!standings?.length"
-									@click="downloadCurrentSvg"
-								>
-									{{ section('standings').downloadSvg }}
-								</button>
+									<input
+										v-model="includeMonthlyWrapOnPublish"
+										type="checkbox"
+										:disabled="loading === 'publish'"
+									/>
+									<span>Include 4-week wrap</span>
+								</label>
+								<div class="btn-row">
+									<button
+										class="btn btn-secondary"
+										:disabled="previewLoading || !standings?.length"
+										@click="openPublishPreview"
+									>
+										{{ previewLoading ? 'Loading preview…' : 'Preview' }}
+									</button>
+									<button
+										class="btn btn-primary"
+										:disabled="loading === 'publish' || !standings?.length"
+										@click="publishThisWeek"
+									>
+										{{
+											loading === 'publish'
+												? section('standings').publishing
+												: section('standings').publish
+										}}
+									</button>
+									<button
+										class="btn btn-secondary"
+										:disabled="!standings?.length"
+										@click="downloadCurrentSvg"
+									>
+										{{ section('standings').downloadSvg }}
+									</button>
+								</div>
 							</div>
 						</div>
+						<p
+							v-if="wrapStatus?.enabled && includeMonthlyWrapOnPublish && wrapStatus.atypical"
+							class="wrap-publish-warn"
+						>
+							Warning: not a normal first-Monday wrap slot
+							<template v-if="wrapStatus.alreadySentThisMonth">
+								(already sent for {{ wrapStatus.monthKey }})
+							</template>
+							<template v-else-if="!wrapStatus.isFirstMonday">
+								(today isn’t the first Monday)
+							</template>
+							— you’ll need to confirm before publishing.
+						</p>
+						<p v-else-if="wrapStatus && !wrapStatus.enabled" class="auto-hint">
+							Enable “4-week wrap with weekly publish” in Settings to use the wrap
+							toggle here.
+						</p>
 
 						<div v-if="activeWeeks.length" class="active-weeks">
 							<h3>{{ section('standings').publishedTitle }}</h3>
@@ -2576,6 +2743,65 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 	margin-bottom: 0;
 }
 
+.admin-message-modal {
+	max-width: min(28rem, 100%);
+	width: 100%;
+}
+
+.admin-message-title {
+	margin: 0 0 0.65rem;
+	font-family: var(--font-display);
+	font-size: 1.2rem;
+	color: var(--realm-text);
+}
+
+.admin-message-body {
+	margin: 0 0 1.25rem;
+	line-height: 1.5;
+	font-size: 0.95rem;
+	color: var(--realm-text-muted);
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.admin-message-body.is-error {
+	color: var(--realm-accent-glow);
+}
+
+.admin-message-body.is-success {
+	color: var(--realm-text);
+}
+
+.admin-success-toast {
+	position: fixed;
+	right: 1rem;
+	bottom: calc(1rem + var(--safe-bottom, 0px));
+	z-index: 10040;
+	display: flex;
+	align-items: flex-start;
+	gap: 0.65rem;
+	max-width: min(24rem, calc(100vw - 2rem));
+	padding: 0.85rem 1rem;
+	border-radius: var(--radius);
+	border: 1px solid color-mix(in srgb, var(--realm-success) 40%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-surface) 92%, var(--realm-success) 8%);
+	color: var(--realm-text);
+	box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+	font-size: 0.92rem;
+	line-height: 1.4;
+}
+
+.admin-success-toast-dismiss {
+	flex-shrink: 0;
+	border: none;
+	background: transparent;
+	color: var(--realm-text-muted);
+	font-size: 1.25rem;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0;
+}
+
 .admin-page,
 .admin-layout,
 .admin-main,
@@ -2983,6 +3209,29 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 	margin-bottom: 1rem;
 }
 
+.publish-actions {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 0.55rem;
+}
+
+.wrap-publish-toggle {
+	margin: 0;
+	font-size: 0.88rem;
+}
+
+.wrap-publish-warn {
+	margin: 0 0 0.85rem;
+	padding: 0.55rem 0.7rem;
+	border-radius: var(--radius);
+	border: 1px solid color-mix(in srgb, #c48a1a 45%, var(--realm-border));
+	background: color-mix(in srgb, #c48a1a 12%, var(--realm-bg));
+	color: color-mix(in srgb, var(--realm-text) 85%, #a36d10);
+	font-size: 0.86rem;
+	line-height: 1.4;
+}
+
 .standings-actions h2 {
 	color: var(--realm-text);
 	font-family: var(--font-display);
@@ -3310,6 +3559,11 @@ small {
 
 	.standings-actions-top {
 		flex-direction: column;
+	}
+
+	.publish-actions {
+		align-items: stretch;
+		width: 100%;
 	}
 
 	.standings-actions-top .btn-row {

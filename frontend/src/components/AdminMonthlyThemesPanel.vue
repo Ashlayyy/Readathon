@@ -12,6 +12,7 @@ import { useConfig } from '../composables/useConfig'
 import { useMonthlyThemePreview } from '../composables/useMonthlyThemePreview'
 import {
 	COLOR_PRESETS,
+	COLOR_PRESETS_LIGHT,
 	CURATED_COPY_FIELDS,
 	DISCORD_CAPTION_HINT,
 	EVENT_TEXT_FIELDS,
@@ -33,6 +34,7 @@ import {
 	textToLore,
 	type ColorPreset,
 	type ThemeColorKey,
+	type ThemePaletteKind,
 } from '../lib/monthlyThemeEditor'
 
 const emit = defineEmits<{ message: [text: string, isError?: boolean] }>()
@@ -67,6 +69,7 @@ const selectedEventId = ref<string | null>(null)
 const siteOverrideJson = ref('{}')
 const advancedOpen = ref(false)
 const editorTab = ref<EditorTab>('basics')
+const lookPalette = ref<ThemePaletteKind>('dark')
 const timezoneDefault = ref('Europe/Amsterdam')
 const savedSnapshot = ref('')
 const baseThemeColors = ref<Partial<Record<ThemeColorKey, string>>>({})
@@ -83,8 +86,14 @@ const selectedEvent = computed(
 	() => monthlyEvents.value.find((e) => e.id === selectedEventId.value) ?? null,
 )
 
+const lookPresets = computed(() =>
+	lookPalette.value === 'light' ? COLOR_PRESETS_LIGHT : COLOR_PRESETS,
+)
+
 const themeColors = computed(() =>
-	selectedEvent.value ? getThemeColors(selectedEvent.value.siteOverride) : {},
+	selectedEvent.value
+		? getThemeColors(selectedEvent.value.siteOverride, lookPalette.value)
+		: {},
 )
 
 const loreText = computed({
@@ -546,6 +555,7 @@ function onColorPick(key: ThemeColorKey, event: Event) {
 		selectedEvent.value.siteOverride,
 		key,
 		value,
+		lookPalette.value,
 	)
 	syncJsonFromOverride()
 }
@@ -556,6 +566,7 @@ function clearColor(key: ThemeColorKey) {
 		selectedEvent.value.siteOverride,
 		key,
 		'',
+		lookPalette.value,
 	)
 	syncJsonFromOverride()
 }
@@ -564,6 +575,7 @@ function resetAllColors() {
 	if (!selectedEvent.value) return
 	selectedEvent.value.siteOverride = clearThemeColors(
 		selectedEvent.value.siteOverride,
+		lookPalette.value,
 	)
 	syncJsonFromOverride()
 }
@@ -573,6 +585,7 @@ function applyLookPreset(preset: ColorPreset) {
 	selectedEvent.value.siteOverride = applyColorPreset(
 		selectedEvent.value.siteOverride,
 		preset,
+		lookPalette.value,
 	)
 	syncJsonFromOverride()
 }
@@ -809,14 +822,34 @@ const tabs: { id: EditorTab; label: string }[] = [
 						<!-- Look -->
 						<div v-show="editorTab === 'look'" class="tab-panel">
 							<p class="hint">
-								Grab a preset, then tweak. Colors hit the site and Discord
-								standings images while this theme is live. Reset clears overrides
-								back to the base event look.
+								Define a dark and light pair. Readers who opt in (default) switch
+								between them with the site light/dark toggle. Discord standings
+								images use the dark palette. Reset clears the selected side only.
 							</p>
+							<div class="look-palette-row" role="radiogroup" aria-label="Palette side">
+								<button
+									type="button"
+									class="theme-mode-btn"
+									:class="{ selected: lookPalette === 'dark' }"
+									:aria-pressed="lookPalette === 'dark'"
+									@click="lookPalette = 'dark'"
+								>
+									Dark
+								</button>
+								<button
+									type="button"
+									class="theme-mode-btn"
+									:class="{ selected: lookPalette === 'light' }"
+									:aria-pressed="lookPalette === 'light'"
+									@click="lookPalette = 'light'"
+								>
+									Light
+								</button>
+							</div>
 							<div class="color-preset-grid" role="list">
 								<button
-									v-for="preset in COLOR_PRESETS"
-									:key="preset.id"
+									v-for="preset in lookPresets"
+									:key="`${lookPalette}-${preset.id}`"
 									type="button"
 									class="color-preset-card"
 									role="listitem"
@@ -1376,6 +1409,30 @@ Paragraph two…"
 	font-weight: 600;
 	color: var(--realm-text-muted);
 	margin-right: 0.25rem;
+}
+
+.look-palette-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.4rem;
+	margin-bottom: 0.75rem;
+}
+
+.look-palette-row .theme-mode-btn {
+	padding: 0.35rem 0.85rem;
+	border-radius: 8px;
+	border: 1px solid var(--realm-border);
+	background: var(--realm-bg);
+	color: var(--realm-text-muted);
+	font-size: 0.85rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.look-palette-row .theme-mode-btn.selected {
+	border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-accent) 14%, transparent);
+	color: var(--realm-text);
 }
 
 .color-preset-grid {

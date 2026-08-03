@@ -42,14 +42,46 @@ describe('profile routes', () => {
 
     assert.equal(res.status, 200)
     const body = (await res.json()) as {
-      user: { displayName: string; notifyStandings: boolean; notifyAnswers: boolean }
+      user: {
+        displayName: string
+        notifyStandings: boolean
+        notifyAnswers: boolean
+        preferEventThemes: boolean
+      }
       submissions: unknown[]
       questions: unknown[]
     }
     assert.equal(body.user.displayName, 'Profile Reader')
     assert.equal(body.user.notifyStandings, true)
     assert.equal(body.user.notifyAnswers, true)
+    assert.equal(body.user.preferEventThemes, true)
     assert.deepEqual(body.submissions, [])
     assert.deepEqual(body.questions, [])
+  })
+
+  it('patches preferEventThemes', async () => {
+    const user = await User.create({
+      displayName: 'Theme Pref Reader',
+      email: 'theme-pref@example.test',
+    })
+    const app = new Hono()
+    app.route('/api/profile', profileRoutes)
+
+    const res = await app.request('http://localhost/api/profile/settings', {
+      method: 'PATCH',
+      headers: {
+        Cookie: await sessionCookie(user._id.toString()),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ preferEventThemes: false }),
+    })
+
+    assert.equal(res.status, 200)
+    const body = (await res.json()) as {
+      settings: { preferEventThemes: boolean }
+    }
+    assert.equal(body.settings.preferEventThemes, false)
+    const refreshed = await User.findById(user._id)
+    assert.equal(refreshed?.preferEventThemes, false)
   })
 })

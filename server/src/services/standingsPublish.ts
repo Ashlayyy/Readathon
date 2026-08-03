@@ -31,6 +31,64 @@ export type PublishStandingsOptions = {
   preset?: string | null
   from?: string | null
   to?: string | null
+  /**
+   * Explicit wrap choice for admin publish.
+   * `undefined` = auto (scheduler / legacy): attach only on first Monday when enabled.
+   * `true` / `false` = force include / exclude.
+   */
+  includeMonthlyWrap?: boolean | null
+  /** Required when forcing wrap outside first Monday or after already sending this month. */
+  confirmAtypicalWrap?: boolean | null
+}
+
+export type MonthlyWrapPublishInfo = {
+  enabled: boolean
+  isFirstMonday: boolean
+  alreadySentThisMonth: boolean
+  monthKey: string
+  lastMonthlyWrapMonthKey: string
+  timezone: string
+  atypical: boolean
+  reasons: string[]
+}
+
+export function getMonthlyWrapPublishInfo(now = new Date()): MonthlyWrapPublishInfo {
+  const settings = getSiteSettingsAdminSync()
+  const timezone = settings.scheduledPublishTimezone || 'Europe/Amsterdam'
+  const monthKey = monthlyWrapMonthKey(now, timezone)
+  const lastMonthlyWrapMonthKey = settings.lastMonthlyWrapMonthKey || ''
+  const isFirstMonday = isFirstMondayOfMonth(now, timezone)
+  const alreadySentThisMonth = lastMonthlyWrapMonthKey === monthKey
+  const reasons: string[] = []
+  if (!isFirstMonday) {
+    reasons.push('Today is not the first Monday of the month (in the publish timezone).')
+  }
+  if (alreadySentThisMonth) {
+    reasons.push(`A 4-week wrap was already sent for ${monthKey}.`)
+  }
+  return {
+    enabled: Boolean(settings.monthlyWrapOnPublish),
+    isFirstMonday,
+    alreadySentThisMonth,
+    monthKey,
+    lastMonthlyWrapMonthKey,
+    timezone,
+    atypical: reasons.length > 0,
+    reasons,
+  }
+}
+
+export class PublishWrapConfirmationRequiredError extends Error {
+  readonly code = 'WRAP_CONFIRM_REQUIRED' as const
+  readonly wrap: MonthlyWrapPublishInfo
+
+  constructor(wrap: MonthlyWrapPublishInfo) {
+    super(
+      'Confirm to attach the 4-week wrap outside the normal first-Monday publish (or after it was already sent this month).',
+    )
+    this.name = 'PublishWrapConfirmationRequiredError'
+    this.wrap = wrap
+  }
 }
 
 export type PublishStandingsResult = {
@@ -42,6 +100,7 @@ export type PublishStandingsResult = {
   emailsSent: number
   emailsSkipped: number
   discordSent: boolean
+  monthlyWrap: boolean
   range: {
     from: string
     to: string
@@ -49,6 +108,7 @@ export type PublishStandingsResult = {
     label: string
   }
 }
+
 
 /**
  * Publishes the current standings snapshot: standings/breakdown/vibes for the
@@ -60,11 +120,42 @@ export async function publishStandings(
   actor: AuditActor,
   options: PublishStandingsOptions = {},
 ): Promise<PublishStandingsResult> {
+  const settings = getSiteSettingsAdminSync()
+  const tz = settings.scheduledPublishTimezone || 'Europe/Amsterdam'
+  const now = new Date()
+  const wrapInfo = getMonthlyWrapPublishInfo(now)
+
+  const explicitWrap =
+    typeof options.includeMonthlyWrap === 'boolean'
+      ? options.includeMonthlyWrap
+      : null
+
+  let shouldAttachWrap = false
+  if (explicitWrap === true) {
+    if (!wrapInfo.enabled) {
+      throw new Error(
+        '4-week wrap on publish is disabled. Enable it under Admin → Settings → Discord.',
+      )
+    }
+    if (wrapInfo.atypical && !options.confirmAtypicalWrap) {
+      throw new PublishWrapConfirmationRequiredError(wrapInfo)
+    }
+    shouldAttachWrap = true
+  } else if (explicitWrap === false) {
+    shouldAttachWrap = false
+  } else {
+    // Auto (scheduler / unspecified): first Monday only when feature enabled
+    shouldAttachWrap =
+      wrapInfo.enabled &&
+      wrapInfo.isFirstMonday &&
+      !wrapInfo.alreadySentThisMonth
+  }
+
   const range = resolvePublishRange({
     preset: options.preset,
     from: options.from,
     to: options.to,
-    timeZone: getSiteSettingsAdminSync().scheduledPublishTimezone || 'Europe/Amsterdam',
+    timeZone: tz,
   })
   const { weekKey, weekLabel } = range
 
@@ -119,17 +210,9 @@ export async function publishStandings(
     return { sent: 0, skipped: 0 }
   })
 
-  const settings = getSiteSettingsAdminSync()
-  const tz = settings.scheduledPublishTimezone || 'Europe/Amsterdam'
-  const now = new Date()
-  const shouldAutoWrap =
-    settings.monthlyWrapOnPublish &&
-    isFirstMondayOfMonth(now, tz) &&
-    settings.lastMonthlyWrapMonthKey !== monthlyWrapMonthKey(now, tz)
-
   let monthlyWrapSvg: string | undefined
   let monthlyWrapLabel: string | undefined
-  if (shouldAutoWrap) {
+  if (shouldAttachWrap) {
     try {
       const wrap = await buildMonthlyWrapSvg({ now, timeZone: tz })
       monthlyWrapSvg = wrap.svg
@@ -154,7 +237,7 @@ export async function publishStandings(
     return { sent: false }
   })
 
-  if (shouldAutoWrap && monthlyWrapSvg && discordResult.sent) {
+  if (shouldAttachWrap && monthlyWrapSvg && discordResult.sent) {
     try {
       await updateSiteSettings({
         lastMonthlyWrapMonthKey: monthlyWrapMonthKey(now, tz),
@@ -176,6 +259,8 @@ export async function publishStandings(
       rangeTo: range.toInput,
       rangePreset: range.preset,
       monthlyWrap: Boolean(monthlyWrapSvg),
+      monthlyWrapExplicit: explicitWrap,
+      monthlyWrapAtypical: Boolean(explicitWrap && wrapInfo.atypical),
     },
   })
 
@@ -201,6 +286,7 @@ export async function publishStandings(
       source,
       emails_sent: emailResult.sent,
       discord_sent: discordResult.sent,
+      monthly_wrap: Boolean(monthlyWrapSvg),
     },
   )
   log.info('Standings published', {
@@ -209,6 +295,7 @@ export async function publishStandings(
     source,
     emailsSent: emailResult.sent,
     discordSent: discordResult.sent,
+    monthlyWrap: Boolean(monthlyWrapSvg),
   })
 
   return {
@@ -220,6 +307,7 @@ export async function publishStandings(
     emailsSent: emailResult.sent,
     emailsSkipped: emailResult.skipped,
     discordSent: discordResult.sent,
+    monthlyWrap: Boolean(monthlyWrapSvg),
     range: {
       from: range.fromInput,
       to: range.toInput,

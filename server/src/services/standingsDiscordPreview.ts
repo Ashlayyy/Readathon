@@ -56,6 +56,7 @@ export async function sendLiveStandingsToDiscord(opts: {
   includeMonthlyWrap?: boolean
   withPing?: boolean
   guildId?: string | null
+  roleIdOverride?: string | null
 }): Promise<{ sent: boolean; error?: string }> {
   const images = await buildLiveStandingsImages()
   let monthlyWrapSvg: string | undefined
@@ -76,5 +77,6 @@ export async function sendLiveStandingsToDiscord(opts: {
     monthlyWrapSvg,
     monthlyWrapLabel,
     guildId: opts.guildId,
+    roleIdOverride: opts.roleIdOverride,
   })
 }

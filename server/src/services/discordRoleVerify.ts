@@ -50,27 +50,60 @@ async function discordGet<T>(
 }
 
 /**
- * Resolve guild id from settings, or from a webhook URL (…/webhooks/{id}/{token}).
+ * Resolve the guild that will actually receive a Discord post.
+ * Prefer webhook / channel destination over the admin “selected server” picker —
+ * those can differ when production webhook/channel points at another guild.
  */
-export async function resolveGuildId(opts?: {
+export async function resolveDestinationGuildId(opts?: {
 	webhookUrl?: string
+	channelId?: string
 	guildId?: string
-}): Promise<{ ok: true; guildId: string } | { ok: false; error: string }> {
-	const explicit = opts?.guildId?.trim()
-	if (explicit) return { ok: true, guildId: explicit }
-
-	const fromSettings = getDiscordGuildId()
-	if (fromSettings) return { ok: true, guildId: fromSettings }
-
+}): Promise<{ ok: true; guildId: string; source: string } | { ok: false; error: string }> {
 	const webhookUrl = opts?.webhookUrl?.trim()
-	if (!webhookUrl) {
-		return {
-			ok: false,
-			error:
-				'No Discord guild ID configured. Pick a server in Admin → Settings (or keep a webhook so we can resolve it).',
+	if (webhookUrl) {
+		const fromHook = await resolveGuildIdFromWebhookOnly(webhookUrl)
+		if (fromHook.ok) {
+			return { ok: true, guildId: fromHook.guildId, source: 'webhook' }
+		}
+		// Fall through — webhook may be invalid while bot channel is fine
+	}
+
+	const channelId = opts?.channelId?.trim()
+	if (channelId && getDiscordBotToken()) {
+		const ch = await discordGet<{ guild_id?: string | null }>(
+			`/channels/${channelId}`,
+			{ bot: true },
+		)
+		if (ch.ok) {
+			const gid = String(ch.data.guild_id ?? '').trim()
+			if (gid) return { ok: true, guildId: gid, source: 'channel' }
 		}
 	}
 
+	const explicit = opts?.guildId?.trim()
+	if (explicit) return { ok: true, guildId: explicit, source: 'selected' }
+
+	const fromSettings = getDiscordGuildId()
+	if (fromSettings) {
+		return { ok: true, guildId: fromSettings, source: 'settings' }
+	}
+
+	if (webhookUrl) {
+		// Surface the webhook error if that was our only clue
+		const fromHook = await resolveGuildIdFromWebhookOnly(webhookUrl)
+		if (!fromHook.ok) return fromHook
+	}
+
+	return {
+		ok: false,
+		error:
+			'No Discord guild ID configured. Pick a server in Admin → Settings (or keep a webhook so we can resolve it).',
+	}
+}
+
+async function resolveGuildIdFromWebhookOnly(
+	webhookUrl: string,
+): Promise<{ ok: true; guildId: string } | { ok: false; error: string }> {
 	let parsed: URL
 	try {
 		parsed = new URL(webhookUrl)
@@ -92,7 +125,7 @@ export async function resolveGuildId(opts?: {
 			error: `Could not read webhook from Discord (${result.status || 'no token'}).`,
 		}
 	}
-	const guildId = result.data.guild_id?.trim()
+	const guildId = String(result.data.guild_id ?? '').trim()
 	if (!guildId) {
 		return {
 			ok: false,
@@ -100,6 +133,22 @@ export async function resolveGuildId(opts?: {
 		}
 	}
 	return { ok: true, guildId }
+}
+
+/**
+ * Resolve guild id from settings, or from a webhook URL (…/webhooks/{id}/{token}).
+ * @deprecated Prefer resolveDestinationGuildId for role checks / sends.
+ */
+export async function resolveGuildId(opts?: {
+	webhookUrl?: string
+	guildId?: string
+}): Promise<{ ok: true; guildId: string } | { ok: false; error: string }> {
+	const dest = await resolveDestinationGuildId({
+		webhookUrl: opts?.webhookUrl,
+		guildId: opts?.guildId,
+	})
+	if (!dest.ok) return dest
+	return { ok: true, guildId: dest.guildId }
 }
 
 /** @deprecated Prefer resolveGuildId */
@@ -135,11 +184,18 @@ export async function listGuildRoles(
 		{ bot: true },
 	)
 	if (!rolesRes.ok) {
-		if (rolesRes.status === 401 || rolesRes.status === 403) {
+		if (rolesRes.status === 401) {
 			return {
 				ok: false,
 				error:
-					'Discord bot cannot list roles — invite it to this server (use the invite link in Settings) and confirm the Guild ID matches.',
+					'Discord rejected the bot token (401). Paste a fresh bot token from the Discord Developer Portal → Bot → Reset Token, then Save. The server list can still show cached servers after a token breaks.',
+			}
+		}
+		if (rolesRes.status === 403) {
+			return {
+				ok: false,
+				error:
+					'Discord bot cannot list roles on this server (403). Re-invite it with the invite link (bot needs to be in the guild), and confirm the Guild ID matches.',
 			}
 		}
 		return {
@@ -150,7 +206,10 @@ export async function listGuildRoles(
 	return {
 		ok: true,
 		guildId: guild.guildId,
-		roles: rolesRes.data.map((r) => ({ id: r.id, name: r.name })),
+		roles: rolesRes.data.map((r) => ({
+			id: String((r as { id: unknown }).id ?? ''),
+			name: String((r as { name?: unknown }).name ?? ''),
+		})),
 	}
 }
 
@@ -194,11 +253,12 @@ export async function getDiscordBotInviteUrl(): Promise<
 }
 
 /**
- * Confirm `roleId` exists on the guild.
+ * Confirm `roleId` exists on the guild that will receive the message.
  */
 export async function verifyDiscordRole(opts: {
 	roleId: string
 	webhookUrl?: string
+	channelId?: string
 	guildId?: string
 }): Promise<DiscordRoleVerifyResult> {
 	const roleId = normalizeDiscordRoleId(opts.roleId)
@@ -223,25 +283,32 @@ export async function verifyDiscordRole(opts: {
 		}
 	}
 
-	const guild = opts.guildId
-		? { ok: true as const, guildId: opts.guildId }
-		: await resolveGuildId({ webhookUrl: opts.webhookUrl })
-	if (!guild.ok) {
-		return { ok: false, error: guild.error, roleId }
+	const dest = await resolveDestinationGuildId({
+		webhookUrl: opts.webhookUrl,
+		channelId: opts.channelId,
+		guildId: opts.guildId,
+	})
+	if (!dest.ok) {
+		return { ok: false, error: dest.error, roleId }
 	}
 
-	const listed = await listGuildRoles(guild.guildId)
+	const listed = await listGuildRoles(dest.guildId)
 	if (!listed.ok) {
-		return { ok: false, error: listed.error, roleId, guildId: guild.guildId }
+		return { ok: false, error: listed.error, roleId, guildId: dest.guildId }
 	}
 
-	const role = listed.roles.find((r) => r.id === roleId)
+	const role = listed.roles.find((r) => String(r.id) === roleId)
 	if (!role) {
+		const selected = opts.guildId?.trim()
+		const mismatchHint =
+			selected && selected !== dest.guildId
+				? ` (checked destination guild ${dest.guildId} via ${dest.source}, not selected ${selected})`
+				: ` (via ${dest.source})`
 		return {
 			ok: false,
-			error: `Role ${roleId} is not on this Discord server (would show as @unknown-role). Copy the Role ID from the same server as the bot.`,
+			error: `Role ${roleId} is not on Discord server ${dest.guildId}${mismatchHint}. Copy the Role ID from that same server.`,
 			roleId,
-			guildId: guild.guildId,
+			guildId: dest.guildId,
 		}
 	}
 
@@ -249,7 +316,7 @@ export async function verifyDiscordRole(opts: {
 		ok: true,
 		roleId,
 		roleName: role.name,
-		guildId: guild.guildId,
+		guildId: dest.guildId,
 	}
 }
 
@@ -267,6 +334,7 @@ export async function verifyDiscordRoleForWebhook(opts: {
 export async function assertDiscordRolePingAllowed(opts: {
 	roleId: string
 	webhookUrl?: string
+	channelId?: string
 	guildId?: string
 }): Promise<{ ok: true; roleName: string } | { ok: false; error: string }> {
 	const result = await verifyDiscordRole(opts)

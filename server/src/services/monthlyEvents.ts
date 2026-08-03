@@ -11,7 +11,12 @@ export type MonthlyEventMultipliers = {
 export type MonthlyEventSiteOverride = {
   event?: Record<string, unknown>
   copy?: Record<string, unknown>
-  branding?: { theme?: Record<string, string> }
+  branding?: {
+    /** @deprecated Prefer themeDark; kept in sync for SVG / Discord / legacy. */
+    theme?: Record<string, string>
+    themeDark?: Record<string, string>
+    themeLight?: Record<string, string>
+  }
 }
 
 /** Optional Discord overrides while the theme is live. Empty = keep global defaults. */
@@ -109,21 +114,35 @@ function asRecord(v: unknown): Record<string, unknown> | undefined {
   return v as Record<string, unknown>
 }
 
+function normalizeThemeMap(raw: unknown): Record<string, string> | undefined {
+  const themeRaw = asRecord(raw)
+  if (!themeRaw) return undefined
+  const theme = Object.fromEntries(
+    Object.entries(themeRaw).filter(
+      ([, v]) => typeof v === 'string' && v.trim().length > 0,
+    ),
+  ) as Record<string, string>
+  return Object.keys(theme).length > 0 ? theme : undefined
+}
+
 function normalizeSiteOverride(raw: unknown): MonthlyEventSiteOverride {
   const obj = asRecord(raw) ?? {}
   const brandingRaw = asRecord(obj.branding)
-  const themeRaw = brandingRaw ? asRecord(brandingRaw.theme) : undefined
-  const theme =
-    themeRaw &&
-    Object.fromEntries(
-      Object.entries(themeRaw).filter(
-        ([, v]) => typeof v === 'string' && v.trim().length > 0,
-      ),
-    )
+  const legacyTheme = brandingRaw ? normalizeThemeMap(brandingRaw.theme) : undefined
+  const themeDark =
+    (brandingRaw ? normalizeThemeMap(brandingRaw.themeDark) : undefined) ?? legacyTheme
+  const themeLight = brandingRaw ? normalizeThemeMap(brandingRaw.themeLight) : undefined
+  const branding =
+    themeDark || themeLight
+      ? {
+          ...(themeDark ? { theme: themeDark, themeDark } : {}),
+          ...(themeLight ? { themeLight } : {}),
+        }
+      : undefined
   return {
     event: asRecord(obj.event),
     copy: asRecord(obj.copy),
-    branding: theme && Object.keys(theme).length > 0 ? { theme: theme as Record<string, string> } : undefined,
+    branding,
   }
 }
 
