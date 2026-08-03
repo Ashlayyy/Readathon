@@ -75,30 +75,51 @@ async function startDiscordGatewayInner(): Promise<void> {
 		const { getDiscordGuildConfigs, getDiscordPrimaryGuildId } = await import(
 			'../services/siteSettings.js'
 		)
-		const configs = getDiscordGuildConfigs()
-		const ids = new Set(Object.keys(configs))
+		const { clearGuildCommands } = await import('./commands.js')
 		const primary = getDiscordPrimaryGuildId()
-		if (primary) ids.add(primary)
-		if (appId && ids.size > 0) {
-			for (const gId of ids) {
-				try {
-					await registerGuildCommands({
-						token,
-						applicationId: appId,
-						guildId: gId,
-					})
-					console.log(`[discord] registered /readathon commands on guild ${gId}`)
-				} catch (e) {
-					console.error(
-						`[discord] failed to register slash commands on ${gId}:`,
-						e,
-					)
-				}
+		if (!appId) return
+
+		if (primary) {
+			try {
+				await registerGuildCommands({
+					token,
+					applicationId: appId,
+					guildId: primary,
+				})
+				console.log(
+					`[discord] registered /readathon commands on primary guild ${primary}`,
+				)
+			} catch (e) {
+				console.error(
+					`[discord] failed to register slash commands on primary ${primary}:`,
+					e,
+				)
 			}
-		} else if (!ids.size) {
+		} else {
 			console.log(
-				'[discord] gateway: no configured guilds — slash commands not registered',
+				'[discord] gateway: no primary guild — slash commands not registered',
 			)
+		}
+
+		// Drop leftover /readathon registrations from non-primary configured guilds
+		const configs = getDiscordGuildConfigs()
+		for (const gId of Object.keys(configs)) {
+			if (!gId || gId === primary) continue
+			try {
+				await clearGuildCommands({
+					token,
+					applicationId: appId,
+					guildId: gId,
+				})
+				console.log(
+					`[discord] cleared slash commands on non-primary guild ${gId}`,
+				)
+			} catch (e) {
+				console.error(
+					`[discord] failed to clear slash commands on ${gId}:`,
+					e,
+				)
+			}
 		}
 	})
 

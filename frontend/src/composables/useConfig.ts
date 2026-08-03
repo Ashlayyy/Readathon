@@ -1,6 +1,5 @@
 import { ref } from 'vue'
 import { api, type RealmathonConfig, type TeamConfig } from '../lib/api'
-import { applyBrandingTheme } from '../lib/branding'
 import { useTheme } from './useTheme'
 import { useMonthlyThemePreview } from './useMonthlyThemePreview'
 
@@ -23,6 +22,22 @@ function syncThemePoll(data: RealmathonConfig | null) {
   themePollHandle = setInterval(() => {
     void loadConfigInternal(true)
   }, 5 * 60 * 1000)
+}
+
+function syncEventThemes(data: RealmathonConfig, usingPreview: boolean) {
+  const theme = useTheme()
+  const live = usingPreview || Boolean(data.site?.activeMonthlyEvent)
+  if (live) {
+    // Only dual keys from monthly merge — never fall back to base branding.theme.
+    theme.setEventThemes(
+      data.branding?.themeDark ?? null,
+      data.branding?.themeLight ?? null,
+    )
+  } else {
+    theme.setEventThemes(null, null)
+  }
+  theme.setForceEventThemes(usingPreview)
+  theme.applyTheme()
 }
 
 async function loadConfigInternal(force = false): Promise<RealmathonConfig | null> {
@@ -55,13 +70,7 @@ async function loadConfigInternal(force = false): Promise<RealmathonConfig | nul
       }
 
       config.value = data
-      if (data.branding?.theme) {
-        applyBrandingTheme(data.branding.theme)
-      }
-      // Site theme preview: force event branding so admins actually see month colors.
-      if (!usingPreview) {
-        useTheme().applyTheme()
-      }
+      syncEventThemes(data, usingPreview)
       syncThemePoll(data)
     } catch (e) {
       console.error('Failed to load config:', e)

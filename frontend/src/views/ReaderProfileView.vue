@@ -206,10 +206,14 @@ watch(activeTab, async (tab) => {
 function onSettingsSaved(settings: {
 	notifyStandings: boolean
 	notifyAnswers: boolean
+	preferEventThemes: boolean
 	currentlyReading: CurrentlyReading | null
 }) {
 	notifyStandings.value = settings.notifyStandings
 	notifyAnswers.value = settings.notifyAnswers
+	if (user.value) {
+		user.value = { ...user.value, preferEventThemes: settings.preferEventThemes }
+	}
 	if (reader.value) {
 		reader.value = { ...reader.value, currentlyReading: settings.currentlyReading }
 	}
@@ -536,6 +540,7 @@ function onAvatarUpdated(avatarUrl: string | null) {
 				:open="settingsOpen"
 				:notify-standings="notifyStandings"
 				:notify-answers="notifyAnswers"
+				:prefer-event-themes="user?.preferEventThemes !== false"
 				:currently-reading="reader.currentlyReading"
 				:avatar-url="reader.avatarUrl"
 				:display-name="reader.displayName"

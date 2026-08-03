@@ -74,6 +74,8 @@ export type SiteSettingsAdmin = SiteSettingsPublic & {
   discordBotTokenConfigured: boolean
   /** Primary guild for auto-publish / realm chat. Flat fields project this guild. */
   discordPrimaryGuildId: string
+  /** Guild for Admin “Send tests to” / verify test role (session preference). */
+  discordSendTargetGuildId: string
   /** Per-server Discord destinations & roles */
   discordGuildConfigs: Record<string, DiscordGuildConfig>
   /** @deprecated Alias of primary guild id */
@@ -127,6 +129,7 @@ const DEFAULTS: SiteSettingsCached = {
   discordBotTokenConfigured: false,
   discordBotTokenEnc: '',
   discordPrimaryGuildId: '',
+  discordSendTargetGuildId: '',
   discordGuildConfigs: {},
   discordGuildId: '',
   discordTestChannelId: '',
@@ -221,9 +224,17 @@ export function getMonthlyEventsSync(): MonthlyEventSlot[] {
     siteOverride: {
       event: s.siteOverride.event ? { ...s.siteOverride.event } : undefined,
       copy: s.siteOverride.copy ? { ...s.siteOverride.copy } : undefined,
-      branding: s.siteOverride.branding?.theme
-        ? { theme: { ...s.siteOverride.branding.theme } }
-        : undefined,
+      branding: (() => {
+        const b = s.siteOverride.branding
+        if (!b) return undefined
+        const themeDark = b.themeDark ?? b.theme
+        const themeLight = b.themeLight
+        if (!themeDark && !themeLight) return undefined
+        return {
+          ...(themeDark ? { theme: { ...themeDark }, themeDark: { ...themeDark } } : {}),
+          ...(themeLight ? { themeLight: { ...themeLight } } : {}),
+        }
+      })(),
     },
   }))
 }
@@ -556,6 +567,10 @@ function toDocFromCache(doc: {
     downtimeMode: doc.downtimeMode ?? false,
     ...flat,
     discordPrimaryGuildId: primaryId,
+    discordSendTargetGuildId: (
+      (doc as { discordSendTargetGuildId?: string | null }).discordSendTargetGuildId ??
+      ''
+    ).trim() || primaryId,
     discordGuildConfigs: guildConfigs,
     discordBotTokenEnc: tokenEnc,
     discordBotTokenConfigured: Boolean(tokenEnc),
@@ -810,6 +825,14 @@ export async function updateSiteSettings(
       configs[primary] = emptyGuildConfig(primary)
       doc.set('discordGuildConfigs', configs)
     }
+  }
+
+  if (typeof patch.discordSendTargetGuildId === 'string') {
+    const target = patch.discordSendTargetGuildId.trim()
+    if (target && !isValidDiscordSnowflake(target)) {
+      throw new Error('Invalid Discord send-target guild ID')
+    }
+    doc.set('discordSendTargetGuildId', target)
   }
 
   if (typeof patch.teamChatHooksEnabled === 'boolean') {

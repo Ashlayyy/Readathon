@@ -10,6 +10,8 @@ const userSchema = new Schema(
     status: { type: String, enum: ['pending', 'assigned'], default: 'pending' },
     notifyStandings: { type: Boolean, default: false },
     notifyAnswers: { type: Boolean, default: false },
+    /** When true (default), use live host event light/dark palettes instead of personal presets. */
+    preferEventThemes: { type: Boolean, default: true },
     /** Optional, not scored — what they're currently reading. */
     currentlyReadingTitle: { type: String, default: null, trim: true },
     currentlyReadingAuthor: { type: String, default: null, trim: true },

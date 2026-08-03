@@ -45,7 +45,7 @@ import {
   updateSiteSettings,
   type SiteSettingsAdminPatch,
 } from '../services/siteSettings.js'
-import { publishStandings } from '../services/standingsPublish.js'
+import { publishStandings, PublishWrapConfirmationRequiredError, getMonthlyWrapPublishInfo } from '../services/standingsPublish.js'
 import { buildStandingsDigestDraft } from '../services/standingsDigest.js'
 import {
   sendDiscordChannelMessage,
@@ -300,14 +300,21 @@ adminRoutes.get('/discord/bot-invite', async (c) => {
 /** Verify one role ID exists on the configured guild. */
 adminRoutes.post('/discord/verify-role', async (c) => {
   requireAdmin(await getSessionUser(c))
-  const body = await c.req.json<{ roleId?: string; webhookUrl?: string }>()
+  const body = await c.req.json<{
+    roleId?: string
+    webhookUrl?: string
+    channelId?: string
+    guildId?: string
+  }>()
   const roleId = String(body.roleId ?? '').trim()
   if (!roleId) {
     return c.json({ error: 'roleId is required' }, 400)
   }
   const result = await verifyDiscordRole({
     roleId,
-    webhookUrl: body.webhookUrl,
+    webhookUrl: String(body.webhookUrl ?? '').trim() || undefined,
+    channelId: String(body.channelId ?? '').trim() || undefined,
+    guildId: String(body.guildId ?? '').trim() || undefined,
   })
   if (!result.ok) {
     return c.json(
@@ -335,15 +342,19 @@ adminRoutes.post('/discord/send', async (c) => {
     channel?: string
     withPing?: boolean
     guildId?: string
+    /** Exact role to ping/check — must match the Admin form field */
+    roleId?: string
   }>()
   const channel = body.channel === 'test' ? 'test' : 'production'
   const withPing = Boolean(body.withPing)
   const guildId = String(body.guildId ?? '').trim() || undefined
+  const roleIdOverride = String(body.roleId ?? '').trim() || undefined
   const result = await sendDiscordChannelMessage({
     channel,
     withPing,
     kind: channel === 'test' ? 'test' : 'announce',
     guildId,
+    roleIdOverride,
   })
   if (!result.sent) {
     return c.json(
@@ -377,14 +388,17 @@ adminRoutes.post('/discord/send-standings', async (c) => {
     includeMonthlyWrap?: boolean
     withPing?: boolean
     guildId?: string
+    roleId?: string
   }>()
   const channel = body.channel === 'production' ? 'production' : 'test'
   const guildId = String(body.guildId ?? '').trim() || undefined
+  const roleIdOverride = String(body.roleId ?? '').trim() || undefined
   const result = await sendLiveStandingsToDiscord({
     channel,
     includeMonthlyWrap: Boolean(body.includeMonthlyWrap),
     withPing: Boolean(body.withPing),
     guildId,
+    roleIdOverride,
   })
   if (!result.sent) {
     return c.json({ error: result.error ?? 'Failed to send standings' }, 400)
@@ -1046,20 +1060,51 @@ adminRoutes.get('/standings/history/:id.svg', async (c) => {
   )
 })
 
+adminRoutes.get('/standings/wrap-status', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  return c.json({ wrap: getMonthlyWrapPublishInfo() })
+})
+
 adminRoutes.post('/standings/publish', async (c) => {
   const admin = requireAdmin(await getSessionUser(c))
-  let body: { preset?: string; from?: string; to?: string } = {}
+  let body: {
+    preset?: string
+    from?: string
+    to?: string
+    includeMonthlyWrap?: boolean
+    confirmAtypicalWrap?: boolean
+  } = {}
   try {
     body = await c.req.json()
   } catch {
     body = {}
   }
-  const result = await publishStandings(admin, {
-    preset: body.preset,
-    from: body.from,
-    to: body.to,
-  })
-  return c.json(result)
+  try {
+    const result = await publishStandings(admin, {
+      preset: body.preset,
+      from: body.from,
+      to: body.to,
+      includeMonthlyWrap:
+        typeof body.includeMonthlyWrap === 'boolean'
+          ? body.includeMonthlyWrap
+          : undefined,
+      confirmAtypicalWrap: Boolean(body.confirmAtypicalWrap),
+    })
+    return c.json(result)
+  } catch (e) {
+    if (e instanceof PublishWrapConfirmationRequiredError) {
+      return c.json(
+        {
+          error: e.message,
+          code: e.code,
+          wrap: e.wrap,
+          needsConfirm: true,
+        },
+        409,
+      )
+    }
+    throw e
+  }
 })
 
 adminRoutes.post('/standings/unpublish', async (c) => {

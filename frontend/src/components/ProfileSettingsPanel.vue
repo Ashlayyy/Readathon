@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../lib/api'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
+import { useTheme } from '../composables/useTheme'
 import { useBodyScrollLock } from '../composables/useBodyScrollLock'
 import ThemeSwitcher from './ThemeSwitcher.vue'
 import UserAvatar from './UserAvatar.vue'
@@ -18,6 +19,7 @@ const props = defineProps<{
 	open: boolean
 	notifyStandings: boolean
 	notifyAnswers: boolean
+	preferEventThemes?: boolean
 	currentlyReading: CurrentlyReading | null
 	avatarUrl?: string | null
 	displayName: string
@@ -30,6 +32,7 @@ const emit = defineEmits<{
 		settings: {
 			notifyStandings: boolean
 			notifyAnswers: boolean
+			preferEventThemes: boolean
 			currentlyReading: CurrentlyReading | null
 		},
 	]
@@ -38,12 +41,14 @@ const emit = defineEmits<{
 
 const { config } = useConfig()
 const { fetchUser } = useAuth()
+const { setPreferEventThemes } = useTheme()
 
 const isOpen = computed(() => props.open)
 useBodyScrollLock(isOpen)
 
 const notifyStandingsLocal = ref(false)
 const notifyAnswersLocal = ref(false)
+const preferEventThemesLocal = ref(true)
 const crTitle = ref('')
 const crAuthor = ref('')
 const saving = ref(false)
@@ -59,6 +64,7 @@ watch(
 		if (!open) return
 		notifyStandingsLocal.value = props.notifyStandings
 		notifyAnswersLocal.value = props.notifyAnswers
+		preferEventThemesLocal.value = props.preferEventThemes !== false
 		crTitle.value = props.currentlyReading?.title ?? ''
 		crAuthor.value = props.currentlyReading?.author ?? ''
 		localAvatarUrl.value = props.avatarUrl ?? null
@@ -163,6 +169,7 @@ async function saveSettings() {
 			settings: {
 				notifyStandings: boolean
 				notifyAnswers: boolean
+				preferEventThemes: boolean
 				currentlyReading: CurrentlyReading | null
 			}
 		}>('/profile/settings', {
@@ -170,6 +177,7 @@ async function saveSettings() {
 			body: JSON.stringify({
 				notifyStandings: notifyStandingsLocal.value,
 				notifyAnswers: notifyAnswersLocal.value,
+				preferEventThemes: preferEventThemesLocal.value,
 				currentlyReading: {
 					title: crTitle.value,
 					author: crAuthor.value,
@@ -177,7 +185,14 @@ async function saveSettings() {
 				},
 			}),
 		})
-		emit('saved', settings)
+		setPreferEventThemes(settings.preferEventThemes !== false)
+		await fetchUser(true)
+		emit('saved', {
+			notifyStandings: settings.notifyStandings,
+			notifyAnswers: settings.notifyAnswers,
+			preferEventThemes: settings.preferEventThemes !== false,
+			currentlyReading: settings.currentlyReading,
+		})
 		message.value = 'Settings saved.'
 		emit('close')
 	} catch (e) {
@@ -197,6 +212,7 @@ async function clearCurrentlyReading() {
 			settings: {
 				notifyStandings: boolean
 				notifyAnswers: boolean
+				preferEventThemes: boolean
 				currentlyReading: CurrentlyReading | null
 			}
 		}>('/profile/settings', {
@@ -208,6 +224,7 @@ async function clearCurrentlyReading() {
 		emit('saved', {
 			notifyStandings: notifyStandingsLocal.value,
 			notifyAnswers: notifyAnswersLocal.value,
+			preferEventThemes: preferEventThemesLocal.value,
 			currentlyReading: settings.currentlyReading,
 		})
 		message.value = 'Currently reading cleared.'
@@ -375,6 +392,16 @@ async function clearCurrentlyReading() {
 								'Presets or a custom palette for this device.'
 							}}
 						</p>
+					<label class="setting-row">
+							<input v-model="preferEventThemesLocal" type="checkbox" />
+							<div>
+								<strong>Use host event themes when live</strong>
+								<span>
+									On by default. Turn off to keep standard light/dark and your
+									custom palettes even while a monthly theme is running.
+								</span>
+							</div>
+						</label>
 						<ThemeSwitcher />
 					</section>
 				</div>

@@ -1,10 +1,19 @@
 import { ref } from 'vue'
 import { api, googleLoginUrl, type PublicUser } from '../lib/api'
 import { captureEvent, identifyUser } from '../lib/posthog'
+import { useTheme } from './useTheme'
 
 const user = ref<PublicUser | null>(null)
 const loaded = ref(false)
 let fetchPromise: Promise<PublicUser | null> | null = null
+
+function syncPreferEventThemes(nextUser: PublicUser | null) {
+  const { setPreferEventThemes } = useTheme()
+  if (nextUser) {
+    // Account field is source of truth when logged in (default on).
+    setPreferEventThemes(nextUser.preferEventThemes !== false, { persistLocal: true })
+  }
+}
 
 export function useAuth() {
   async function fetchUser(force = false): Promise<PublicUser | null> {
@@ -15,6 +24,7 @@ export function useAuth() {
       try {
         const data = await api<{ user: PublicUser | null }>('/auth/me')
         user.value = data.user
+        syncPreferEventThemes(data.user)
         identifyUser(data.user)
         return data.user
       } catch {

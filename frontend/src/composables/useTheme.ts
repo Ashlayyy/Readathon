@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 export type ThemeMode = 'dark' | 'light' | 'custom'
 
@@ -27,6 +27,7 @@ type PersistedThemeState = {
 }
 
 const STORAGE_KEY = 'realm-theme-v1'
+const PREFER_EVENT_KEY = 'realm-prefer-event-themes'
 
 /** Matches the hardcoded defaults in assets/main.css. */
 export const DARK_PRESET: ThemeColors = {
@@ -80,10 +81,51 @@ function hexToRgb(hex: string): string {
   return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`
 }
 
+function asThemeColors(
+  partial: Record<string, string> | null | undefined,
+  base: ThemeColors,
+): ThemeColors | null {
+  if (!partial) return null
+  const keys = Object.keys(CSS_VAR_MAP) as (keyof ThemeColors)[]
+  const hasAny = keys.some((k) => typeof partial[k] === 'string' && partial[k]!.trim())
+  if (!hasAny) return null
+  const out = { ...base }
+  for (const k of keys) {
+    const v = partial[k]
+    if (typeof v === 'string' && v.trim()) out[k] = v.trim()
+  }
+  return out
+}
+
 const mode = ref<ThemeMode>('dark')
 const customColors = ref<ThemeColors>({ ...DARK_PRESET })
 const savedCustoms = ref<SavedCustomTheme[]>([])
+/** Live host event palettes (null when no monthly theme / preview). */
+const eventThemeDark = ref<ThemeColors | null>(null)
+const eventThemeLight = ref<ThemeColors | null>(null)
+/** Opt-in to host event themes. Guests default on; accounts sync from server. */
+const preferEventThemes = ref(true)
+/** Admin site preview: always show event pair regardless of prefer. */
+const forceEventThemes = ref(false)
 let initialized = false
+
+function loadPreferEventThemes(): boolean {
+  try {
+    const raw = localStorage.getItem(PREFER_EVENT_KEY)
+    if (raw === null) return true
+    return raw !== '0' && raw !== 'false'
+  } catch {
+    return true
+  }
+}
+
+function persistPreferEventThemes() {
+  try {
+    localStorage.setItem(PREFER_EVENT_KEY, preferEventThemes.value ? '1' : '0')
+  } catch {
+    // ignore
+  }
+}
 
 function loadState(): PersistedThemeState | null {
   try {
@@ -109,8 +151,20 @@ function persist() {
   }
 }
 
+function useEventPair(): boolean {
+  if (forceEventThemes.value) return Boolean(eventThemeDark.value || eventThemeLight.value)
+  if (!preferEventThemes.value) return false
+  return Boolean(eventThemeDark.value || eventThemeLight.value)
+}
+
 function activeColors(): ThemeColors {
   if (mode.value === 'custom') return customColors.value
+  if (useEventPair()) {
+    if (mode.value === 'light') {
+      return eventThemeLight.value ?? LIGHT_PRESET
+    }
+    return eventThemeDark.value ?? DARK_PRESET
+  }
   if (mode.value === 'light') return LIGHT_PRESET
   return DARK_PRESET
 }
@@ -194,6 +248,8 @@ function init() {
   if (initialized) return
   initialized = true
 
+  preferEventThemes.value = loadPreferEventThemes()
+
   const saved = loadState()
   if (saved) {
     if (saved.mode === 'dark' || saved.mode === 'light' || saved.mode === 'custom') {
@@ -207,10 +263,9 @@ function init() {
 }
 
 function setMode(next: ThemeMode) {
-  // Entering custom: seed from current preset if custom draft is still a preset clone
+  // Entering custom: seed from current active palette if draft is still a preset clone
   if (next === 'custom' && mode.value !== 'custom') {
-    const current = mode.value === 'light' ? LIGHT_PRESET : DARK_PRESET
-    // Only seed if they haven't customized yet (still equal to a preset)
+    const current = activeColors()
     const draft = customColors.value
     const looksLikePreset =
       Object.keys(DARK_PRESET).every(
@@ -227,9 +282,12 @@ function setMode(next: ThemeMode) {
   persist()
 }
 
-/** Nav moon/sun: always flips between dark and light (leaves custom drafts intact). */
+/** Nav moon/sun: flips effective light/dark appearance; always re-applies palette. */
 function toggleDarkLight() {
-  setMode(mode.value === 'light' ? 'dark' : 'light')
+  const effectiveLight = document.documentElement.dataset.theme === 'light'
+  mode.value = effectiveLight ? 'dark' : 'light'
+  applyTheme()
+  persist()
 }
 
 function setCustomColor(key: keyof ThemeColors, value: string) {
@@ -270,6 +328,28 @@ function loadSavedTheme(id: string) {
   persist()
 }
 
+function setEventThemes(
+  dark: Record<string, string> | null | undefined,
+  light: Record<string, string> | null | undefined,
+) {
+  eventThemeDark.value = asThemeColors(dark ?? null, DARK_PRESET)
+  eventThemeLight.value = asThemeColors(light ?? null, LIGHT_PRESET)
+}
+
+function setForceEventThemes(force: boolean) {
+  forceEventThemes.value = force
+}
+
+function setPreferEventThemes(value: boolean, opts?: { persistLocal?: boolean }) {
+  preferEventThemes.value = value
+  if (opts?.persistLocal !== false) persistPreferEventThemes()
+  applyTheme()
+}
+
+const eventThemesActive = computed(
+  () => useEventPair() && mode.value !== 'custom',
+)
+
 export function useTheme() {
   init()
 
@@ -277,6 +357,10 @@ export function useTheme() {
     mode,
     customColors,
     savedCustoms,
+    preferEventThemes,
+    eventThemesActive,
+    eventThemeDark,
+    eventThemeLight,
     presets: { dark: DARK_PRESET, light: LIGHT_PRESET },
     setMode,
     toggleDarkLight,
@@ -286,5 +370,8 @@ export function useTheme() {
     deleteSavedTheme,
     loadSavedTheme,
     applyTheme,
+    setEventThemes,
+    setForceEventThemes,
+    setPreferEventThemes,
   }
 }

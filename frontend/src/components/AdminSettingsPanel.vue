@@ -48,6 +48,7 @@ const discordPrimaryGuildId = ref('');
 const discordPrimaryGuildIdSaved = ref('');
 const editingGuildId = ref('');
 const sendTargetGuildId = ref('');
+const sendTargetGuildIdSaved = ref('');
 const botGuilds = ref<Array<{ id: string; name: string }>>([]);
 const botGuildsLoading = ref(false);
 const botGuildsFetchedAt = ref('');
@@ -55,8 +56,8 @@ const addGuildIdDraft = ref('');
 
 /** Session-level cache so remounting Settings doesn't blank the picker. */
 let sessionBotGuilds: {
-	guilds: Array<{ id: string; name: string }>
-	fetchedAt: string
+	guilds: Array<{ id: string; name: string }>;
+	fetchedAt: string;
 } | null = null;
 
 function hydrateBotGuildsFromCache(
@@ -139,7 +140,12 @@ function listsEqual(a: string[], b: string[]) {
 }
 
 const dirty = computed(() => {
-	if (discordPrimaryGuildId.value.trim() !== discordPrimaryGuildIdSaved.value.trim())
+	if (
+		discordPrimaryGuildId.value.trim() !==
+		discordPrimaryGuildIdSaved.value.trim()
+	)
+		return true;
+	if (sendTargetGuildId.value.trim() !== sendTargetGuildIdSaved.value.trim())
 		return true;
 	if (
 		JSON.stringify(discordGuildConfigs.value) !==
@@ -170,13 +176,18 @@ const dirty = computed(() => {
 		)
 	)
 		return true;
-	if (discordTestWebhookDraft.value.trim() !== discordTestWebhookUrl.value) return true;
-	if (discordTestRoleIdDraft.value.trim() !== discordTestRoleId.value) return true;
+	if (discordTestWebhookDraft.value.trim() !== discordTestWebhookUrl.value)
+		return true;
+	if (discordTestRoleIdDraft.value.trim() !== discordTestRoleId.value)
+		return true;
 	if (
-		discordProductionWebhookDraft.value.trim() !== discordProductionWebhookUrl.value
+		discordProductionWebhookDraft.value.trim() !==
+		discordProductionWebhookUrl.value
 	)
 		return true;
-	if (discordProductionRoleIdDraft.value.trim() !== discordProductionRoleId.value)
+	if (
+		discordProductionRoleIdDraft.value.trim() !== discordProductionRoleId.value
+	)
 		return true;
 	const teams = config.value?.teams ?? [];
 	for (const team of teams) {
@@ -187,8 +198,12 @@ const dirty = computed(() => {
 		const chSaved = (teamChatChannelIds.value[team.id] ?? '').trim();
 		if (chDraft !== chSaved) return true;
 	}
-	if (!listsEqual(teamChatAddDrafts.value, teamChatAddTemplates.value)) return true;
-	if (!listsEqual(teamChatSabotageDrafts.value, teamChatSabotageTemplates.value)) return true;
+	if (!listsEqual(teamChatAddDrafts.value, teamChatAddTemplates.value))
+		return true;
+	if (
+		!listsEqual(teamChatSabotageDrafts.value, teamChatSabotageTemplates.value)
+	)
+		return true;
 	return false;
 });
 
@@ -212,6 +227,111 @@ const productionChannelReady = computed(() => {
 	return Boolean(discordProductionWebhookUrl.value.trim());
 });
 
+/** Effective config for the server manual sends/verifies target. */
+function sendTargetGuildConfig(): DiscordGuildConfig | null {
+	const gid = sendTargetGuildId.value.trim();
+	if (!gid) return null;
+	if (gid === editingGuildId.value.trim()) {
+		const prev = discordGuildConfigs.value[gid] ?? emptyGuildConfig(gid);
+		return {
+			...prev,
+			guildId: gid,
+			testDeliveryMode: discordTestDeliveryMode.value,
+			productionDeliveryMode: discordProductionDeliveryMode.value,
+			testWebhookUrl: discordTestWebhookDraft.value.trim(),
+			testRoleId: discordTestRoleIdDraft.value.trim(),
+			productionWebhookUrl: discordProductionWebhookDraft.value.trim(),
+			productionRoleId: discordProductionRoleIdDraft.value.trim(),
+			testChannelId: discordTestChannelIdDraft.value.trim(),
+			productionChannelId: discordProductionChannelIdDraft.value.trim(),
+		};
+	}
+	return discordGuildConfigs.value[gid] ?? null;
+}
+
+const sendTargetTestReady = computed(() => {
+	const cfg = sendTargetGuildConfig();
+	if (!cfg) return false;
+	if (cfg.testDeliveryMode === 'bot') {
+		return discordBotTokenConfigured.value && Boolean(cfg.testChannelId.trim());
+	}
+	return Boolean(cfg.testWebhookUrl.trim());
+});
+
+const sendTargetProductionReady = computed(() => {
+	const cfg = sendTargetGuildConfig();
+	if (!cfg) return false;
+	if (cfg.productionDeliveryMode === 'bot') {
+		return (
+			discordBotTokenConfigured.value && Boolean(cfg.productionChannelId.trim())
+		);
+	}
+	return Boolean(cfg.productionWebhookUrl.trim());
+});
+
+function roleIdForSendChannel(channel: 'test' | 'production'): string {
+	const cfg = sendTargetGuildConfig();
+	if (!cfg) return '';
+	return channel === 'test'
+		? cfg.testRoleId.trim()
+		: cfg.productionRoleId.trim();
+}
+
+function guildLabel(guildId: string): string {
+	const id = guildId.trim();
+	if (!id) return '—';
+	const opt = configuredGuildOptions().find((g) => g.id === id);
+	return opt?.label ?? id;
+}
+
+const botTokenStatus = computed(() => {
+	if (clearDiscordBotToken.value) {
+		return {
+			tone: 'warn' as const,
+			text: 'Clear armed — Save to remove token',
+		};
+	}
+	if (discordBotTokenDraft.value.trim()) {
+		return { tone: 'warn' as const, text: 'New token pasted — Save to store' };
+	}
+	if (discordBotTokenConfigured.value) {
+		return { tone: 'ok' as const, text: 'Token stored (encrypted)' };
+	}
+	return { tone: 'off' as const, text: 'No bot token yet' };
+});
+
+const discordFlowStatus = computed(() => [
+	{
+		label: 'Token',
+		value: botTokenStatus.value.text,
+		tone: botTokenStatus.value.tone,
+	},
+	{
+		label: 'Servers',
+		value: botGuildsLoading.value
+			? 'Loading…'
+			: botGuilds.value.length
+				? `${botGuilds.value.length} known`
+				: 'None loaded',
+		tone: botGuilds.value.length ? ('ok' as const) : ('off' as const),
+	},
+	{
+		label: 'Primary',
+		value: guildLabel(discordPrimaryGuildId.value),
+		tone: discordPrimaryGuildId.value ? ('ok' as const) : ('off' as const),
+	},
+	{
+		label: 'Editing',
+		value: guildLabel(editingGuildId.value),
+		tone: editingGuildId.value ? ('ok' as const) : ('off' as const),
+	},
+	{
+		label: 'Send tests to',
+		value: guildLabel(sendTargetGuildId.value),
+		tone: sendTargetGuildId.value ? ('ok' as const) : ('off' as const),
+	},
+]);
+
 const statusChips = computed(() => [
 	{
 		id: 'discord',
@@ -222,7 +342,9 @@ const statusChips = computed(() => [
 	},
 	{
 		id: 'schedule',
-		label: scheduledPublishEnabled.value ? 'Auto-publish on' : 'Auto-publish off',
+		label: scheduledPublishEnabled.value
+			? 'Auto-publish on'
+			: 'Auto-publish off',
 		on: scheduledPublishEnabled.value,
 	},
 	{
@@ -238,7 +360,7 @@ const statusChips = computed(() => [
 	{
 		id: 'wrap',
 		label: monthlyWrapOnPublish.value
-			? '4-week wrap on 1st Mon'
+			? '4-week wrap enabled'
 			: '4-week wrap off',
 		on: monthlyWrapOnPublish.value,
 	},
@@ -261,7 +383,8 @@ function applySettings(settings: AdminSiteSettings) {
 			: settings.discordDeliveryMode === 'bot'
 				? 'bot'
 				: 'webhook';
-	discordProductionDeliveryModeSaved.value = discordProductionDeliveryMode.value;
+	discordProductionDeliveryModeSaved.value =
+		discordProductionDeliveryMode.value;
 	discordBotTokenConfigured.value = Boolean(settings.discordBotTokenConfigured);
 	discordBotTokenDraft.value = '';
 	clearDiscordBotToken.value = false;
@@ -272,7 +395,9 @@ function applySettings(settings: AdminSiteSettings) {
 	discordProductionChannelId.value = settings.discordProductionChannelId ?? '';
 	discordProductionChannelIdDraft.value =
 		settings.discordProductionChannelId ?? '';
-	discordBotCommandRoleIds.value = [...(settings.discordBotCommandRoleIds ?? [])];
+	discordBotCommandRoleIds.value = [
+		...(settings.discordBotCommandRoleIds ?? []),
+	];
 	discordBotCommandRoleIdsDraft.value = [
 		...(settings.discordBotCommandRoleIds ?? []),
 	];
@@ -300,8 +425,12 @@ function applySettings(settings: AdminSiteSettings) {
 	teamChatChannelDrafts.value = { ...(settings.teamChatChannelIds ?? {}) };
 	teamChatAddTemplates.value = [...(settings.teamChatAddTemplates ?? [])];
 	teamChatAddDrafts.value = [...(settings.teamChatAddTemplates ?? [])];
-	teamChatSabotageTemplates.value = [...(settings.teamChatSabotageTemplates ?? [])];
-	teamChatSabotageDrafts.value = [...(settings.teamChatSabotageTemplates ?? [])];
+	teamChatSabotageTemplates.value = [
+		...(settings.teamChatSabotageTemplates ?? []),
+	];
+	teamChatSabotageDrafts.value = [
+		...(settings.teamChatSabotageTemplates ?? []),
+	];
 
 	const configs = { ...(settings.discordGuildConfigs ?? {}) };
 	if (
@@ -311,13 +440,16 @@ function applySettings(settings: AdminSiteSettings) {
 		const id = settings.discordPrimaryGuildId || settings.discordGuildId;
 		configs[id] = {
 			...emptyGuildConfig(id),
-			testDeliveryMode: settings.discordTestDeliveryMode === 'bot' ? 'bot' : 'webhook',
+			testDeliveryMode:
+				settings.discordTestDeliveryMode === 'bot' ? 'bot' : 'webhook',
 			productionDeliveryMode:
 				settings.discordProductionDeliveryMode === 'bot' ? 'bot' : 'webhook',
 			testWebhookUrl: settings.discordTestWebhookUrl ?? '',
 			testRoleId: settings.discordTestRoleId ?? '',
 			productionWebhookUrl:
-				settings.discordProductionWebhookUrl || settings.discordWebhookUrl || '',
+				settings.discordProductionWebhookUrl ||
+				settings.discordWebhookUrl ||
+				'',
 			productionRoleId:
 				settings.discordProductionRoleId || settings.discordRoleId || '',
 			testChannelId: settings.discordTestChannelId ?? '',
@@ -337,11 +469,13 @@ function applySettings(settings: AdminSiteSettings) {
 	discordPrimaryGuildId.value = primary;
 	discordPrimaryGuildIdSaved.value = primary;
 	editingGuildId.value = primary;
-	sendTargetGuildId.value = primary;
-	const cachedGuilds =
-		settings.discordBotGuildsCache?.guilds?.length
-			? settings.discordBotGuildsCache
-			: sessionBotGuilds;
+	const sendTarget =
+		(settings.discordSendTargetGuildId || '').trim() || primary;
+	sendTargetGuildId.value = sendTarget;
+	sendTargetGuildIdSaved.value = sendTarget;
+	const cachedGuilds = settings.discordBotGuildsCache?.guilds?.length
+		? settings.discordBotGuildsCache
+		: sessionBotGuilds;
 	if (cachedGuilds?.guilds?.length) {
 		hydrateBotGuildsFromCache(
 			cachedGuilds.guilds,
@@ -385,8 +519,12 @@ function flushGuildDrafts(guildId: string) {
 	const webhookDrafts: Record<string, string> = {};
 	const channelDrafts: Record<string, string> = {};
 	for (const team of config.value?.teams ?? []) {
-		webhookDrafts[team.id] = (teamChatWebhookDrafts.value[team.id] ?? '').trim();
-		channelDrafts[team.id] = (teamChatChannelDrafts.value[team.id] ?? '').trim();
+		webhookDrafts[team.id] = (
+			teamChatWebhookDrafts.value[team.id] ?? ''
+		).trim();
+		channelDrafts[team.id] = (
+			teamChatChannelDrafts.value[team.id] ?? ''
+		).trim();
 	}
 	discordGuildConfigs.value = {
 		...discordGuildConfigs.value,
@@ -428,9 +566,9 @@ async function loadBotGuilds(opts?: { silent?: boolean; force?: boolean }) {
 	try {
 		const q = opts?.force ? '?refresh=1' : '';
 		const data = await api<{
-			guilds: Array<{ id: string; name: string }>
-			cached?: boolean
-			fetchedAt?: string
+			guilds: Array<{ id: string; name: string }>;
+			cached?: boolean;
+			fetchedAt?: string;
 		}>(`/admin/discord/bot-guilds${q}`);
 		hydrateBotGuildsFromCache(data.guilds, data.fetchedAt ?? '');
 		// Refresh names on already-saved configs only (don't invent dirty empty rows)
@@ -438,12 +576,12 @@ async function loadBotGuilds(opts?: { silent?: boolean; force?: boolean }) {
 		const savedNext = { ...discordGuildConfigsSaved.value };
 		let touched = false;
 		for (const g of data.guilds) {
-			const current = next[g.id]
+			const current = next[g.id];
 			if (current && g.name && current.name !== g.name) {
 				next[g.id] = { ...current, name: g.name };
 				touched = true;
 			}
-			const saved = savedNext[g.id]
+			const saved = savedNext[g.id];
 			if (saved && g.name && saved.name !== g.name) {
 				savedNext[g.id] = { ...saved, name: g.name };
 			}
@@ -460,13 +598,14 @@ async function loadBotGuilds(opts?: { silent?: boolean; force?: boolean }) {
 		}
 		if (!opts?.silent) {
 			const via = data.cached ? 'cache' : 'Discord';
-			emit(
-				'message',
-				`Found ${data.guilds.length} server(s) (via ${via}).`,
-			);
+			emit('message', `Found ${data.guilds.length} server(s) (via ${via}).`);
 		}
 	} catch (e) {
-		emit('message', e instanceof Error ? e.message : 'Failed to list bot servers', true);
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Failed to list bot servers',
+			true,
+		);
 	} finally {
 		botGuildsLoading.value = false;
 	}
@@ -490,7 +629,8 @@ function configuredGuildOptions() {
 		.map((id) => {
 			const fromBot = botGuilds.value.find((g) => g.id === id);
 			const fromCfg = discordGuildConfigs.value[id];
-			const name = (fromBot?.name || fromCfg?.name || '').trim() || 'Unknown server';
+			const name =
+				(fromBot?.name || fromCfg?.name || '').trim() || 'Unknown server';
 			const isPrimary = id === discordPrimaryGuildId.value;
 			return {
 				id,
@@ -518,7 +658,10 @@ function armClearBotToken() {
 	if (!ok) return;
 	clearDiscordBotToken.value = true;
 	discordBotTokenDraft.value = '';
-	emit('message', 'Bot token clear armed — click Save to apply, or Discard to cancel.');
+	emit(
+		'message',
+		'Bot token clear armed — click Save to apply, or Discard to cancel.',
+	);
 }
 
 function cancelClearBotToken() {
@@ -526,7 +669,9 @@ function cancelClearBotToken() {
 }
 
 async function loadSettings() {
-	const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings');
+	const { settings } = await api<{ settings: AdminSiteSettings }>(
+		'/admin/settings',
+	);
 	applySettings(settings);
 	loaded.value = true;
 }
@@ -539,17 +684,24 @@ onMounted(async () => {
 			await loadBotGuilds({ silent: true, force: false });
 		}
 	} catch (e) {
-		emit('message', e instanceof Error ? e.message : msg('settingsLoadFailed'), true);
+		emit(
+			'message',
+			e instanceof Error ? e.message : msg('settingsLoadFailed'),
+			true,
+		);
 	}
 });
 
 async function patchSettings(body: Record<string, unknown>, busyKey = 'save') {
 	autoSaving.value = busyKey;
 	try {
-		const { settings } = await api<{ settings: AdminSiteSettings }>('/admin/settings', {
-			method: 'PATCH',
-			body: JSON.stringify(body),
-		});
+		const { settings } = await api<{ settings: AdminSiteSettings }>(
+			'/admin/settings',
+			{
+				method: 'PATCH',
+				body: JSON.stringify(body),
+			},
+		);
 		applySettings(settings);
 		await loadConfig(true);
 		return settings;
@@ -572,6 +724,7 @@ async function saveAllWebhookSettings() {
 		flushGuildDrafts(editingGuildId.value);
 		const body: Record<string, unknown> = {
 			discordPrimaryGuildId: discordPrimaryGuildId.value.trim(),
+			discordSendTargetGuildId: sendTargetGuildId.value.trim(),
 			discordGuildConfigs: discordGuildConfigs.value,
 			teamChatAddTemplates: teamChatAddDrafts.value
 				.map((s) => s.trim())
@@ -588,7 +741,11 @@ async function saveAllWebhookSettings() {
 		await patchSettings(body, 'save');
 		emit('message', 'Settings saved.');
 	} catch (e) {
-		emit('message', e instanceof Error ? e.message : 'Failed to save settings', true);
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Failed to save settings',
+			true,
+		);
 		discardDrafts();
 	} finally {
 		saving.value = false;
@@ -600,6 +757,7 @@ function discardDrafts() {
 		JSON.stringify(discordGuildConfigsSaved.value),
 	);
 	discordPrimaryGuildId.value = discordPrimaryGuildIdSaved.value;
+	sendTargetGuildId.value = sendTargetGuildIdSaved.value;
 	if (editingGuildId.value && discordGuildConfigs.value[editingGuildId.value]) {
 		loadGuildDrafts(editingGuildId.value);
 	} else if (discordPrimaryGuildId.value) {
@@ -633,60 +791,67 @@ function addCommandRoleFromInput(raw: string) {
 const commandRoleInput = ref('');
 
 async function loadGuildRoles() {
-	const guildId = editingGuildId.value.trim()
+	const guildId = editingGuildId.value.trim();
 	if (!discordBotTokenConfigured.value) {
 		emit(
 			'message',
 			'Save a bot token first, then click Load guild roles.',
 			true,
-		)
-		return
+		);
+		return;
 	}
 	if (!guildId) {
-		emit('message', 'Select a server first, then load roles.', true)
-		return
+		emit('message', 'Select a server first, then load roles.', true);
+		return;
 	}
-	guildRolesLoading.value = true
-	emit('message', '')
+	guildRolesLoading.value = true;
+	emit('message', '');
 	try {
-		const q = new URLSearchParams({ guildId })
+		const q = new URLSearchParams({ guildId });
 		const data = await api<{
-			guildId: string
-			roles: Array<{ id: string; name: string }>
-		}>(`/admin/discord/guild-roles?${q}`)
-		guildRoles.value = data.roles
-		emit('message', `Loaded ${data.roles.length} roles from guild ${data.guildId}.`)
+			guildId: string;
+			roles: Array<{ id: string; name: string }>;
+		}>(`/admin/discord/guild-roles?${q}`);
+		guildRoles.value = data.roles;
+		emit(
+			'message',
+			`Loaded ${data.roles.length} roles from guild ${data.guildId}.`,
+		);
 	} catch (e) {
 		emit(
 			'message',
 			e instanceof Error ? e.message : 'Failed to load guild roles',
 			true,
-		)
+		);
 	} finally {
-		guildRolesLoading.value = false
+		guildRolesLoading.value = false;
 	}
 }
 
 async function copyBotInvite() {
-	emit('message', '')
+	emit('message', '');
 	try {
-		const data = await api<{ url: string }>('/admin/discord/bot-invite')
-		await navigator.clipboard.writeText(data.url)
+		const data = await api<{ url: string }>('/admin/discord/bot-invite');
+		await navigator.clipboard.writeText(data.url);
 		emit(
 			'message',
 			'Invite link copied. Open it while logged into Discord and re-invite the bot (needs applications.commands for slash commands).',
-		)
+		);
 	} catch (e) {
 		emit(
 			'message',
 			e instanceof Error ? e.message : 'Failed to build invite link',
 			true,
-		)
+		);
 	}
 }
 
-async function verifyRoleId(roleId: string) {
+async function verifyRoleId(roleId: string, guildIdOverride?: string) {
 	if (!roleId.trim()) return;
+	const guildId =
+		(guildIdOverride ?? '').trim() ||
+		sendTargetGuildId.value.trim() ||
+		editingGuildId.value.trim();
 	autoSaving.value = 'verify-role';
 	emit('message', '');
 	try {
@@ -694,11 +859,18 @@ async function verifyRoleId(roleId: string) {
 			ok: boolean;
 			roleName: string;
 			roleId: string;
+			guildId?: string;
 		}>('/admin/discord/verify-role', {
 			method: 'POST',
-			body: JSON.stringify({ roleId: roleId.trim() }),
+			body: JSON.stringify({
+				roleId: roleId.trim(),
+				guildId: guildId || undefined,
+			}),
 		});
-		emit('message', `Role OK: ${data.roleName} (${data.roleId})`);
+		emit(
+			'message',
+			`Role OK: ${data.roleName} (${data.roleId}) on ${guildLabel(data.guildId ?? guildId)}`,
+		);
 	} catch (e) {
 		emit(
 			'message',
@@ -707,6 +879,125 @@ async function verifyRoleId(roleId: string) {
 		);
 	} finally {
 		autoSaving.value = '';
+	}
+}
+
+async function verifySendChannelRole(channel: 'test' | 'production') {
+	// Always use the role ID sitting in the form for the server you're Editing.
+	const guildId = editingGuildId.value.trim();
+	if (!guildId) {
+		emit('message', 'Select a server under Editing first.', true);
+		return;
+	}
+	const roleId =
+		channel === 'test'
+			? discordTestRoleIdDraft.value.trim()
+			: discordProductionRoleIdDraft.value.trim();
+	if (!roleId) {
+		emit('message', `Paste a ${channel} role ID in the field above first.`, true);
+		return;
+	}
+	const mode =
+		channel === 'test'
+			? discordTestDeliveryMode.value
+			: discordProductionDeliveryMode.value;
+	const webhookUrl =
+		channel === 'test'
+			? discordTestWebhookDraft.value.trim()
+			: discordProductionWebhookDraft.value.trim();
+	const channelId =
+		channel === 'test'
+			? discordTestChannelIdDraft.value.trim()
+			: discordProductionChannelIdDraft.value.trim();
+
+	autoSaving.value = 'verify-role';
+	emit('message', '');
+	try {
+		const data = await api<{
+			ok: boolean;
+			roleName: string;
+			roleId: string;
+			guildId?: string;
+		}>('/admin/discord/verify-role', {
+			method: 'POST',
+			body: JSON.stringify({
+				roleId,
+				webhookUrl: mode === 'webhook' ? webhookUrl || undefined : undefined,
+				channelId: mode === 'bot' ? channelId || undefined : undefined,
+				guildId,
+			}),
+		});
+		emit(
+			'message',
+			`Role OK: ${data.roleName} (${data.roleId}) on ${guildLabel(data.guildId ?? guildId)} — this is the ${channel} field value.`,
+		);
+	} catch (e) {
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Role verification failed',
+			true,
+		);
+	} finally {
+		autoSaving.value = '';
+	}
+}
+
+/** Manual sends use the Editing server + the role IDs in the form fields. */
+async function ensureManualSendReady(_withPing: boolean): Promise<boolean> {
+	const guildId = editingGuildId.value.trim();
+	if (!guildId) {
+		emit('message', 'Select a server under Editing first.', true);
+		return false;
+	}
+	if (dirty.value) {
+		const ok = confirm(
+			`You have unsaved Discord settings for ${guildLabel(guildId)}.\n\nSave now so channel/webhook settings match the form? (The role ID in the form is still sent as-is.)`,
+		);
+		if (ok) {
+			await saveAllWebhookSettings();
+			if (dirty.value) return false;
+		}
+	}
+	// Keep Send-tests-to aligned with what we're actually sending
+	if (sendTargetGuildId.value !== guildId) {
+		sendTargetGuildId.value = guildId;
+	}
+	return true;
+}
+
+function selectSendTargetGuild(guildId: string) {
+	if (!guildId) return;
+	ensureGuildConfig(guildId);
+	sendTargetGuildId.value = guildId;
+	void persistSendTargetGuild(guildId);
+}
+
+async function persistSendTargetGuild(guildId: string) {
+	if (!guildId || guildId === sendTargetGuildIdSaved.value) return;
+	try {
+		await patchSettings({ discordSendTargetGuildId: guildId }, 'send-target');
+		sendTargetGuildIdSaved.value = guildId;
+		emit('message', `Send tests to saved: ${guildId}`);
+	} catch (e) {
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Failed to save send-tests guild',
+			true,
+		);
+	}
+}
+
+function applyManualGuildId(raw: string, target: 'configure' | 'tests') {
+	const id = raw.trim().replace(/\D/g, '');
+	if (!/^\d{5,30}$/.test(id)) {
+		emit('message', 'Guild ID must be a numeric snowflake.', true);
+		return;
+	}
+	ensureGuildConfig(id);
+	if (target === 'configure') {
+		selectEditingGuild(id);
+	} else {
+		selectSendTargetGuild(id);
 	}
 }
 
@@ -745,22 +1036,27 @@ function onTemplateFocus(kind: 'add' | 'sabotage', index: number) {
 function insertVariable(example: string) {
 	const focus = focusedTemplate.value;
 	if (!focus) {
-		const list = previewKind.value === 'add' ? teamChatAddDrafts : teamChatSabotageDrafts;
+		const list =
+			previewKind.value === 'add' ? teamChatAddDrafts : teamChatSabotageDrafts;
 		if (!list.value.length) addTemplate(previewKind.value);
 		const index = Math.max(0, list.value.length - 1);
 		list.value[index] = `${list.value[index] ?? ''}${example}`;
 		focusedTemplate.value = { kind: previewKind.value, index };
 		return;
 	}
-	const list = focus.kind === 'add' ? teamChatAddDrafts : teamChatSabotageDrafts;
+	const list =
+		focus.kind === 'add' ? teamChatAddDrafts : teamChatSabotageDrafts;
 	const current = list.value[focus.index] ?? '';
 	list.value[focus.index] = `${current}${example}`;
 }
 
 function fillPreview(template: string): string {
-	return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, key: string) => {
-		return SAMPLE_VARS[key] ?? '';
-	});
+	return template.replace(
+		/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,
+		(_m, key: string) => {
+			return SAMPLE_VARS[key] ?? '';
+		},
+	);
 }
 
 /** Light Discord-style markdown: **bold** only. */
@@ -774,7 +1070,9 @@ function previewHtml(template: string): string {
 
 const previewTemplate = computed(() => {
 	const list =
-		previewKind.value === 'add' ? teamChatAddDrafts.value : teamChatSabotageDrafts.value;
+		previewKind.value === 'add'
+			? teamChatAddDrafts.value
+			: teamChatSabotageDrafts.value;
 	const focus = focusedTemplate.value;
 	if (focus && focus.kind === previewKind.value && list[focus.index]) {
 		return list[focus.index]!;
@@ -799,9 +1097,16 @@ async function onDowntimeToggle() {
 	}
 	try {
 		await patchSettings({ downtimeMode: downtimeMode.value }, 'downtime');
-		emit('message', downtimeMode.value ? msg('downtimeOn') : msg('downtimeOff'));
+		emit(
+			'message',
+			downtimeMode.value ? msg('downtimeOn') : msg('downtimeOff'),
+		);
 	} catch (e) {
-		emit('message', e instanceof Error ? e.message : msg('downtimeSettingFailed'), true);
+		emit(
+			'message',
+			e instanceof Error ? e.message : msg('downtimeSettingFailed'),
+			true,
+		);
 		downtimeMode.value = config.value?.site?.downtimeMode ?? false;
 	}
 }
@@ -814,7 +1119,11 @@ async function saveRosterSetting() {
 			showTeamRosters.value ? msg('rostersPublic') : msg('rostersHidden'),
 		);
 	} catch (e) {
-		emit('message', e instanceof Error ? e.message : msg('rosterSettingFailed'), true);
+		emit(
+			'message',
+			e instanceof Error ? e.message : msg('rosterSettingFailed'),
+			true,
+		);
 		showTeamRosters.value = config.value?.site?.showTeamRosters ?? false;
 	}
 }
@@ -835,7 +1144,9 @@ async function saveScheduledPublishSettings() {
 	} catch (e) {
 		emit(
 			'message',
-			e instanceof Error ? e.message : 'Failed to save scheduled publish settings',
+			e instanceof Error
+				? e.message
+				: 'Failed to save scheduled publish settings',
 			true,
 		);
 	}
@@ -862,10 +1173,20 @@ async function saveTeamChatToggle() {
 	}
 }
 
-async function sendDiscord(
-	channel: 'test' | 'production',
-	withPing: boolean,
-) {
+async function sendDiscord(channel: 'test' | 'production', withPing: boolean) {
+	if (!(await ensureManualSendReady(withPing))) return;
+	const roleId =
+		channel === 'test'
+			? discordTestRoleIdDraft.value.trim()
+			: discordProductionRoleIdDraft.value.trim();
+	if (withPing && !roleId) {
+		emit(
+			'message',
+			`Paste a ${channel} role ID in the field above before sending with ping.`,
+			true,
+		);
+		return;
+	}
 	const busyKey = `discord-${channel}-${withPing ? 'ping' : 'nopping'}`;
 	autoSaving.value = busyKey;
 	emit('message', '');
@@ -875,12 +1196,14 @@ async function sendDiscord(
 			roleId?: string;
 			channel?: string;
 			withPing?: boolean;
+			guildId?: string | null;
 		}>('/admin/discord/send', {
 			method: 'POST',
 			body: JSON.stringify({
 				channel,
 				withPing,
-				guildId: sendTargetGuildId.value || undefined,
+				guildId: editingGuildId.value.trim() || undefined,
+				roleId: withPing ? roleId : undefined,
 			}),
 		});
 		const label = channel === 'test' ? 'Test' : 'Production';
@@ -889,7 +1212,10 @@ async function sendDiscord(
 				? ` with role ping (${result.roleId})`
 				: ' with role ping'
 			: ' without ping';
-		emit('message', `${label} Discord message sent${pingNote}.`);
+		emit(
+			'message',
+			`${label} Discord message sent${pingNote} → ${guildLabel(result.guildId ?? editingGuildId.value)}.`,
+		);
 	} catch (e) {
 		emit(
 			'message',
@@ -902,7 +1228,9 @@ async function sendDiscord(
 }
 
 function discordBusy(channel: 'test' | 'production', withPing: boolean) {
-	return autoSaving.value === `discord-${channel}-${withPing ? 'ping' : 'nopping'}`;
+	return (
+		autoSaving.value === `discord-${channel}-${withPing ? 'ping' : 'nopping'}`
+	);
 }
 
 async function saveMonthlyWrapToggle() {
@@ -930,6 +1258,16 @@ async function sendDiscordStandings(
 	includeMonthlyWrap: boolean,
 	withPing = false,
 ) {
+	if (!(await ensureManualSendReady(withPing))) return;
+	const roleId = discordTestRoleIdDraft.value.trim();
+	if (withPing && !roleId) {
+		emit(
+			'message',
+			'Paste a test role ID in the field above before sending with ping.',
+			true,
+		);
+		return;
+	}
 	const busyKey = includeMonthlyWrap
 		? withPing
 			? 'discord-standings-wrap-ping'
@@ -946,16 +1284,20 @@ async function sendDiscordStandings(
 				channel: 'test',
 				includeMonthlyWrap,
 				withPing,
-				guildId: sendTargetGuildId.value || undefined,
+				guildId: editingGuildId.value.trim() || undefined,
+				roleId: withPing ? roleId : undefined,
 			}),
 		});
 		const wrapNote = includeMonthlyWrap ? ' + 4-week wrap' : '';
-		const pingNote = withPing ? ' with ping' : '';
-		emit('message', `Test webhook: standings${wrapNote} sent${pingNote}.`);
+		const pingNote = withPing ? ` with ping (${roleId})` : '';
+		emit(
+			'message',
+			`Live standings${wrapNote} sent to test${pingNote} → ${guildLabel(editingGuildId.value)}.`,
+		);
 	} catch (e) {
 		emit(
 			'message',
-			e instanceof Error ? e.message : 'Failed to send standings to test webhook',
+			e instanceof Error ? e.message : 'Failed to send standings preview',
 			true,
 		);
 	} finally {
@@ -963,7 +1305,8 @@ async function sendDiscordStandings(
 	}
 }
 
-async function sendMonthlyWrapOnly(channel: 'test' | 'production') {
+async function sendMonthlyWrap(channel: 'test' | 'production') {
+	if (!(await ensureManualSendReady(false))) return;
 	autoSaving.value = `discord-wrap-${channel}`;
 	emit('message', '');
 	try {
@@ -972,12 +1315,12 @@ async function sendMonthlyWrapOnly(channel: 'test' | 'production') {
 			body: JSON.stringify({
 				channel,
 				withPing: false,
-				guildId: sendTargetGuildId.value || undefined,
+				guildId: editingGuildId.value.trim() || undefined,
 			}),
 		});
 		emit(
 			'message',
-			`${channel === 'test' ? 'Test' : 'Production'}: 4-week wrap sent (${result.label ?? 'ok'}).`,
+			`${channel === 'test' ? 'Test' : 'Production'}: 4-week wrap sent (${result.label ?? 'ok'}) → ${guildLabel(editingGuildId.value)}.`,
 		);
 	} catch (e) {
 		emit(
@@ -988,6 +1331,10 @@ async function sendMonthlyWrapOnly(channel: 'test' | 'production') {
 	} finally {
 		autoSaving.value = '';
 	}
+}
+
+async function sendMonthlyWrapOnly(channel: 'test' | 'production') {
+	await sendMonthlyWrap(channel);
 }
 
 function openWrapPreview() {
@@ -1128,14 +1475,22 @@ function openWrapPreview() {
 					<div>
 						<h3>Discord settings</h3>
 						<p class="section-desc">
-							Pick <strong>webhook</strong> or <strong>bot</strong> separately
-							for test and production. Bot token is shared and stored encrypted.
-							Slash commands <code>/readathon …</code> need the gateway + allowed
-							roles below. Realm chat follows the <strong>production</strong>
-							delivery mode.
+							Work top to bottom: connect the bot, pick servers, then configure
+							test / production channels for the server you’re editing.
 						</p>
 					</div>
 				</div>
+
+				<ul class="discord-flow-status" aria-label="Discord setup status">
+					<li
+						v-for="row in discordFlowStatus"
+						:key="row.label"
+						:class="['flow-status-item', row.tone]"
+					>
+						<span class="flow-status-label">{{ row.label }}</span>
+						<span class="flow-status-value">{{ row.value }}</span>
+					</li>
+				</ul>
 
 				<label class="setting-toggle">
 					<input
@@ -1144,68 +1499,40 @@ function openWrapPreview() {
 						:disabled="autoSaving === 'wrap'"
 						@change="saveMonthlyWrapToggle"
 					/>
-					<span>Also send 4-week wrap on the first Monday of each month</span>
+					<span>Enable 4-week wrap with weekly publish</span>
 				</label>
 				<p class="auto-hint">
-					With weekly publish: first Monday also posts the dense last-4-weeks
-					stats image to production. Manual send buttons are below.
+					Unlocks the wrap toggle next to <strong>Publish this week</strong>.
+					Scheduled Monday publish still auto-attaches the wrap on the first
+					Monday of the month (once per month). Manual publish can attach it any
+					day, with a confirmation if it’s not that first Monday or it was
+					already sent.
 				</p>
 
-				<div class="webhook-block" style="margin-bottom: 1.25rem">
-					<h4>Bot credentials</h4>
-					<div class="server-picker">
-						<label>
-							Configure server
-							<AdminSearchableSelect
-								:model-value="editingGuildId"
-								:options="guildSelectOptions"
-								:disabled="saving"
-								placeholder="Search by name or id…"
-								@update:model-value="selectEditingGuild"
-							/>
-						</label>
-						<label>
-							Send tests to
-							<AdminSearchableSelect
-								:model-value="sendTargetGuildId"
-								:options="guildSelectOptions"
-								:disabled="saving"
-								placeholder="Search by name or id…"
-								@update:model-value="
-									(id) => {
-										ensureGuildConfig(id);
-										sendTargetGuildId = id;
-									}
-								"
-							/>
-						</label>
-						<div class="discord-actions-row">
-							<button
-								type="button"
-								class="btn btn-secondary btn-sm"
-								:disabled="saving || botGuildsLoading || !discordBotTokenConfigured"
-								@click="loadBotGuilds({ force: true })"
-							>
-								{{ botGuildsLoading ? 'Loading servers…' : 'Refresh bot servers' }}
-							</button>
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								:disabled="saving || !editingGuildId"
-								@click="setPrimaryGuild(editingGuildId)"
-							>
-								Set as primary
-							</button>
+				<!-- 1. Bot token (shared) -->
+				<section class="discord-panel">
+					<header class="discord-panel-head">
+						<div>
+							<p class="discord-step">Step 1</p>
+							<h4>Bot token</h4>
+							<p class="hint">
+								One shared token for all servers. Stored encrypted. Needed for
+								bot delivery, listing servers, and slash commands on the
+								<strong>primary</strong> server.
+							</p>
 						</div>
-						<p class="hint">
-							Servers load from Discord when a bot token is saved. Primary is used for
-							weekly publish & realm chat; manual sends use
-							<strong>Send tests to</strong>.
-						</p>
-					</div>
-					<div class="bot-cred-grid">
-						<label>
-							Bot token
+						<span class="token-badge" :class="botTokenStatus.tone">
+							{{ botTokenStatus.text }}
+						</span>
+					</header>
+
+					<div class="bot-token-row">
+						<label class="bot-token-field">
+							{{
+								discordBotTokenConfigured && !clearDiscordBotToken
+									? 'Replace token (optional)'
+									: 'Paste Discord bot token'
+							}}
 							<input
 								v-model="discordBotTokenDraft"
 								type="password"
@@ -1213,39 +1540,39 @@ function openWrapPreview() {
 									clearDiscordBotToken
 										? 'Will clear on Save'
 										: discordBotTokenConfigured
-											? '•••• configured — paste to replace'
-											: 'Paste Discord bot token'
+											? '•••• leave blank to keep current token'
+											: 'Paste token from Discord Developer Portal'
 								"
 								autocomplete="new-password"
 								spellcheck="false"
 								:disabled="saving || clearDiscordBotToken"
 							/>
 						</label>
+						<div class="discord-actions-row bot-token-actions">
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								:disabled="saving || !discordBotTokenConfigured"
+								@click="copyBotInvite"
+							>
+								Copy bot invite link
+							</button>
+						</div>
 					</div>
 					<p class="hint">
-						Invite the bot with <code>bot</code> +
-						<code>applications.commands</code> (use
-						<strong>Copy bot invite</strong>). Needs Send Messages, Attach Files,
-						and Mention Everyone for role pings.
+						Invite with <code>bot</code> + <code>applications.commands</code>.
+						Needs Send Messages, Attach Files, and Mention Everyone for role
+						pings. Token changes apply when you click
+						<strong>Save Discord settings</strong>
+						at the bottom.
 					</p>
+
 					<details class="discord-danger-zone">
-						<summary>Advanced / danger zone</summary>
-						<label>
-							Add server by ID
-							<input
-								v-model="addGuildIdDraft"
-								type="text"
-								placeholder="Paste snowflake then Enter"
-								autocomplete="off"
-								spellcheck="false"
-								inputmode="numeric"
-								:disabled="saving"
-								@keydown.enter.prevent="addGuildById(addGuildIdDraft)"
-							/>
-						</label>
+						<summary>Danger: clear stored token</summary>
 						<div v-if="discordBotTokenConfigured" class="danger-token-row">
 							<p class="hint danger-hint">
-								Clearing the bot token cannot be undone without pasting a new one.
+								Removes the encrypted token from the database. Bot delivery and
+								slash commands stop until you paste a new one and Save.
 							</p>
 							<button
 								v-if="!clearDiscordBotToken"
@@ -1268,7 +1595,196 @@ function openWrapPreview() {
 								</button>
 							</div>
 						</div>
+						<p v-else class="hint">No token stored.</p>
 					</details>
+				</section>
+
+				<!-- 2. Servers -->
+				<section
+					class="discord-panel"
+					:class="{ dimmed: !discordBotTokenConfigured }"
+				>
+					<header class="discord-panel-head">
+						<div>
+							<p class="discord-step">Step 2</p>
+							<h4>Servers</h4>
+							<p class="hint">
+								<strong>Primary</strong> = weekly publish + realm chat.
+								<strong>Editing</strong> = channels/roles you change below.
+								<strong>Send tests to</strong> = where manual send buttons go
+								(saved immediately).
+							</p>
+						</div>
+					</header>
+
+					<p v-if="!discordBotTokenConfigured" class="hint panel-blocked">
+						Save a bot token in Step 1 first, then refresh the server list.
+					</p>
+
+					<div class="server-picker">
+						<label>
+							Editing (configure channels &amp; roles)
+							<AdminSearchableSelect
+								:model-value="editingGuildId"
+								:options="guildSelectOptions"
+								:disabled="saving || !discordBotTokenConfigured"
+								placeholder="Search by name or id…"
+								@update:model-value="selectEditingGuild"
+							/>
+						</label>
+						<label>
+							Send tests to (manual buttons)
+							<AdminSearchableSelect
+								:model-value="sendTargetGuildId"
+								:options="guildSelectOptions"
+								:disabled="saving || !discordBotTokenConfigured"
+								placeholder="Search by name or id…"
+								@update:model-value="selectSendTargetGuild"
+							/>
+						</label>
+					</div>
+
+					<div class="discord-actions-row">
+						<button
+							type="button"
+							class="btn btn-secondary btn-sm"
+							:disabled="
+								saving || botGuildsLoading || !discordBotTokenConfigured
+							"
+							@click="loadBotGuilds({ force: true })"
+						>
+							{{
+								botGuildsLoading ? 'Loading servers…' : 'Refresh server list'
+							}}
+						</button>
+						<button
+							type="button"
+							class="btn btn-ghost btn-sm"
+							:disabled="
+								saving ||
+								!editingGuildId ||
+								editingGuildId === discordPrimaryGuildId
+							"
+							@click="setPrimaryGuild(editingGuildId)"
+						>
+							{{
+								editingGuildId && editingGuildId === discordPrimaryGuildId
+									? 'Already primary'
+									: 'Make editing server primary'
+							}}
+						</button>
+					</div>
+
+					<dl class="server-summary">
+						<div>
+							<dt>Primary</dt>
+							<dd>{{ guildLabel(discordPrimaryGuildId) }}</dd>
+						</div>
+						<div>
+							<dt>Editing</dt>
+							<dd>{{ guildLabel(editingGuildId) }}</dd>
+						</div>
+						<div>
+							<dt>Send tests to</dt>
+							<dd>{{ guildLabel(sendTargetGuildId) }}</dd>
+						</div>
+					</dl>
+
+					<details class="discord-advanced">
+						<summary>Advanced: paste a guild ID</summary>
+						<div class="server-picker" style="margin-top: 0.65rem">
+							<label>
+								Set as Editing
+								<input
+									type="text"
+									inputmode="numeric"
+									placeholder="Guild snowflake"
+									autocomplete="off"
+									spellcheck="false"
+									:disabled="saving"
+									@change="
+										(e) =>
+											applyManualGuildId(
+												(e.target as HTMLInputElement).value,
+												'configure',
+											)
+									"
+								/>
+							</label>
+							<label>
+								Set as Send tests to
+								<input
+									type="text"
+									inputmode="numeric"
+									placeholder="Guild snowflake"
+									autocomplete="off"
+									spellcheck="false"
+									:disabled="saving"
+									@change="
+										(e) =>
+											applyManualGuildId(
+												(e.target as HTMLInputElement).value,
+												'tests',
+											)
+									"
+								/>
+							</label>
+						</div>
+						<label
+							style="
+								margin-top: 0.65rem;
+								display: flex;
+								flex-direction: column;
+								gap: 0.35rem;
+							"
+						>
+							Add server by ID (then select in Editing)
+							<input
+								v-model="addGuildIdDraft"
+								type="text"
+								placeholder="Paste snowflake then Enter"
+								autocomplete="off"
+								spellcheck="false"
+								inputmode="numeric"
+								:disabled="saving"
+								@keydown.enter.prevent="addGuildById(addGuildIdDraft)"
+							/>
+						</label>
+					</details>
+				</section>
+
+				<!-- 3. Slash roles for primary server -->
+				<section
+					class="discord-panel"
+					:class="{
+						dimmed: !discordBotTokenConfigured || !discordPrimaryGuildId,
+					}"
+				>
+					<header class="discord-panel-head">
+						<div>
+							<p class="discord-step">Step 3</p>
+							<h4>Slash command roles (primary only)</h4>
+							<p class="hint">
+								<code>/readathon</code> is admin-only and registered only on
+								<strong>{{ guildLabel(discordPrimaryGuildId) }}</strong
+								>. Configure these roles while that server is selected under
+								<strong>Editing</strong>, then Save.
+							</p>
+						</div>
+					</header>
+
+					<p
+						v-if="
+							discordPrimaryGuildId &&
+							editingGuildId &&
+							editingGuildId !== discordPrimaryGuildId
+						"
+						class="hint panel-blocked"
+					>
+						You’re editing a non-primary server. Switch
+						<strong>Editing</strong> to the primary server to change
+						slash-command roles.
+					</p>
 
 					<div class="discord-actions-row">
 						<button
@@ -1278,27 +1794,21 @@ function openWrapPreview() {
 								saving ||
 								guildRolesLoading ||
 								!discordBotTokenConfigured ||
-								!editingGuildId.trim()
+								!discordPrimaryGuildId.trim() ||
+								editingGuildId !== discordPrimaryGuildId
 							"
 							@click="loadGuildRoles"
 						>
-							{{ guildRolesLoading ? 'Loading roles…' : 'Load guild roles' }}
-						</button>
-						<button
-							type="button"
-							class="btn btn-ghost btn-sm"
-							:disabled="saving || !discordBotTokenConfigured"
-							@click="copyBotInvite"
-						>
-							Copy bot invite
+							{{
+								guildRolesLoading
+									? 'Loading roles…'
+									: 'Load roles for primary server'
+							}}
 						</button>
 					</div>
 
 					<div v-if="guildRoles.length" class="role-picker">
-						<p class="section-desc">
-							Slash command access — select roles that may run
-							<code>/readathon</code>:
-						</p>
+						<p class="section-desc">Select roles that may run commands:</p>
 						<div class="role-chip-list">
 							<label
 								v-for="role in guildRoles"
@@ -1362,387 +1872,408 @@ function openWrapPreview() {
 							</button>
 						</span>
 					</div>
-				</div>
+				</section>
 
-				<div class="webhook-columns">
-					<div class="webhook-block">
-						<h4>Test channel</h4>
-						<div class="delivery-mode-row">
-							<label class="setting-toggle">
-								<input
-									v-model="discordTestDeliveryMode"
-									type="radio"
-									value="webhook"
-									:disabled="saving"
-								/>
-								<span>Webhook</span>
-							</label>
-							<label class="setting-toggle">
-								<input
-									v-model="discordTestDeliveryMode"
-									type="radio"
-									value="bot"
-									:disabled="saving"
-								/>
-								<span>Bot</span>
-							</label>
+				<!-- 4. Per-server channels -->
+				<section class="discord-panel">
+					<header class="discord-panel-head">
+						<div>
+							<p class="discord-step">Step 4</p>
+							<h4>Channels for {{ guildLabel(editingGuildId) }}</h4>
+							<p class="hint">
+								Webhook or bot per channel for the server under
+								<strong>Editing</strong>. Manual send / verify buttons always
+								use
+								<strong>Send tests to</strong>
+								({{ guildLabel(sendTargetGuildId) }}) — set Editing to that same
+								server, configure roles, then Save before sending with ping.
+							</p>
 						</div>
-						<template v-if="discordTestDeliveryMode === 'bot'">
+					</header>
+
+					<div class="webhook-columns">
+						<div class="webhook-block">
+							<h4>Test channel</h4>
+							<div class="delivery-mode-row">
+								<label class="setting-toggle">
+									<input
+										v-model="discordTestDeliveryMode"
+										type="radio"
+										value="webhook"
+										:disabled="saving"
+									/>
+									<span>Webhook</span>
+								</label>
+								<label class="setting-toggle">
+									<input
+										v-model="discordTestDeliveryMode"
+										type="radio"
+										value="bot"
+										:disabled="saving"
+									/>
+									<span>Bot</span>
+								</label>
+							</div>
+							<template v-if="discordTestDeliveryMode === 'bot'">
+								<label>
+									Test channel ID
+									<input
+										v-model="discordTestChannelIdDraft"
+										type="text"
+										placeholder="Channel snowflake"
+										autocomplete="off"
+										spellcheck="false"
+										inputmode="numeric"
+										:disabled="saving"
+									/>
+								</label>
+							</template>
+							<template v-else>
+								<label>
+									Test webhook URL
+									<input
+										v-model="discordTestWebhookDraft"
+										type="url"
+										:placeholder="section('standings').webhookPlaceholder"
+										autocomplete="off"
+										spellcheck="false"
+										:disabled="saving"
+									/>
+								</label>
+							</template>
 							<label>
-								Test channel ID
+								Test role ID (optional ping)
 								<input
-									v-model="discordTestChannelIdDraft"
+									v-model="discordTestRoleIdDraft"
 									type="text"
-									placeholder="Channel snowflake"
+									placeholder="123456789012345678"
 									autocomplete="off"
 									spellcheck="false"
 									inputmode="numeric"
 									:disabled="saving"
 								/>
 							</label>
-						</template>
-						<template v-else>
-							<label>
-								Test webhook URL
-								<input
-									v-model="discordTestWebhookDraft"
-									type="url"
-									:placeholder="section('standings').webhookPlaceholder"
-									autocomplete="off"
-									spellcheck="false"
-									:disabled="saving"
-								/>
-							</label>
-						</template>
-						<label>
-							Test role ID (optional ping)
-							<input
-								v-model="discordTestRoleIdDraft"
-								type="text"
-								placeholder="123456789012345678"
-								autocomplete="off"
-								spellcheck="false"
-								inputmode="numeric"
-								:disabled="saving"
-							/>
-						</label>
-						<div class="btn-row discord-send-row">
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								:disabled="
-									saving ||
-									autoSaving === 'verify-role' ||
-									!discordTestRoleIdDraft.trim()
-								"
-								@click="verifyRoleId(discordTestRoleIdDraft)"
-							>
-								Verify test role
-							</button>
-							<button
-								type="button"
-								class="btn btn-secondary btn-sm"
-								:disabled="
-									saving ||
-									discordBusy('test', false) ||
-									!testChannelReady
-								"
-								@click="sendDiscord('test', false)"
-							>
-								{{
-									discordBusy('test', false)
-										? 'Sending…'
-										: 'Send test message without ping'
-								}}
-							</button>
-							<button
-								type="button"
-								class="btn btn-secondary btn-sm"
-								:disabled="
-									saving ||
-									discordBusy('test', true) ||
-									!testChannelReady ||
-									!discordTestRoleId
-								"
-								@click="sendDiscord('test', true)"
-							>
-								{{
-									discordBusy('test', true)
-										? 'Sending…'
-										: 'Send test message with ping'
-								}}
-							</button>
-							<button
-								type="button"
-								class="btn btn-secondary btn-sm"
-								:disabled="
-									saving ||
-									autoSaving === 'discord-standings' ||
-									!testChannelReady
-								"
-								@click="sendDiscordStandings(false)"
-							>
-								{{
-									autoSaving === 'discord-standings'
-										? 'Sending…'
-										: 'Send standings'
-								}}
-							</button>
-							<button
-								type="button"
-								class="btn btn-secondary btn-sm"
-								:disabled="
-									saving ||
-									autoSaving === 'discord-standings-wrap' ||
-									!testChannelReady
-								"
-								@click="sendDiscordStandings(true)"
-							>
-								{{
-									autoSaving === 'discord-standings-wrap'
-										? 'Sending…'
-										: 'Send standings + 4-week stats'
-								}}
-							</button>
-							<button
-								type="button"
-								class="btn btn-secondary btn-sm"
-								:disabled="
-									saving ||
-									autoSaving === 'discord-standings-wrap-ping' ||
-									!testChannelReady ||
-									!discordTestRoleId
-								"
-								@click="sendDiscordStandings(true, true)"
-							>
-								{{
-									autoSaving === 'discord-standings-wrap-ping'
-										? 'Sending…'
-										: 'Send standings + wrap with ping'
-								}}
-							</button>
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								:disabled="
-									saving ||
-									autoSaving === 'discord-wrap-test' ||
-									!testChannelReady
-								"
-								@click="sendMonthlyWrapOnly('test')"
-							>
-								{{
-									autoSaving === 'discord-wrap-test'
-										? 'Sending…'
-										: 'Send 4-week wrap only'
-								}}
-							</button>
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								@click="openWrapPreview"
-							>
-								Preview wrap SVG
-							</button>
+							<div class="btn-row discord-send-row">
+								<button
+									type="button"
+									class="btn btn-ghost btn-sm"
+									:disabled="
+										saving ||
+										autoSaving === 'verify-role' ||
+										!discordTestRoleIdDraft.trim()
+									"
+									@click="verifySendChannelRole('test')"
+								>
+									Verify test role
+								</button>
+								<button
+									type="button"
+									class="btn btn-secondary btn-sm"
+									:disabled="
+										saving || discordBusy('test', false) || !testChannelReady
+									"
+									@click="sendDiscord('test', false)"
+								>
+									{{
+										discordBusy('test', false)
+											? 'Sending…'
+											: 'Send test message without ping'
+									}}
+								</button>
+								<button
+									type="button"
+									class="btn btn-secondary btn-sm"
+									:disabled="
+										saving ||
+										discordBusy('test', true) ||
+										!testChannelReady ||
+										!discordTestRoleIdDraft.trim()
+									"
+									@click="sendDiscord('test', true)"
+								>
+									{{
+										discordBusy('test', true)
+											? 'Sending…'
+											: 'Send test message with ping'
+									}}
+								</button>
+								<button
+									type="button"
+									class="btn btn-secondary btn-sm"
+									:disabled="
+										saving ||
+										autoSaving === 'discord-standings' ||
+										!testChannelReady
+									"
+									@click="sendDiscordStandings(false)"
+								>
+									{{
+										autoSaving === 'discord-standings'
+											? 'Sending…'
+											: 'Send standings'
+									}}
+								</button>
+								<button
+									type="button"
+									class="btn btn-secondary btn-sm"
+									:disabled="
+										saving ||
+										autoSaving === 'discord-standings-wrap' ||
+										!testChannelReady
+									"
+									@click="sendDiscordStandings(true)"
+								>
+									{{
+										autoSaving === 'discord-standings-wrap'
+											? 'Sending…'
+											: 'Send standings + 4-week stats'
+									}}
+								</button>
+								<button
+									type="button"
+									class="btn btn-secondary btn-sm"
+									:disabled="
+										saving ||
+										autoSaving === 'discord-standings-wrap-ping' ||
+										!testChannelReady ||
+										!discordTestRoleIdDraft.trim()
+									"
+									@click="sendDiscordStandings(true, true)"
+								>
+									{{
+										autoSaving === 'discord-standings-wrap-ping'
+											? 'Sending…'
+											: 'Send standings + wrap with ping'
+									}}
+								</button>
+								<button
+									type="button"
+									class="btn btn-ghost btn-sm"
+									:disabled="
+										saving ||
+										autoSaving === 'discord-wrap-test' ||
+										!testChannelReady
+									"
+									@click="sendMonthlyWrapOnly('test')"
+								>
+									{{
+										autoSaving === 'discord-wrap-test'
+											? 'Sending…'
+											: 'Send 4-week wrap only'
+									}}
+								</button>
+								<button
+									type="button"
+									class="btn btn-ghost btn-sm"
+									@click="openWrapPreview"
+								>
+									Preview wrap SVG
+								</button>
+							</div>
 						</div>
-					</div>
 
-					<div class="webhook-block">
-						<h4>Production channel</h4>
-						<div class="delivery-mode-row">
-							<label class="setting-toggle">
-								<input
-									v-model="discordProductionDeliveryMode"
-									type="radio"
-									value="webhook"
-									:disabled="saving"
-								/>
-								<span>Webhook</span>
-							</label>
-							<label class="setting-toggle">
-								<input
-									v-model="discordProductionDeliveryMode"
-									type="radio"
-									value="bot"
-									:disabled="saving"
-								/>
-								<span>Bot</span>
-							</label>
-						</div>
-						<template v-if="discordProductionDeliveryMode === 'bot'">
+						<div class="webhook-block">
+							<h4>Production channel</h4>
+							<div class="delivery-mode-row">
+								<label class="setting-toggle">
+									<input
+										v-model="discordProductionDeliveryMode"
+										type="radio"
+										value="webhook"
+										:disabled="saving"
+									/>
+									<span>Webhook</span>
+								</label>
+								<label class="setting-toggle">
+									<input
+										v-model="discordProductionDeliveryMode"
+										type="radio"
+										value="bot"
+										:disabled="saving"
+									/>
+									<span>Bot</span>
+								</label>
+							</div>
+							<template v-if="discordProductionDeliveryMode === 'bot'">
+								<label>
+									Production channel ID
+									<input
+										v-model="discordProductionChannelIdDraft"
+										type="text"
+										placeholder="Channel snowflake"
+										autocomplete="off"
+										spellcheck="false"
+										inputmode="numeric"
+										:disabled="saving"
+									/>
+								</label>
+							</template>
+							<template v-else>
+								<label>
+									Production webhook URL
+									<input
+										v-model="discordProductionWebhookDraft"
+										type="url"
+										:placeholder="section('standings').webhookPlaceholder"
+										autocomplete="off"
+										spellcheck="false"
+										:disabled="saving"
+									/>
+								</label>
+							</template>
 							<label>
-								Production channel ID
+								Production role ID (optional ping)
 								<input
-									v-model="discordProductionChannelIdDraft"
+									v-model="discordProductionRoleIdDraft"
 									type="text"
-									placeholder="Channel snowflake"
+									placeholder="123456789012345678"
 									autocomplete="off"
 									spellcheck="false"
 									inputmode="numeric"
 									:disabled="saving"
 								/>
 							</label>
-						</template>
-						<template v-else>
-							<label>
-								Production webhook URL
-								<input
-									v-model="discordProductionWebhookDraft"
-									type="url"
-									:placeholder="section('standings').webhookPlaceholder"
-									autocomplete="off"
-									spellcheck="false"
-									:disabled="saving"
-								/>
-							</label>
-						</template>
-						<label>
-							Production role ID (optional ping)
-							<input
-								v-model="discordProductionRoleIdDraft"
-								type="text"
-								placeholder="123456789012345678"
-								autocomplete="off"
-								spellcheck="false"
-								inputmode="numeric"
-								:disabled="saving"
-							/>
-						</label>
-						<div class="btn-row discord-send-row">
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								:disabled="
-									saving ||
-									autoSaving === 'verify-role' ||
-									!discordProductionRoleIdDraft.trim()
-								"
-								@click="verifyRoleId(discordProductionRoleIdDraft)"
-							>
-								Verify production role
-							</button>
-							<button
-								type="button"
-								class="btn btn-secondary btn-sm"
-								:disabled="
-									saving ||
-									discordBusy('production', false) ||
-									!productionChannelReady
-								"
-								@click="sendDiscord('production', false)"
-							>
-								{{
-									discordBusy('production', false)
-										? 'Sending…'
-										: 'Send message without ping'
-								}}
-							</button>
-							<button
-								type="button"
-								class="btn btn-secondary btn-sm"
-								:disabled="
-									saving ||
-									discordBusy('production', true) ||
-									!productionChannelReady ||
-									!discordProductionRoleId
-								"
-								@click="sendDiscord('production', true)"
-							>
-								{{
-									discordBusy('production', true)
-										? 'Sending…'
-										: 'Send message with ping'
-								}}
-							</button>
+							<div class="btn-row discord-send-row">
+								<button
+									type="button"
+									class="btn btn-ghost btn-sm"
+									:disabled="
+										saving ||
+										autoSaving === 'verify-role' ||
+										!discordProductionRoleIdDraft.trim()
+									"
+									@click="verifySendChannelRole('production')"
+								>
+									Verify production role
+								</button>
+								<button
+									type="button"
+									class="btn btn-secondary btn-sm"
+									:disabled="
+										saving ||
+										discordBusy('production', false) ||
+										!productionChannelReady
+									"
+									@click="sendDiscord('production', false)"
+								>
+									{{
+										discordBusy('production', false)
+											? 'Sending…'
+											: 'Send message without ping'
+									}}
+								</button>
+								<button
+									type="button"
+									class="btn btn-secondary btn-sm"
+									:disabled="
+										saving ||
+										discordBusy('production', true) ||
+										!productionChannelReady ||
+										!discordProductionRoleIdDraft.trim()
+									"
+									@click="sendDiscord('production', true)"
+								>
+									{{
+										discordBusy('production', true)
+											? 'Sending…'
+											: 'Send message with ping'
+									}}
+								</button>
+							</div>
+							<p class="hint">
+								Verify / send use the <strong>Production role ID</strong> in the
+								field above for
+								<strong>{{ guildLabel(editingGuildId) }}</strong> (Editing).
+							</p>
+							<div class="btn-row discord-send-row" style="margin-top: 0.5rem">
+								<button
+									type="button"
+									class="btn btn-ghost btn-sm"
+									:disabled="
+										saving ||
+										autoSaving === 'discord-wrap-production' ||
+										!productionChannelReady
+									"
+									@click="sendMonthlyWrapOnly('production')"
+								>
+									{{
+										autoSaving === 'discord-wrap-production'
+											? 'Sending…'
+											: 'Send 4-week wrap (production)'
+									}}
+								</button>
+							</div>
 						</div>
-						<p class="hint">
-							Weekly publish uses the <strong>production</strong> destination +
-							role. Copy a <strong>Role ID</strong> from the
-							<em>same server</em> as the bot/webhook. Save before sending tests.
-						</p>
-						<div class="btn-row discord-send-row" style="margin-top: 0.5rem">
-							<button
-								type="button"
-								class="btn btn-ghost btn-sm"
-								:disabled="
-									saving ||
-									autoSaving === 'discord-wrap-production' ||
-									!productionChannelReady
-								"
-								@click="sendMonthlyWrapOnly('production')"
-							>
-								{{
-									autoSaving === 'discord-wrap-production'
-										? 'Sending…'
-										: 'Send 4-week wrap (production)'
-								}}
-							</button>
-						</div>
-					</div>
 
-					<div class="webhook-block">
-						<h4>Realm chat</h4>
-						<p class="section-desc">
-							Posts a short note to each realm’s Discord channel when a member
-							logs a book. Follows
-							<strong>production</strong> delivery
-							({{ discordProductionDeliveryMode }}).
-						</p>
-						<label class="setting-toggle">
-							<input
-								v-model="teamChatHooksEnabled"
-								type="checkbox"
-								:disabled="autoSaving === 'realm-toggle'"
-								@change="saveTeamChatToggle"
-							/>
-							<span>Enable realm chat</span>
-						</label>
-						<div
-							v-if="config && discordProductionDeliveryMode === 'bot'"
-							class="team-chat-urls"
-						>
-							<label v-for="team in config.teams" :key="team.id">
-								{{ team.icon }} {{ team.name }} (channel ID)
+						<div class="webhook-block">
+							<h4>Realm chat</h4>
+							<p class="section-desc">
+								Posts a short note to each realm’s Discord channel when a member
+								logs a book. Follows
+								<strong>production</strong> delivery ({{
+									discordProductionDeliveryMode
+								}}).
+							</p>
+							<label class="setting-toggle">
 								<input
-									v-model="teamChatChannelDrafts[team.id]"
-									type="text"
-									placeholder="Channel snowflake"
-									autocomplete="off"
-									spellcheck="false"
-									inputmode="numeric"
-									:disabled="saving"
+									v-model="teamChatHooksEnabled"
+									type="checkbox"
+									:disabled="autoSaving === 'realm-toggle'"
+									@change="saveTeamChatToggle"
 								/>
+								<span>Enable realm chat</span>
 							</label>
-						</div>
-						<div v-else-if="config" class="team-chat-urls">
-							<label v-for="team in config.teams" :key="team.id">
-								{{ team.icon }} {{ team.name }}
-								<input
-									v-model="teamChatWebhookDrafts[team.id]"
-									type="url"
-									placeholder="https://discord.com/api/webhooks/..."
-									autocomplete="off"
-									spellcheck="false"
-									:disabled="saving"
-								/>
-							</label>
+							<div
+								v-if="config && discordProductionDeliveryMode === 'bot'"
+								class="team-chat-urls"
+							>
+								<label v-for="team in config.teams" :key="team.id">
+									{{ team.icon }} {{ team.name }} (channel ID)
+									<input
+										v-model="teamChatChannelDrafts[team.id]"
+										type="text"
+										placeholder="Channel snowflake"
+										autocomplete="off"
+										spellcheck="false"
+										inputmode="numeric"
+										:disabled="saving"
+									/>
+								</label>
+							</div>
+							<div v-else-if="config" class="team-chat-urls">
+								<label v-for="team in config.teams" :key="team.id">
+									{{ team.icon }} {{ team.name }}
+									<input
+										v-model="teamChatWebhookDrafts[team.id]"
+										type="url"
+										placeholder="https://discord.com/api/webhooks/..."
+										autocomplete="off"
+										spellcheck="false"
+										:disabled="saving"
+									/>
+								</label>
+							</div>
 						</div>
 					</div>
-				</div>
+				</section>
 
 				<section class="template-editor">
 					<div class="template-editor-head">
 						<div>
 							<h4>Realm chat messages</h4>
 							<p class="section-desc">
-								One line is picked at random when someone logs a book. Click a variable to
-								insert it into the focused line. Empty categories re-seed five defaults on
-								save / load.
+								One line is picked at random when someone logs a book. Click a
+								variable to insert it into the focused line. Empty categories
+								re-seed five defaults on save / load.
 							</p>
 						</div>
 					</div>
 
-					<div class="var-toolbar" role="toolbar" aria-label="Template variables">
+					<div
+						class="var-toolbar"
+						role="toolbar"
+						aria-label="Template variables"
+					>
 						<button
 							v-for="v in TEAM_CHAT_TEMPLATE_VARS"
 							:key="v.key"
@@ -1781,7 +2312,9 @@ function openWrapPreview() {
 							<div class="template-column-head">
 								<div>
 									<strong>Add</strong>
-									<span class="col-count">{{ teamChatAddDrafts.length }} lines</span>
+									<span class="col-count"
+										>{{ teamChatAddDrafts.length }} lines</span
+									>
 								</div>
 								<button
 									type="button"
@@ -1798,7 +2331,8 @@ function openWrapPreview() {
 								class="template-row"
 								:class="{
 									focused:
-										focusedTemplate?.kind === 'add' && focusedTemplate.index === i,
+										focusedTemplate?.kind === 'add' &&
+										focusedTemplate.index === i,
 								}"
 							>
 								<textarea
@@ -1819,16 +2353,24 @@ function openWrapPreview() {
 								>
 									×
 								</button>
-								<p v-if="line.trim()" class="row-preview" v-html="previewHtml(line)" />
+								<p
+									v-if="line.trim()"
+									class="row-preview"
+									v-html="previewHtml(line)"
+								/>
 							</div>
-							<p v-if="!teamChatAddDrafts.length" class="empty-col">No add lines yet.</p>
+							<p v-if="!teamChatAddDrafts.length" class="empty-col">
+								No add lines yet.
+							</p>
 						</div>
 
 						<div class="template-column card">
 							<div class="template-column-head">
 								<div>
 									<strong>Sabotage</strong>
-									<span class="col-count">{{ teamChatSabotageDrafts.length }} lines</span>
+									<span class="col-count"
+										>{{ teamChatSabotageDrafts.length }} lines</span
+									>
 								</div>
 								<button
 									type="button"
@@ -1845,7 +2387,8 @@ function openWrapPreview() {
 								class="template-row"
 								:class="{
 									focused:
-										focusedTemplate?.kind === 'sabotage' && focusedTemplate.index === i,
+										focusedTemplate?.kind === 'sabotage' &&
+										focusedTemplate.index === i,
 								}"
 							>
 								<textarea
@@ -1853,7 +2396,7 @@ function openWrapPreview() {
 									rows="4"
 									spellcheck="true"
 									:disabled="saving"
-									placeholder='⚔️ **{{displayName}}** sabotaged **{{targetTeamName}}**…'
+									placeholder="⚔️ **{{displayName}}** sabotaged **{{targetTeamName}}**…"
 									@focus="onTemplateFocus('sabotage', i)"
 								/>
 								<button
@@ -1866,9 +2409,15 @@ function openWrapPreview() {
 								>
 									×
 								</button>
-								<p v-if="line.trim()" class="row-preview" v-html="previewHtml(line)" />
+								<p
+									v-if="line.trim()"
+									class="row-preview"
+									v-html="previewHtml(line)"
+								/>
 							</div>
-							<p v-if="!teamChatSabotageDrafts.length" class="empty-col">No sabotage lines yet.</p>
+							<p v-if="!teamChatSabotageDrafts.length" class="empty-col">
+								No sabotage lines yet.
+							</p>
 						</div>
 					</div>
 				</section>
@@ -1888,19 +2437,14 @@ function openWrapPreview() {
 						:disabled="!dirty || saving"
 						@click="saveAllWebhookSettings"
 					>
-						{{ saving ? 'Saving…' : dirty ? 'Save settings' : 'Saved' }}
+						{{ saving ? 'Saving…' : dirty ? 'Save Discord settings' : 'Saved' }}
 					</button>
 				</div>
 			</article>
 		</template>
 
 		<Teleport to="body">
-			<div
-				v-if="dirty"
-				class="unsaved-sticky"
-				role="status"
-				aria-live="polite"
-			>
+			<div v-if="dirty" class="unsaved-sticky" role="status" aria-live="polite">
 				<p class="unsaved-sticky-text">
 					You have unsaved settings — save or discard before you leave.
 				</p>
@@ -1919,7 +2463,7 @@ function openWrapPreview() {
 						:disabled="saving"
 						@click="saveAllWebhookSettings"
 					>
-						{{ saving ? 'Saving…' : 'Save settings' }}
+						{{ saving ? 'Saving…' : 'Save Discord settings' }}
 					</button>
 				</div>
 			</div>
@@ -1990,12 +2534,12 @@ function openWrapPreview() {
 </style>
 
 <style scoped>
-
 .server-picker {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 0.75rem;
 	margin-bottom: 0.85rem;
+	align-items: start;
 }
 
 .server-picker label {
@@ -2004,11 +2548,201 @@ function openWrapPreview() {
 	gap: 0.35rem;
 	font-size: 0.82rem;
 	color: var(--realm-text-muted);
+	min-width: 0;
 }
 
 .server-picker .discord-actions-row,
 .server-picker > .hint {
 	grid-column: 1 / -1;
+}
+
+.server-picker code {
+	font-size: 0.78rem;
+	word-break: break-all;
+}
+
+.discord-flow-status {
+	list-style: none;
+	margin: 0 0 1rem;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+	gap: 0.5rem;
+}
+
+.flow-status-item {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	padding: 0.55rem 0.65rem;
+	border-radius: var(--radius);
+	border: 1px solid var(--realm-border);
+	background: color-mix(
+		in srgb,
+		var(--realm-bg) 88%,
+		var(--realm-surface, #fff)
+	);
+	min-width: 0;
+}
+
+.flow-status-item.ok {
+	border-color: color-mix(in srgb, #2f8f5b 35%, var(--realm-border));
+}
+
+.flow-status-item.warn {
+	border-color: color-mix(in srgb, #c48a1a 45%, var(--realm-border));
+}
+
+.flow-status-item.off {
+	opacity: 0.78;
+}
+
+.flow-status-label {
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--realm-text-muted);
+}
+
+.flow-status-value {
+	font-size: 0.84rem;
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+
+.discord-panel {
+	margin: 1rem 0 1.25rem;
+	padding: 0.9rem 1rem 1rem;
+	border: 1px solid var(--realm-border);
+	border-radius: var(--radius);
+	background: color-mix(in srgb, var(--realm-bg) 94%, var(--realm-accent) 6%);
+}
+
+.discord-panel.dimmed {
+	opacity: 0.72;
+}
+
+.discord-panel-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 0.75rem;
+	margin-bottom: 0.85rem;
+}
+
+.discord-panel-head h4 {
+	margin: 0.1rem 0 0.35rem;
+	font-size: 1.05rem;
+}
+
+.discord-step {
+	margin: 0;
+	font-size: 0.72rem;
+	font-weight: 650;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--realm-accent);
+}
+
+.token-badge {
+	flex-shrink: 0;
+	align-self: flex-start;
+	padding: 0.3rem 0.55rem;
+	border-radius: 999px;
+	font-size: 0.75rem;
+	border: 1px solid var(--realm-border);
+	background: var(--realm-bg);
+}
+
+.token-badge.ok {
+	border-color: color-mix(in srgb, #2f8f5b 40%, var(--realm-border));
+	color: #2f8f5b;
+}
+
+.token-badge.warn {
+	border-color: color-mix(in srgb, #c48a1a 45%, var(--realm-border));
+	color: #a36d10;
+}
+
+.token-badge.off {
+	color: var(--realm-text-muted);
+}
+
+.bot-token-row {
+	display: flex;
+	flex-direction: column;
+	gap: 0.55rem;
+}
+
+.bot-token-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	font-size: 0.82rem;
+	color: var(--realm-text-muted);
+}
+
+.bot-token-actions {
+	justify-content: flex-start;
+}
+
+.panel-blocked {
+	padding: 0.55rem 0.65rem;
+	border-radius: var(--radius);
+	border: 1px dashed var(--realm-border);
+	background: var(--realm-bg);
+}
+
+.server-summary {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.55rem;
+	margin: 0.85rem 0 0;
+}
+
+.server-summary > div {
+	padding: 0.5rem 0.6rem;
+	border-radius: var(--radius);
+	border: 1px solid var(--realm-border);
+	background: var(--realm-bg);
+	min-width: 0;
+}
+
+.server-summary dt {
+	margin: 0;
+	font-size: 0.7rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--realm-text-muted);
+}
+
+.server-summary dd {
+	margin: 0.2rem 0 0;
+	font-size: 0.84rem;
+	overflow-wrap: anywhere;
+}
+
+.discord-advanced {
+	margin-top: 0.85rem;
+	padding-top: 0.55rem;
+	border-top: 1px dashed var(--realm-border);
+}
+
+.discord-advanced summary {
+	cursor: pointer;
+	font-size: 0.8rem;
+	color: var(--realm-text-muted);
+	user-select: none;
+}
+
+@media (max-width: 720px) {
+	.server-summary {
+		grid-template-columns: 1fr;
+	}
+
+	.discord-panel-head {
+		flex-direction: column;
+	}
 }
 
 .discord-danger-zone {
@@ -2121,7 +2855,11 @@ function openWrapPreview() {
 }
 
 .status-chip.on {
-	border-color: color-mix(in srgb, var(--realm-success) 45%, var(--realm-border));
+	border-color: color-mix(
+		in srgb,
+		var(--realm-success) 45%,
+		var(--realm-border)
+	);
 	color: var(--realm-success);
 	background: color-mix(in srgb, var(--realm-success) 12%, transparent);
 }
@@ -2292,7 +3030,11 @@ function openWrapPreview() {
 }
 
 .role-chip:has(input:checked) {
-	border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
+	border-color: color-mix(
+		in srgb,
+		var(--realm-accent) 55%,
+		var(--realm-border)
+	);
 	background: color-mix(in srgb, var(--realm-accent) 12%, var(--realm-bg));
 }
 
@@ -2376,7 +3118,6 @@ function openWrapPreview() {
 	margin-top: 0.25rem;
 }
 
-
 .template-editor {
 	margin-top: 0.35rem;
 	padding-top: 1rem;
@@ -2405,7 +3146,8 @@ function openWrapPreview() {
 	cursor: pointer;
 	padding: 0.28rem 0.55rem;
 	border-radius: 999px;
-	border: 1px solid color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
+	border: 1px solid
+		color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
 	background: color-mix(in srgb, var(--realm-accent) 12%, var(--realm-bg));
 	color: var(--realm-accent-glow);
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2450,7 +3192,11 @@ function openWrapPreview() {
 
 .preview-tabs button.active {
 	color: var(--realm-text);
-	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+	border-color: color-mix(
+		in srgb,
+		var(--realm-accent) 45%,
+		var(--realm-border)
+	);
 	background: color-mix(in srgb, var(--realm-accent) 14%, transparent);
 }
 
@@ -2511,7 +3257,11 @@ function openWrapPreview() {
 }
 
 .template-row.focused {
-	border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
+	border-color: color-mix(
+		in srgb,
+		var(--realm-accent) 55%,
+		var(--realm-border)
+	);
 	box-shadow: 0 0 0 1px color-mix(in srgb, var(--realm-accent) 25%, transparent);
 }
 
@@ -2547,7 +3297,11 @@ function openWrapPreview() {
 
 .icon-remove:hover:not(:disabled) {
 	color: var(--realm-accent);
-	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+	border-color: color-mix(
+		in srgb,
+		var(--realm-accent) 45%,
+		var(--realm-border)
+	);
 }
 
 .row-preview {
