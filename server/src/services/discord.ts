@@ -1,6 +1,8 @@
 import {
+	getActiveMonthlyEventSync,
 	getDiscordChannelConfig,
 	getSiteSettingsAdminSync,
+	updateSiteSettings,
 	type DiscordWebhookChannel,
 } from './siteSettings.js';
 import { svgToPng, isPngBuffer } from './svgToPng.js';
@@ -9,6 +11,7 @@ import { getSvgEventName } from './svgTheme.js';
 import {
 	getLiveMonthlyDiscordTemplates,
 	renderDiscordCaption,
+	resolveReaderOfMonth,
 } from './monthlyThemeExtras.js';
 import { assertDiscordRolePingAllowed } from './discordRoleVerify.js';
 import {
@@ -18,6 +21,18 @@ import {
 	isDiscordChannelConfigured,
 	resolveStandingsTransport,
 } from '../discord/delivery.js';
+
+async function persistMonthlyWrapForSite(svg: string, label: string) {
+	try {
+		await updateSiteSettings({
+			lastMonthlyWrapSvg: svg,
+			lastMonthlyWrapLabel: label,
+			lastMonthlyWrapAt: new Date().toISOString(),
+		});
+	} catch (e) {
+		console.error('[discord] Failed to persist monthly wrap for site:', e);
+	}
+}
 
 /** Fallback when a publish label wasn't provided (legacy ISO key → "Week 30"). */
 function weekNumberLabel(weekKey: string): string {
@@ -294,6 +309,33 @@ export async function sendDiscordChannelMessage(opts: {
 	}
 }
 
+/** Follow-up after a 4-week wrap: celebrate Reader of the Month when a theme is live. */
+export async function notifyDiscordReaderOfMonth(opts: {
+	channel: DiscordWebhookChannel;
+}): Promise<DiscordSendResult> {
+	const channel = opts.channel === 'test' ? 'test' : 'production';
+	const slot = getActiveMonthlyEventSync();
+	if (!slot) return { sent: false, error: 'No live monthly theme', channel };
+	const rom = await resolveReaderOfMonth(slot);
+	if (!rom) return { sent: false, error: 'No reader of the month', channel };
+
+	const teamBit = rom.teamName ? ` (${rom.teamName})` : '';
+	const shout = rom.shoutout?.trim();
+	const lines = [
+		`👑 **Reader of the Month: ${rom.displayName}**${teamBit}`,
+		shout || undefined,
+		rom.books > 0
+			? `_${rom.books} book${rom.books === 1 ? '' : 's'} · ${rom.points} pts_`
+			: undefined,
+	].filter(Boolean) as string[];
+
+	return sendDiscordChannelMessage({
+		channel,
+		withPing: false,
+		message: lines.join('\n'),
+	});
+}
+
 /** @deprecated Prefer sendDiscordChannelMessage({ channel: 'production', withPing: false }) */
 export async function sendDiscordWebhookTest(): Promise<DiscordSendResult> {
 	return sendDiscordChannelMessage({
@@ -539,6 +581,10 @@ export async function notifyDiscordStandingsPublished(
 				);
 				return { sent: false, error: 'Discord rejected monthly wrap image' };
 			}
+			await persistMonthlyWrapForSite(opts.monthlyWrapSvg, wrapLabel);
+			await notifyDiscordReaderOfMonth({ channel }).catch((e) => {
+				console.error('[discord] Reader of the Month announce failed:', e);
+			});
 		}
 
 		console.log('[discord] publish finished successfully');
@@ -613,6 +659,12 @@ export async function sendDiscordMonthlyWrap(opts: {
 			usePing ? roleId : undefined,
 			guildId,
 		);
+		if (ok) {
+			await persistMonthlyWrapForSite(opts.wrapSvg, label);
+			await notifyDiscordReaderOfMonth({ channel }).catch((e) => {
+				console.error('[discord] Reader of the Month announce failed:', e);
+			});
+		}
 		return {
 			sent: ok,
 			error: ok ? undefined : 'Discord rejected monthly wrap image',
@@ -632,16 +684,20 @@ export async function sendDiscordMonthlyWrap(opts: {
  * Optional per-realm chat via webhook (legacy) or bot channel ID.
  * Fire-and-forget: failures are logged and ignored so a bad destination
  * never breaks submission.
+ * When coverUrl is present, Discord embed shows the cover; otherwise text only.
  */
 export function notifyTeamChatSubmission(
 	teamId: string | null | undefined,
 	message: string,
+	coverUrl?: string | null,
 ): void {
 	if (!teamId) return;
 	const settings = getSiteSettingsAdminSync();
 	if (!settings.teamChatHooksEnabled) return;
 
-	void deliverySendTeamChat(teamId, message)
+	const imageUrl = coverUrl?.trim() || undefined;
+
+	void deliverySendTeamChat(teamId, message, imageUrl)
 		.then((result) => {
 			discordWebhookTotal.labels('team_chat', result.ok ? 'ok' : 'fail').inc();
 			if (!result.ok) {

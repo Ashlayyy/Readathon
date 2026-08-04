@@ -9,12 +9,18 @@ Built with **Vue 3 + Vite** (frontend), **Hono + MongoDB** (API), and a single c
 ## Features
 
 - **Sign up & magic-link login** (email via Resend, optional Google OAuth)
-- **Team assignment** - admins sort readers into realms (Sun & Moon)
-- **Book submission wizard** - prompts, bonuses, add points or sabotage
-- **Standings** - weekly publish with SVG leaderboard, optional Discord webhook
-- **FAQ inbox** - readers ask questions; admins reply by email
-- **Admin panel** - users, teams, submissions, prompts, standings, rosters
-- **Config-driven UI** - event name, copy, colors, and admin labels live in `data/realmathon.json`
+- **Team assignment** — admins sort readers into realms (Riders, Wielders, Explorers)
+- **Book submission wizard** — prompts, bonuses, add points or sabotage; optional Discord realm chat with cover
+- **Standings** — published weekly snapshot with leaderboard, reading vibes, score breakdown, optional 4-week wrap
+- **Hall of Fame** — season leaders (books, pages, sabotage)
+- **Shelf** — recent finished books across realms
+- **Monthly themes** — scheduled look/multipliers/featured prompts, Reader of the Month, Discord templates
+- **Season archive** — one-click close from Admin → Settings (optional downtime)
+- **FAQ inbox** — readers ask questions; admins reply by email
+- **Admin panel** — Inbox, Teams, Standings, Users, Submissions, Stats, Prompts, Audit, Themes, Settings
+- **Discord** — webhook or bot delivery, role pings, scheduled publish, wrap + Reader of the Month announces
+- **PWA** — installable (`manifest.webmanifest` + service worker)
+- **Config-driven UI** — event name, copy, colors, and admin labels live in `data/realmathon.json`
 
 ---
 

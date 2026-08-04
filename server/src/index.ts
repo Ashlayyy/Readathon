@@ -17,9 +17,11 @@ import { refreshPromptsCache, getConfig } from './services/prompts.js';
 import {
 	refreshSiteSettingsCache,
 	getSiteSettingsSync,
+	getSiteSettingsAdminSync,
 	getActiveMonthlyEventSync,
 } from './services/siteSettings.js';
 import { enrichActiveMonthlyEvent } from './services/monthlyThemeExtras.js';
+import { buildHallOfFame } from './services/hallOfFame.js';
 import { PublishedStandings } from './db/models/PublishedStandings.js';
 import { startScheduledPublishChecker } from './services/scheduledPublish.js';
 import {
@@ -223,6 +225,11 @@ app.get('/api/standings', async (c) => {
 			? `/standings/vibes.svg?id=${id}`
 			: null,
 		vibes,
+		wrapImageUrl: getSiteSettingsAdminSync().lastMonthlyWrapSvg?.trim()
+			? '/standings/wrap.svg'
+			: null,
+		wrapLabel: getSiteSettingsAdminSync().lastMonthlyWrapLabel?.trim() || null,
+		wrapPublishedAt: getSiteSettingsAdminSync().lastMonthlyWrapAt,
 	});
 });
 
@@ -232,6 +239,17 @@ function svgInline(c: { header: (k: string, v: string) => void; body: (b: string
 	c.header('Cache-Control', `public, max-age=${cacheSeconds}`);
 	return c.body(svg);
 }
+
+app.get('/api/standings/wrap.svg', async (c) => {
+	const svg = getSiteSettingsAdminSync().lastMonthlyWrapSvg?.trim();
+	if (!svg) return c.json({ error: 'No monthly wrap published yet' }, 404);
+	return svgInline(c, svg, 120);
+});
+
+app.get('/api/hall-of-fame', async (c) => {
+	const fame = await buildHallOfFame();
+	return c.json({ fame });
+});
 
 app.get('/api/standings/image.svg', async (c) => {
 	const published = await PublishedStandings.findOne({ isActive: true }).sort({

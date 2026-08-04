@@ -142,6 +142,7 @@ submissionRoutes.post('/', async (c) => {
 							: globalTemplates,
 				},
 			),
+			submission.coverUrl?.trim() || null,
 		);
 	}
 

@@ -48,6 +48,20 @@ export function comparePromptsByUnlock(a: IPrompt, b: IPrompt): number {
 }
 
 export async function refreshPromptsCache(): Promise<void> {
+	// One-time rename for the Wielders bonus prompt (cartoon cover → series).
+	try {
+		await Prompt.updateOne(
+			{ promptId: 'wielders-cartoon-cover' },
+			{
+				$set: {
+					promptId: 'wielders-part-of-series',
+					label: 'This book is part of a series',
+				},
+			},
+		);
+	} catch {
+		/* ignore — unique conflicts if already migrated */
+	}
 	cache = await Prompt.find().sort({ goesLiveAt: 1, sortOrder: 1, label: 1 });
 	usingDatabase = cache.length > 0;
 }

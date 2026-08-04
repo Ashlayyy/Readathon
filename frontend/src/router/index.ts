@@ -18,6 +18,17 @@ const router = createRouter({
     { path: '/changelog', name: 'changelog', component: () => import('../views/ChangelogView.vue') },
     { path: '/standings', name: 'standings', component: () => import('../views/StandingsView.vue') },
     { path: '/shelf', name: 'shelf', component: () => import('../views/ShelfView.vue') },
+    { path: '/hall-of-fame', name: 'hall-of-fame', component: () => import('../views/HallOfFameView.vue') },
+    {
+      path: '/archive',
+      name: 'archive',
+      component: () => import('../views/ArchiveView.vue'),
+    },
+    {
+      path: '/archive/:slug',
+      name: 'archive-slug',
+      component: () => import('../views/ArchiveView.vue'),
+    },
     { path: '/login', name: 'login', component: () => import('../views/LoginView.vue') },
     { path: '/maintenance', name: 'maintenance', component: () => import('../views/MaintenanceView.vue') },
     { path: '/submit', name: 'submit', component: () => import('../views/SubmitView.vue'), meta: { requiresAssigned: true } },

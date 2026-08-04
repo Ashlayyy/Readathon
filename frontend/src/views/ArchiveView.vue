@@ -5,6 +5,10 @@ import { api, apiUrl, type StandingsBreakdown, type TeamStanding } from '../lib/
 import { useConfig } from '../composables/useConfig';
 import StandingsPanel from '../components/StandingsPanel.vue';
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue';
+import StandingsVibes, {
+	type StandingsVibes as VibesData,
+} from '../components/StandingsVibes.vue';
+import MonthlyWrapPanel from '../components/MonthlyWrapPanel.vue';
 
 const { config, loadConfig } = useConfig();
 const route = useRoute();
@@ -17,6 +21,9 @@ const breakdownImageUrl = ref<string | null>(null);
 const publishedAt = ref<string | null>(null);
 const weekLabel = ref<string | null>(null);
 const standingsPublished = ref(false);
+const vibes = ref<VibesData | null>(null);
+const wrapImageUrl = ref<string | null>(null);
+const wrapLabel = ref<string | null>(null);
 const loading = ref(true);
 
 const archive = computed(() => config.value?.site?.seasonArchive ?? null);
@@ -40,6 +47,9 @@ async function loadStandingsSnapshot() {
 			breakdownImageUrl?: string | null;
 			publishedAt?: string;
 			weekLabel?: string;
+			vibes?: VibesData | null;
+			wrapImageUrl?: string | null;
+			wrapLabel?: string | null;
 		}>('/standings');
 		standingsPublished.value = data.published;
 		standings.value = data.standings ?? null;
@@ -48,6 +58,9 @@ async function loadStandingsSnapshot() {
 		weekLabel.value = data.weekLabel ?? null;
 		standingsImageUrl.value = data.imageUrl ? apiUrl(data.imageUrl) : null;
 		breakdownImageUrl.value = data.breakdownImageUrl ? apiUrl(data.breakdownImageUrl) : null;
+		vibes.value = data.published ? (data.vibes ?? null) : null;
+		wrapImageUrl.value = data.wrapImageUrl ? apiUrl(data.wrapImageUrl) : null;
+		wrapLabel.value = data.wrapLabel ?? null;
 	} catch {
 		standingsPublished.value = false;
 	}
@@ -107,6 +120,18 @@ watch(
 					:published-at="publishedAt"
 					title="Final Standings"
 				/>
+				<StandingsVibes
+					v-if="vibes"
+					:vibes="vibes"
+					title="Season vibes"
+					lead="Reading activity from the final published week."
+				/>
+				<MonthlyWrapPanel
+					v-if="wrapImageUrl"
+					:image-url="wrapImageUrl"
+					:label="wrapLabel"
+					title="4-week wrap"
+				/>
 				<StandingsBreakdownPanel
 					v-if="breakdown"
 					:breakdown="breakdown"
@@ -119,7 +144,9 @@ watch(
 			</div>
 
 			<p class="archive-footer-link">
-				<RouterLink to="/standings">View the live standings page →</RouterLink>
+				<RouterLink to="/hall-of-fame">Hall of Fame →</RouterLink>
+				<span aria-hidden="true"> · </span>
+				<RouterLink to="/standings">Live standings →</RouterLink>
 			</p>
 		</template>
 	</main>

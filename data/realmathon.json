@@ -611,8 +611,8 @@
 					"points": 20
 				},
 				{
-					"id": "wielders-cartoon-cover",
-					"label": "The book has a cartoon cover",
+					"id": "wielders-part-of-series",
+					"label": "This book is part of a series",
 					"points": 10
 				}
 			]

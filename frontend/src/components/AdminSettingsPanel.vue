@@ -23,6 +23,20 @@ const autoSaving = ref('');
 const showTeamRosters = ref(false);
 const downtimeMode = ref(false);
 const monthlyWrapOnPublish = ref(false);
+const closeSeasonDowntime = ref(false);
+const closingSeason = ref(false);
+const seasonArchiveSlug = ref('');
+const discordHealthLoading = ref(false);
+const discordHealth = ref<{
+	botTokenConfigured: boolean
+	gatewayReady: boolean
+	gatewayUser: string | null
+	productionConfigured: boolean
+	productionRoleId: boolean
+	lastPublishedAt: string | null
+	lastPublishedWeekLabel: string | null
+	lastMonthlyWrapAt: string | null
+} | null>(null);
 
 function emptyGuildConfig(guildId: string, name = ''): DiscordGuildConfig {
 	return {
@@ -370,6 +384,7 @@ function applySettings(settings: AdminSiteSettings) {
 	showTeamRosters.value = settings.showTeamRosters ?? false;
 	downtimeMode.value = settings.downtimeMode ?? false;
 	monthlyWrapOnPublish.value = settings.monthlyWrapOnPublish ?? false;
+	seasonArchiveSlug.value = settings.seasonArchive?.slug?.trim() || '';
 	discordTestDeliveryMode.value =
 		settings.discordTestDeliveryMode === 'bot'
 			? 'bot'
@@ -683,6 +698,7 @@ onMounted(async () => {
 			// Use server memory/DB cache; Refresh button forces Discord.
 			await loadBotGuilds({ silent: true, force: false });
 		}
+		void loadDiscordHealth();
 	} catch (e) {
 		emit(
 			'message',
@@ -1111,6 +1127,58 @@ async function onDowntimeToggle() {
 	}
 }
 
+async function onCloseSeason() {
+	const ok = confirm(
+		closeSeasonDowntime.value
+			? 'Close this season and enable downtime for non-admins? This creates /archive from the latest publish.'
+			: 'Close this season? This creates a public /archive page from the latest publish. Downtime stays as-is.',
+	);
+	if (!ok) return;
+	closingSeason.value = true;
+	try {
+		const data = await api<{
+			archive: { slug: string; title: string }
+			downtimeMode: boolean
+		}>('/admin/season/close', {
+			method: 'POST',
+			body: JSON.stringify({ enableDowntime: closeSeasonDowntime.value }),
+		});
+		seasonArchiveSlug.value = data.archive.slug;
+		downtimeMode.value = data.downtimeMode;
+		await loadConfig(true);
+		emit(
+			'message',
+			`Season archived at /archive/${data.archive.slug}`,
+		);
+	} catch (e) {
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Failed to close season',
+			true,
+		);
+	} finally {
+		closingSeason.value = false;
+	}
+}
+
+async function loadDiscordHealth() {
+	discordHealthLoading.value = true;
+	try {
+		const data = await api<{
+			health: NonNullable<typeof discordHealth.value>
+		}>('/admin/discord/health');
+		discordHealth.value = data.health;
+	} catch (e) {
+		emit(
+			'message',
+			e instanceof Error ? e.message : 'Failed to load Discord health',
+			true,
+		);
+	} finally {
+		discordHealthLoading.value = false;
+	}
+}
+
 async function saveRosterSetting() {
 	try {
 		await patchSettings({ showTeamRosters: showTeamRosters.value }, 'roster');
@@ -1395,6 +1463,80 @@ function openWrapPreview() {
 						<span>{{ section('teams').rostersToggle }}</span>
 					</label>
 					<p class="auto-hint">Saves automatically when you toggle.</p>
+				</article>
+
+				<article class="card settings-card danger-zone-card">
+					<h3>Close season</h3>
+					<p class="section-desc">
+						One-click archive: freezes a public
+						<code>/archive</code> page from the latest published standings.
+						Does nothing until you press the button.
+					</p>
+					<label class="setting-toggle">
+						<input v-model="closeSeasonDowntime" type="checkbox" />
+						<span>Also enable downtime mode for non-admins</span>
+					</label>
+					<button
+						type="button"
+						class="btn btn-secondary btn-sm"
+						:disabled="closingSeason"
+						@click="onCloseSeason"
+					>
+						{{ closingSeason ? 'Closing…' : 'Close / archive season' }}
+					</button>
+					<p v-if="seasonArchiveSlug" class="auto-hint">
+						Current archive:
+						<a :href="`/archive/${seasonArchiveSlug}`">/archive/{{ seasonArchiveSlug }}</a>
+					</p>
+				</article>
+
+				<article class="card settings-card">
+					<h3>Discord health</h3>
+					<p class="section-desc">Quick readiness check for publish &amp; bot.</p>
+					<button
+						type="button"
+						class="btn btn-ghost btn-sm"
+						:disabled="discordHealthLoading"
+						@click="loadDiscordHealth"
+					>
+						{{ discordHealthLoading ? 'Checking…' : 'Refresh health' }}
+					</button>
+					<ul v-if="discordHealth" class="discord-health-list">
+						<li>
+							Bot token:
+							<strong>{{ discordHealth.botTokenConfigured ? 'yes' : 'no' }}</strong>
+						</li>
+						<li>
+							Gateway:
+							<strong>{{
+								discordHealth.gatewayReady
+									? `ready (${discordHealth.gatewayUser ?? 'bot'})`
+									: 'not ready'
+							}}</strong>
+						</li>
+						<li>
+							Production destination:
+							<strong>{{
+								discordHealth.productionConfigured ? 'configured' : 'missing'
+							}}</strong>
+						</li>
+						<li>
+							Production role:
+							<strong>{{ discordHealth.productionRoleId ? 'set' : 'missing' }}</strong>
+						</li>
+						<li>
+							Last publish:
+							<strong>{{
+								discordHealth.lastPublishedWeekLabel ||
+								discordHealth.lastPublishedAt ||
+								'none'
+							}}</strong>
+						</li>
+						<li>
+							Last wrap:
+							<strong>{{ discordHealth.lastMonthlyWrapAt || 'none' }}</strong>
+						</li>
+					</ul>
 				</article>
 
 				<article class="card settings-card">
@@ -2534,6 +2676,26 @@ function openWrapPreview() {
 </style>
 
 <style scoped>
+.discord-health-list {
+	list-style: none;
+	margin: 0.75rem 0 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	font-size: 0.85rem;
+	color: var(--realm-text-muted);
+}
+
+.discord-health-list strong {
+	color: var(--realm-text);
+	font-weight: 600;
+}
+
+.danger-zone-card {
+	border-color: color-mix(in srgb, var(--realm-accent) 35%, var(--realm-border));
+}
+
 .server-picker {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));

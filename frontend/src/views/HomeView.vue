@@ -10,6 +10,7 @@ import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue'
 import StandingsVibes, {
   type StandingsVibes as VibesData,
 } from '../components/StandingsVibes.vue'
+import MonthlyWrapPanel from '../components/MonthlyWrapPanel.vue'
 import ChangelogModal from '../components/ChangelogModal.vue'
 
 const { config, loadConfig } = useConfig()
@@ -21,6 +22,8 @@ const breakdown = ref<StandingsBreakdown | null>(null)
 const breakdownImageUrl = ref<string | null>(null)
 const publishedAt = ref<string | null>(null)
 const vibes = ref<VibesData | null>(null)
+const wrapImageUrl = ref<string | null>(null)
+const wrapLabel = ref<string | null>(null)
 const standingsOpen = ref(false)
 const changelogOpen = ref(false)
 
@@ -71,6 +74,8 @@ onMounted(async () => {
       breakdownImageUrl?: string | null
       publishedAt?: string
       vibes?: VibesData | null
+      wrapImageUrl?: string | null
+      wrapLabel?: string | null
     }>('/standings')
     if (data.published) {
       standings.value = data.standings ?? null
@@ -81,6 +86,8 @@ onMounted(async () => {
         ? apiUrl(data.breakdownImageUrl)
         : null
       vibes.value = data.vibes ?? null
+      wrapImageUrl.value = data.wrapImageUrl ? apiUrl(data.wrapImageUrl) : null
+      wrapLabel.value = data.wrapLabel ?? null
     }
   } catch {
     /* no published standings yet */
@@ -110,6 +117,18 @@ onMounted(async () => {
     </section>
 
     <ChangelogModal v-model:open="changelogOpen" />
+
+    <section v-if="!user" class="spectator-strip card" aria-label="Explore without an account">
+      <p>
+        Browse the competition as a guest — standings, shelf, prompts, and hall of fame are public.
+      </p>
+      <div class="spectator-links">
+        <RouterLink to="/standings" class="btn btn-secondary btn-sm">Standings</RouterLink>
+        <RouterLink to="/shelf" class="btn btn-secondary btn-sm">Shelf</RouterLink>
+        <RouterLink to="/prompts" class="btn btn-secondary btn-sm">Prompts</RouterLink>
+        <RouterLink to="/hall-of-fame" class="btn btn-secondary btn-sm">Hall of Fame</RouterLink>
+      </div>
+    </section>
 
     <section v-if="activeTheme" class="theme-banner" aria-label="Theme of the month">
       <p class="theme-eyebrow">Theme of the month</p>
@@ -183,6 +202,12 @@ onMounted(async () => {
                   'This week’s reading activity from the latest standings publish.',
               )
             "
+          />
+          <MonthlyWrapPanel
+            v-if="wrapImageUrl"
+            :image-url="wrapImageUrl"
+            :label="wrapLabel"
+            title="4-week wrap"
           />
           <StandingsBreakdownPanel
             v-if="breakdown"
@@ -293,6 +318,29 @@ details[open] > .collapse-summary::after {
 .hero {
   text-align: center;
   padding: 2.5rem 0 2rem;
+}
+
+.spectator-strip {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.15rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.spectator-strip p {
+  margin: 0;
+  color: var(--realm-text-muted);
+  font-size: 0.92rem;
+  max-width: 36rem;
+}
+
+.spectator-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 .eyebrow {

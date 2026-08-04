@@ -101,6 +101,7 @@ export async function deliverySendImage(opts: {
 export function deliverySendTeamChat(
 	teamId: string,
 	message: string,
+	imageUrl?: string,
 ): Promise<DiscordSendOutcome> {
 	const primaryId = getDiscordPrimaryGuildId()
 	const cfg = resolveDiscordGuildConfig(primaryId)
@@ -111,6 +112,7 @@ export function deliverySendTeamChat(
 		})
 	}
 	const mode = cfg.productionDeliveryMode
+	const cover = imageUrl?.trim() || undefined
 	if (mode === 'bot') {
 		const channelId = cfg.teamChatChannelIds[teamId]?.trim()
 		if (!channelId) {
@@ -126,7 +128,10 @@ export function deliverySendTeamChat(
 				error: 'No Discord bot token configured',
 			})
 		}
-		return createBotTransport(token, channelId).sendText({ content: message })
+		return createBotTransport(token, channelId).sendText({
+			content: message,
+			imageUrl: cover,
+		})
 	}
 	const webhookUrl = cfg.teamChatWebhookUrls[teamId]?.trim()
 	if (!webhookUrl) {
@@ -135,7 +140,10 @@ export function deliverySendTeamChat(
 			error: `No realm chat webhook for team ${teamId}`,
 		})
 	}
-	return createWebhookTransport(webhookUrl).sendText({ content: message })
+	return createWebhookTransport(webhookUrl).sendText({
+		content: message,
+		imageUrl: cover,
+	})
 }
 
 export function isDiscordChannelConfigured(

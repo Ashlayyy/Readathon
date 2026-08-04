@@ -1602,6 +1602,29 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 										(role {{ previewData.whoGetsNotified.discordRoleId }})</span
 									>
 								</p>
+								<ul class="publish-checklist" aria-label="Publish checklist">
+									<li>
+										Standings + vibes + breakdown images ready for
+										{{ previewData.weekLabel }}
+									</li>
+									<li>
+										Email recipients:
+										{{ previewData.whoGetsNotified.emails }}
+									</li>
+									<li>
+										Discord:
+										{{
+											previewData.whoGetsNotified.discord
+												? 'will post to production channel'
+												: 'not configured / skipped'
+										}}
+									</li>
+									<li v-if="includeMonthlyWrapOnPublish">
+										4-week wrap attached
+										<span v-if="wrapStatus?.atypical"> (atypical — confirm below)</span>
+									</li>
+									<li v-else>4-week wrap not included</li>
+								</ul>
 								<div class="modal-actions">
 									<button type="button" class="btn btn-ghost" @click="closePreview">
 										Cancel
@@ -3780,6 +3803,21 @@ small {
 	margin: 0;
 	font-size: 0.88rem;
 	color: var(--realm-text-muted);
+}
+
+.publish-checklist {
+	margin: 0.75rem 0 0;
+	padding: 0.65rem 0.85rem 0.65rem 1.4rem;
+	border-radius: 8px;
+	border: 1px solid var(--realm-border);
+	background: color-mix(in srgb, var(--realm-bg) 70%, transparent);
+	font-size: 0.85rem;
+	color: var(--realm-text-muted);
+	line-height: 1.45;
+}
+
+.publish-checklist li {
+	margin: 0.2rem 0;
 }
 
 .publish-range-section {

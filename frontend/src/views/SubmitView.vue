@@ -1913,9 +1913,11 @@ function reset() {
 
   .wizard :deep(.xp-preview-panel) {
     position: sticky;
-    bottom: 0.75rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
     z-index: 5;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+    max-height: 40dvh;
+    overflow: auto;
   }
 
   .progress-step:not(.current) .progress-label {

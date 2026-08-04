@@ -7,6 +7,7 @@ import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue';
 import StandingsVibes, {
 	type StandingsVibes as VibesData,
 } from '../components/StandingsVibes.vue';
+import MonthlyWrapPanel from '../components/MonthlyWrapPanel.vue';
 
 const { config, loadConfig } = useConfig();
 const standings = ref<TeamStanding[] | null>(null);
@@ -17,6 +18,8 @@ const publishedAt = ref<string | null>(null);
 const weekLabel = ref<string | null>(null);
 const published = ref(false);
 const vibes = ref<VibesData | null>(null);
+const wrapImageUrl = ref<string | null>(null);
+const wrapLabel = ref<string | null>(null);
 const loading = ref(true);
 const error = ref('');
 
@@ -32,6 +35,8 @@ onMounted(async () => {
 			publishedAt?: string;
 			weekLabel?: string;
 			vibes?: VibesData | null;
+			wrapImageUrl?: string | null;
+			wrapLabel?: string | null;
 		}>('/standings');
 		published.value = data.published;
 		standings.value = data.standings ?? null;
@@ -44,6 +49,8 @@ onMounted(async () => {
 			: null;
 		// Only show published vibes — never live-updating
 		vibes.value = data.published ? (data.vibes ?? null) : null;
+		wrapImageUrl.value = data.wrapImageUrl ? apiUrl(data.wrapImageUrl) : null;
+		wrapLabel.value = data.wrapLabel ?? null;
 	} catch {
 		error.value = String(
 			config.value?.copy.standingsLoadError ?? "Couldn't load standings.",
@@ -92,6 +99,13 @@ onMounted(async () => {
 					'Weekly vibes will appear after the next standings publish.'
 				}}
 			</p>
+
+			<MonthlyWrapPanel
+				v-if="wrapImageUrl"
+				:image-url="wrapImageUrl"
+				:label="wrapLabel"
+				title="4-week wrap"
+			/>
 
 			<StandingsBreakdownPanel
 				v-if="breakdown"

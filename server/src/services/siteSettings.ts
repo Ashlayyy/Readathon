@@ -99,6 +99,10 @@ export type SiteSettingsAdmin = SiteSettingsPublic & {
   monthlyEvents: MonthlyEventSlot[]
   monthlyWrapOnPublish: boolean
   lastMonthlyWrapMonthKey: string
+  /** Last 4-week wrap SVG for public site display. */
+  lastMonthlyWrapSvg: string
+  lastMonthlyWrapLabel: string
+  lastMonthlyWrapAt: string | null
   /** Last known Discord servers for the configured bot (Admin pickers). */
   discordBotGuildsCache: DiscordBotGuildsCache | null
 }
@@ -151,6 +155,9 @@ const DEFAULTS: SiteSettingsCached = {
   monthlyEvents: [],
   monthlyWrapOnPublish: false,
   lastMonthlyWrapMonthKey: '',
+  lastMonthlyWrapSvg: '',
+  lastMonthlyWrapLabel: '',
+  lastMonthlyWrapAt: null,
   discordBotGuildsCache: null,
 }
 
@@ -536,6 +543,9 @@ function toDocFromCache(doc: {
   monthlyEvents?: unknown
   monthlyWrapOnPublish?: boolean | null
   lastMonthlyWrapMonthKey?: string | null
+  lastMonthlyWrapSvg?: string | null
+  lastMonthlyWrapLabel?: string | null
+  lastMonthlyWrapAt?: string | Date | null
 }): SiteSettingsCached {
   const addTemplates = normalizeTemplateList(doc.teamChatAddTemplates)
   const sabotageTemplates = normalizeTemplateList(doc.teamChatSabotageTemplates)
@@ -591,6 +601,11 @@ function toDocFromCache(doc: {
     monthlyEvents,
     monthlyWrapOnPublish: doc.monthlyWrapOnPublish ?? false,
     lastMonthlyWrapMonthKey: doc.lastMonthlyWrapMonthKey ?? '',
+    lastMonthlyWrapSvg: String(doc.lastMonthlyWrapSvg ?? ''),
+    lastMonthlyWrapLabel: String(doc.lastMonthlyWrapLabel ?? ''),
+    lastMonthlyWrapAt: doc.lastMonthlyWrapAt
+      ? new Date(doc.lastMonthlyWrapAt).toISOString()
+      : null,
     activeMonthlyEvent: resolveActiveFromCache(monthlyEvents),
     discordBotGuildsCache: normalizeBotGuildsCache(
       (doc as { discordBotGuildsCache?: unknown }).discordBotGuildsCache,
@@ -903,6 +918,18 @@ export async function updateSiteSettings(
   }
   if (typeof patch.lastMonthlyWrapMonthKey === 'string') {
     doc.lastMonthlyWrapMonthKey = patch.lastMonthlyWrapMonthKey.trim()
+  }
+  if (typeof patch.lastMonthlyWrapSvg === 'string') {
+    doc.lastMonthlyWrapSvg = patch.lastMonthlyWrapSvg
+  }
+  if (typeof patch.lastMonthlyWrapLabel === 'string') {
+    doc.lastMonthlyWrapLabel = patch.lastMonthlyWrapLabel.trim()
+  }
+  if ('lastMonthlyWrapAt' in patch) {
+    const raw = patch.lastMonthlyWrapAt
+    doc.lastMonthlyWrapAt = raw
+      ? new Date(raw as string | Date)
+      : null
   }
   // Keep primary guild config in sync when legacy flat fields were patched alone
   {
