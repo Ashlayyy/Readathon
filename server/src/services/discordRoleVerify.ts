@@ -222,7 +222,8 @@ export async function getDiscordBotInviteUrl(): Promise<
 	if (!token) {
 		return {
 			ok: false,
-			error: 'Save a Discord bot token first.',
+			error:
+				'Configure PLATFORM_DISCORD_BOT_TOKEN (or save a bot token in Admin → Settings).',
 		}
 	}
 	const me = await discordGet<{ id: string; bot?: { id?: string } }>(

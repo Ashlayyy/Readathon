@@ -1,7 +1,16 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose'
+import { tenantScopePlugin } from '../../tenancy/plugin.js'
 
 const siteSettingsSchema = new Schema(
   {
+    /** One settings doc per tenant (Phase 0: stamped onto the existing singleton). */
+    tenantId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Tenant',
+      default: null,
+      unique: true,
+      sparse: true,
+    },
     showTeamRosters: { type: Boolean, default: false },
     downtimeMode: { type: Boolean, default: false },
     /** @deprecated Prefer discordProductionWebhookUrl — kept in sync for older docs. */
@@ -68,6 +77,8 @@ const siteSettingsSchema = new Schema(
   },
   { timestamps: true },
 )
+
+siteSettingsSchema.plugin(tenantScopePlugin)
 
 export type ISiteSettings = InferSchemaType<typeof siteSettingsSchema> & {
   _id: mongoose.Types.ObjectId

@@ -1,12 +1,15 @@
 import { apiUrl, googleLoginUrl } from './apiBase'
+import { currentTenantSlugHeader } from '../composables/useTenant'
 
 export { apiUrl, googleLoginUrl }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const tenantSlug = currentTenantSlugHeader()
   const res = await fetch(apiUrl(path), {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(tenantSlug ? { 'X-Tenant-Slug': tenantSlug } : {}),
       ...options.headers,
     },
     ...options,
@@ -572,7 +575,13 @@ export type AdminStandingsData = {
 
 /** Download a file from an authenticated API path. */
 export async function downloadFile(path: string, filename: string) {
-  const res = await fetch(apiUrl(path), { credentials: 'include' })
+  const tenantSlug = currentTenantSlugHeader()
+  const res = await fetch(apiUrl(path), {
+    credentials: 'include',
+    headers: {
+      ...(tenantSlug ? { 'X-Tenant-Slug': tenantSlug } : {}),
+    },
+  })
   if (!res.ok) {
     let msg = `Download failed (${res.status})`
     try {

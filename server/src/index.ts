@@ -9,7 +9,14 @@ import { fileURLToPath } from 'node:url';
 import { downtimeGuard } from './middleware/downtime.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { metricsMiddleware } from './middleware/metrics.js';
+import { tenantMiddleware } from './middleware/tenant.js';
 import { connectDb } from './db/connect.js';
+import { runTenancyMigration } from './tenancy/migrate.js';
+import {
+	getProductApex,
+	getProductName,
+	getTenantContext,
+} from './tenancy/context.js';
 import { User } from './db/models/User.js';
 import { Submission } from './db/models/Submission.js';
 import { withActive } from './db/activeSubmission.js';
@@ -44,6 +51,7 @@ import {
 import { isPostHogEnabled, shutdownPostHog } from './services/posthog.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
+import { platformRoutes } from './routes/platform.js';
 import { profileRoutes } from './routes/profile.js';
 import { questionRoutes } from './routes/questions.js';
 import { submissionRoutes } from './routes/submissions.js';
@@ -68,6 +76,7 @@ app.use(
 	}),
 );
 
+app.use('*', tenantMiddleware);
 app.use('*', metricsMiddleware);
 
 /** Prometheus scrape target. Optional bearer: METRICS_TOKEN */
@@ -98,8 +107,9 @@ const adminLimiter = rateLimit({
 
 app.use('/api/*', downtimeGuard);
 
-app.get('/api/health', (c) =>
-	c.json({
+app.get('/api/health', (c) => {
+	const tenancy = getTenantContext();
+	return c.json({
 		status: 'ok',
 		version: APP_VERSION,
 		pngFonts: getSvgFontStatus(),
@@ -108,8 +118,23 @@ app.get('/api/health', (c) =>
 			posthog: isPostHogEnabled(),
 			betterstack: betterStackStatus(),
 		},
-	}),
-);
+		product: {
+			name: getProductName(),
+			apex: getProductApex(),
+		},
+		tenant: tenancy
+			? {
+					slug: tenancy.slug,
+					resolution: tenancy.resolution,
+					isMarketingHost: tenancy.isMarketingHost,
+					id: tenancy.tenant?._id?.toString() ?? null,
+				}
+			: null,
+	});
+});
+
+/** Lightweight product/marketing surface (www.product.com). */
+app.route('/api/platform', platformRoutes);
 
 app.get('/api/config', async (c) => {
 	const config = getConfig();
@@ -353,7 +378,21 @@ async function main() {
 	}
 
 	await connectDb();
-	await Promise.all([refreshPromptsCache(), refreshSiteSettingsCache()]);
+	await runTenancyMigration();
+	const { ensureDefaultTenant } = await import('./tenancy/resolve.js');
+	const { runWithTenantContext } = await import('./tenancy/context.js');
+	const defaultTenant = await ensureDefaultTenant();
+	await runWithTenantContext(
+		{
+			tenant: defaultTenant,
+			isMarketingHost: false,
+			resolution: 'default',
+			slug: defaultTenant.slug,
+		},
+		async () => {
+			await Promise.all([refreshPromptsCache(), refreshSiteSettingsCache()]);
+		},
+	);
 
 	wireDiscordGatewaySettingsHook();
 	await startDiscordGateway();

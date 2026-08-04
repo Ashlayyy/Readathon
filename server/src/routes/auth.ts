@@ -4,10 +4,12 @@ import { getCookie, setCookie } from 'hono/cookie'
 import { rateLimit } from '../middleware/rateLimit.js'
 import {
   AuthError,
+  accountToPublic,
   clearSession,
   createSession,
   findOrCreateGoogleUser,
   getGoogleClient,
+  getSessionAccount,
   getSessionUser,
   registerWithEmail,
   loginByEmail,
@@ -16,6 +18,7 @@ import {
   verifyMagicLink,
 } from '../services/auth.js'
 import { Question } from '../db/models/Question.js'
+import { getTenantContext, getProductApex } from '../tenancy/context.js'
 
 const OAUTH_STATE_COOKIE = 'oauth_state'
 const OAUTH_VERIFIER_COOKIE = 'oauth_verifier'
@@ -25,9 +28,30 @@ export const authRoutes = new Hono()
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'auth' })
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, keyPrefix: 'login' })
 
+function frontendBase(): string {
+  return process.env.FRONTEND_URL ?? 'http://localhost:5173'
+}
+
 authRoutes.get('/me', async (c) => {
+  const tenancy = getTenantContext()
+  const account = await getSessionAccount(c)
+
+  if (tenancy?.isMarketingHost) {
+    return c.json({
+      user: null,
+      account: account ? accountToPublic(account) : null,
+      isMarketingHost: true,
+    })
+  }
+
   const user = await getSessionUser(c)
-  if (!user) return c.json({ user: null })
+  if (!user) {
+    return c.json({
+      user: null,
+      account: account ? accountToPublic(account) : null,
+      isMarketingHost: false,
+    })
+  }
 
   const unreadAnswers = await Question.countDocuments({
     userId: user._id,
@@ -40,6 +64,8 @@ authRoutes.get('/me', async (c) => {
       ...userToPublic(user),
       unreadAnswers,
     },
+    account: account ? accountToPublic(account) : null,
+    isMarketingHost: false,
   })
 })
 
@@ -74,7 +100,7 @@ authRoutes.post('/login', loginLimiter, async (c) => {
 })
 
 authRoutes.get('/verify', async (c) => {
-  const frontend = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+  const frontend = frontendBase()
   const token = c.req.query('token')
 
   if (!token) {
@@ -82,9 +108,21 @@ authRoutes.get('/verify', async (c) => {
   }
 
   try {
-    const user = await verifyMagicLink(token)
-    await createSession(c, user._id.toString())
-    return c.redirect(`${frontend}/`)
+    const result = await verifyMagicLink(token)
+    if (result.kind === 'user') {
+      await createSession(c, {
+        userId: result.user._id.toString(),
+        accountId: result.account._id.toString(),
+      })
+      return c.redirect(`${frontend}/`)
+    }
+    await createSession(c, { accountId: result.account._id.toString() })
+    const apex = getProductApex()
+    // Prefer host console on product marketing surface
+    const hostUrl =
+      process.env.PRODUCT_MARKETING_URL?.trim() ||
+      `https://www.${apex}/host`
+    return c.redirect(hostUrl.includes('localhost') ? `${frontend}/host` : hostUrl)
   } catch {
     return c.redirect(`${frontend}/login?error=invalid_link`)
   }
@@ -117,7 +155,7 @@ authRoutes.get('/google', (c) => {
 })
 
 authRoutes.get('/google/callback', async (c) => {
-  const frontend = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+  const frontend = frontendBase()
   const google = getGoogleClient()
   if (!google) return c.redirect(`${frontend}/login?error=google_not_configured`)
 
@@ -142,14 +180,21 @@ authRoutes.get('/google/callback', async (c) => {
       picture?: string
     }
 
-    const user = await findOrCreateGoogleUser(
+    const result = await findOrCreateGoogleUser(
       profile.sub,
       profile.name,
       profile.email,
       profile.picture ?? null,
     )
-    await createSession(c, user._id.toString())
-    return c.redirect(`${frontend}/`)
+    if (result.kind === 'user') {
+      await createSession(c, {
+        userId: result.user._id.toString(),
+        accountId: result.account._id.toString(),
+      })
+      return c.redirect(`${frontend}/`)
+    }
+    await createSession(c, { accountId: result.account._id.toString() })
+    return c.redirect(`${frontend}/host`)
   } catch {
     return c.redirect(`${frontend}/login?error=oauth_failed`)
   }

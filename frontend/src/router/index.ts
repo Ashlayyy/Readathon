@@ -1,41 +1,110 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
+import { detectMarketingHost, useTenant } from '../composables/useTenant'
+
+const eventRoutes: RouteRecordRaw[] = [
+  { path: '', name: 'home', component: () => import('../views/HomeView.vue') },
+  { path: 'how-it-works', name: 'how-it-works', component: () => import('../views/HowItWorksView.vue') },
+  { path: 'teams', name: 'teams', component: () => import('../views/TeamsView.vue') },
+  {
+    path: 'rosters',
+    name: 'rosters',
+    redirect: (to) => ({
+      name: to.params.tenantSlug ? 'tenant-teams' : 'teams',
+      params: to.params,
+      query: { ...to.query, tab: 'rosters' },
+    }),
+  },
+  { path: 'prompts', name: 'prompts', component: () => import('../views/PromptsView.vue') },
+  { path: 'faq', name: 'faq', component: () => import('../views/FaqView.vue') },
+  { path: 'changelog', name: 'changelog', component: () => import('../views/ChangelogView.vue') },
+  { path: 'standings', name: 'standings', component: () => import('../views/StandingsView.vue') },
+  { path: 'shelf', name: 'shelf', component: () => import('../views/ShelfView.vue') },
+  { path: 'hall-of-fame', name: 'hall-of-fame', component: () => import('../views/HallOfFameView.vue') },
+  { path: 'archive', name: 'archive', component: () => import('../views/ArchiveView.vue') },
+  { path: 'archive/:slug', name: 'archive-slug', component: () => import('../views/ArchiveView.vue') },
+  { path: 'login', name: 'login', component: () => import('../views/LoginView.vue') },
+  { path: 'maintenance', name: 'maintenance', component: () => import('../views/MaintenanceView.vue') },
+  {
+    path: 'submit',
+    name: 'submit',
+    component: () => import('../views/SubmitView.vue'),
+    meta: { requiresAssigned: true },
+  },
+  {
+    path: 'profile',
+    name: 'profile',
+    meta: { requiresAuth: true },
+    component: () => import('../views/ReaderProfileView.vue'),
+  },
+  { path: 'readers/:id', name: 'reader', component: () => import('../views/ReaderProfileView.vue') },
+  {
+    path: 'my-reads',
+    redirect: (to) => ({
+      name: to.params.tenantSlug ? 'tenant-profile' : 'profile',
+      params: to.params,
+      query: { ...to.query, tab: 'books' },
+    }),
+  },
+  {
+    path: 'admin',
+    name: 'admin',
+    component: () => import('../views/AdminView.vue'),
+    meta: { requiresAdmin: true },
+  },
+]
+
+function prefixEventRoutes(
+  routes: RouteRecordRaw[],
+  namePrefix: string,
+): RouteRecordRaw[] {
+  return routes.map((r) => {
+    const name =
+      r.name && namePrefix ? (`${namePrefix}${String(r.name)}` as const) : r.name
+    const next: RouteRecordRaw = { ...r, name }
+    if (r.redirect && typeof r.redirect === 'function') {
+      next.redirect = r.redirect
+    }
+    return next
+  })
+}
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    { path: '/', name: 'home', component: () => import('../views/HomeView.vue') },
-    { path: '/how-it-works', name: 'how-it-works', component: () => import('../views/HowItWorksView.vue') },
-    { path: '/teams', name: 'teams', component: () => import('../views/TeamsView.vue') },
     {
-      path: '/rosters',
-      name: 'rosters',
-      redirect: (to) => ({ name: 'teams', query: { ...to.query, tab: 'rosters' } }),
-    },
-    { path: '/prompts', name: 'prompts', component: () => import('../views/PromptsView.vue') },
-    { path: '/faq', name: 'faq', component: () => import('../views/FaqView.vue') },
-    { path: '/changelog', name: 'changelog', component: () => import('../views/ChangelogView.vue') },
-    { path: '/standings', name: 'standings', component: () => import('../views/StandingsView.vue') },
-    { path: '/shelf', name: 'shelf', component: () => import('../views/ShelfView.vue') },
-    { path: '/hall-of-fame', name: 'hall-of-fame', component: () => import('../views/HallOfFameView.vue') },
-    {
-      path: '/archive',
-      name: 'archive',
-      component: () => import('../views/ArchiveView.vue'),
+      path: '/host',
+      name: 'host-console',
+      component: () => import('../views/platform/HostConsoleView.vue'),
+      meta: { platform: true },
     },
     {
-      path: '/archive/:slug',
-      name: 'archive-slug',
-      component: () => import('../views/ArchiveView.vue'),
+      path: '/host/new',
+      name: 'host-create',
+      component: () => import('../views/platform/CreateEventView.vue'),
+      meta: { platform: true },
     },
-    { path: '/login', name: 'login', component: () => import('../views/LoginView.vue') },
-    { path: '/maintenance', name: 'maintenance', component: () => import('../views/MaintenanceView.vue') },
-    { path: '/submit', name: 'submit', component: () => import('../views/SubmitView.vue'), meta: { requiresAssigned: true } },
-    { path: '/profile', name: 'profile', meta: { requiresAuth: true }, component: () => import('../views/ReaderProfileView.vue') },
-    { path: '/readers/:id', name: 'reader', component: () => import('../views/ReaderProfileView.vue') },
-    { path: '/my-reads', redirect: (to) => ({ name: 'profile', query: { ...to.query, tab: 'books' } }) },
-    { path: '/admin', name: 'admin', component: () => import('../views/AdminView.vue'), meta: { requiresAdmin: true } },
+    {
+      path: '/marketing',
+      name: 'marketing',
+      component: () => import('../views/platform/MarketingHomeView.vue'),
+      meta: { platform: true },
+    },
+    // Legacy / default-tenant routes (bookbaddies.net, localhost)
+    ...prefixEventRoutes(
+      eventRoutes.map((r) => ({
+        ...r,
+        path: r.path === '' ? '/' : `/${r.path}`,
+      })),
+      '',
+    ),
+    // Path tenancy: /e/:tenantSlug/...
+    {
+      path: '/e/:tenantSlug',
+      component: () => import('../views/TenantShell.vue'),
+      children: prefixEventRoutes(eventRoutes, 'tenant-'),
+    },
   ],
 })
 
@@ -57,7 +126,22 @@ export function prefetchAppRoutes() {
   }
 }
 
+function routeBaseName(name: unknown): string {
+  const s = String(name ?? '')
+  return s.startsWith('tenant-') ? s.slice('tenant-'.length) : s
+}
+
 router.beforeEach(async (to) => {
+  const { syncFromRoutePath, isMarketingHost } = useTenant()
+  syncFromRoutePath(to.path)
+
+  // Marketing apex: `/` shows product landing (keep /host always available)
+  if (detectMarketingHost() && (to.path === '/' || to.name === 'home')) {
+    return { name: 'marketing' }
+  }
+
+  if (to.meta.platform) return true
+
   const { user, fetchUser } = useAuth()
   const { config, loadConfig } = useConfig()
 
@@ -65,35 +149,78 @@ router.beforeEach(async (to) => {
 
   const downtime = config.value?.site?.downtimeMode === true
   const isAdmin = user.value?.isAdmin === true
+  const base = routeBaseName(to.name)
 
   if (downtime && !isAdmin) {
-    const allowed = new Set(['maintenance', 'login', 'archive', 'archive-slug', 'reader'])
-    if (!allowed.has(String(to.name))) return { name: 'maintenance' }
+    const allowed = new Set(['maintenance', 'login', 'archive', 'archive-slug', 'reader', 'marketing', 'host-console', 'host-create'])
+    if (!allowed.has(base) && !to.meta.platform) {
+      return to.params.tenantSlug
+        ? { name: 'tenant-maintenance', params: { tenantSlug: to.params.tenantSlug } }
+        : { name: 'maintenance' }
+    }
   }
 
-  if (to.name === 'maintenance' && (!downtime || isAdmin)) {
-    return isAdmin ? '/admin' : '/'
+  if (base === 'maintenance' && (!downtime || isAdmin)) {
+    if (isAdmin) {
+      return to.params.tenantSlug
+        ? { name: 'tenant-admin', params: { tenantSlug: to.params.tenantSlug } }
+        : '/admin'
+    }
+    return to.params.tenantSlug
+      ? { name: 'tenant-home', params: { tenantSlug: to.params.tenantSlug } }
+      : '/'
   }
 
-  if (to.name === 'login' && user.value) return '/'
-  if (to.name === 'profile') {
-    if (!user.value) return '/login'
+  if (base === 'login' && user.value) {
+    return to.params.tenantSlug
+      ? { name: 'tenant-home', params: { tenantSlug: to.params.tenantSlug } }
+      : '/'
+  }
+  if (base === 'profile') {
+    if (!user.value) {
+      return to.params.tenantSlug
+        ? { name: 'tenant-login', params: { tenantSlug: to.params.tenantSlug } }
+        : '/login'
+    }
     const query = { ...to.query }
-    return { name: 'reader', params: { id: user.value.id }, query }
+    return {
+      name: to.params.tenantSlug ? 'tenant-reader' : 'reader',
+      params: { ...(to.params.tenantSlug ? { tenantSlug: to.params.tenantSlug } : {}), id: user.value.id },
+      query,
+    }
   }
   if (
-    to.name === 'teams' &&
+    base === 'teams' &&
     to.query.tab === 'rosters' &&
     !config.value?.site?.showTeamRosters
   ) {
-    return { name: 'teams' }
+    return {
+      name: to.params.tenantSlug ? 'tenant-teams' : 'teams',
+      params: to.params,
+    }
   }
-  if (to.meta.requiresAdmin && !user.value?.isAdmin) return '/'
-  if (to.meta.requiresAuth && !user.value) return '/login'
+  if (to.meta.requiresAdmin && !user.value?.isAdmin) {
+    return to.params.tenantSlug
+      ? { name: 'tenant-home', params: { tenantSlug: to.params.tenantSlug } }
+      : '/'
+  }
+  if (to.meta.requiresAuth && !user.value) {
+    return to.params.tenantSlug
+      ? { name: 'tenant-login', params: { tenantSlug: to.params.tenantSlug } }
+      : '/login'
+  }
   if (to.meta.requiresAssigned && user.value?.status !== 'assigned') {
-    if (!user.value) return '/login'
-    return '/'
+    if (!user.value) {
+      return to.params.tenantSlug
+        ? { name: 'tenant-login', params: { tenantSlug: to.params.tenantSlug } }
+        : '/login'
+    }
+    return to.params.tenantSlug
+      ? { name: 'tenant-home', params: { tenantSlug: to.params.tenantSlug } }
+      : '/'
   }
+
+  void isMarketingHost
 })
 
 router.afterEach((to) => {

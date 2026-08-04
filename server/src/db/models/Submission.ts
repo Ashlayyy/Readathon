@@ -1,7 +1,10 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose'
+import { tenantScopePlugin } from '../../tenancy/plugin.js'
 
 const submissionSchema = new Schema(
   {
+    /** Multi-tenant scope (default tenant backfilled on boot). */
+    tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', default: null, index: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     bookTitle: { type: String, required: true, trim: true },
     bookAuthor: { type: String, required: true, trim: true },
@@ -25,6 +28,8 @@ const submissionSchema = new Schema(
   },
   { timestamps: true },
 )
+
+submissionSchema.plugin(tenantScopePlugin)
 
 export type ISubmission = InferSchemaType<typeof submissionSchema> & { _id: mongoose.Types.ObjectId }
 
