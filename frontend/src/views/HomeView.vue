@@ -7,6 +7,9 @@ import { useConfig } from '../composables/useConfig'
 import { useCopy } from '../composables/useCopy'
 import StandingsPanel from '../components/StandingsPanel.vue'
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue'
+import StandingsVibes, {
+  type StandingsVibes as VibesData,
+} from '../components/StandingsVibes.vue'
 import ChangelogModal from '../components/ChangelogModal.vue'
 
 const { config, loadConfig } = useConfig()
@@ -17,6 +20,7 @@ const standingsImageUrl = ref<string | null>(null)
 const breakdown = ref<StandingsBreakdown | null>(null)
 const breakdownImageUrl = ref<string | null>(null)
 const publishedAt = ref<string | null>(null)
+const vibes = ref<VibesData | null>(null)
 const standingsOpen = ref(false)
 const changelogOpen = ref(false)
 
@@ -66,6 +70,7 @@ onMounted(async () => {
       imageUrl?: string | null
       breakdownImageUrl?: string | null
       publishedAt?: string
+      vibes?: VibesData | null
     }>('/standings')
     if (data.published) {
       standings.value = data.standings ?? null
@@ -75,6 +80,7 @@ onMounted(async () => {
       breakdownImageUrl.value = data.breakdownImageUrl
         ? apiUrl(data.breakdownImageUrl)
         : null
+      vibes.value = data.vibes ?? null
     }
   } catch {
     /* no published standings yet */
@@ -160,12 +166,23 @@ onMounted(async () => {
 
     <section v-if="standings" class="home-standings">
       <details class="collapse" @toggle="standingsOpen = ($event.target as HTMLDetailsElement).open">
-        <summary class="collapse-summary">Standings &amp; score breakdown</summary>
+        <summary class="collapse-summary">Standings, vibes &amp; score breakdown</summary>
         <div v-if="standingsOpen" class="collapse-body">
           <StandingsPanel
             :standings="standings"
             :image-url="standingsImageUrl"
             :published-at="publishedAt"
+          />
+          <StandingsVibes
+            v-if="vibes"
+            :vibes="vibes"
+            :title="String(config.copy.standingsVibesTitle ?? 'Reading vibes')"
+            :lead="
+              String(
+                config.copy.standingsVibesLead ??
+                  'This week’s reading activity from the latest standings publish.',
+              )
+            "
           />
           <StandingsBreakdownPanel
             v-if="breakdown"

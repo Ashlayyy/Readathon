@@ -7,7 +7,7 @@ import { generateBreakdownSvg } from './standings-breakdown-image.js'
 import { generateVibesSvg } from './vibes-image.js'
 import { buildPublicStandingsVibes } from './adminAnalytics.js'
 import { notifyStandingsPublished } from './notifications.js'
-import { notifyDiscordStandingsPublished } from './discord.js'
+import { notifyDiscordStandingsPublished, sendDiscordChannelMessage } from './discord.js'
 import { logAudit, type AuditActor } from './audit.js'
 import { getWeekInfo, resolvePublishRange } from '../utils/week.js'
 import {
@@ -26,6 +26,7 @@ import {
 } from './metrics.js'
 import { captureServerEvent } from './posthog.js'
 import { log } from './betterstack.js'
+import { countPromptsWentLiveInRange } from './prompts.js'
 
 export type PublishStandingsOptions = {
   preset?: string | null
@@ -236,6 +237,37 @@ export async function publishStandings(
     console.error('[discord] Standings webhook failed:', e)
     return { sent: false }
   })
+
+  if (discordResult.sent) {
+    try {
+      const newPromptCount = await countPromptsWentLiveInRange(
+        range.from,
+        range.toExclusive,
+      )
+      if (newPromptCount > 0) {
+        const promptsMsg = await sendDiscordChannelMessage({
+          channel: 'production',
+          withPing: true,
+          kind: 'announce',
+          message:
+            'New prompts have also been added to the website this week!',
+        })
+        if (!promptsMsg.sent) {
+          console.error(
+            '[discord] New-prompts announce failed:',
+            promptsMsg.error ?? 'unknown',
+          )
+        } else {
+          log.info('Discord new-prompts announce sent', {
+            weekKey,
+            newPromptCount,
+          })
+        }
+      }
+    } catch (e) {
+      console.error('[discord] New-prompts announce check failed:', e)
+    }
+  }
 
   if (shouldAttachWrap && monthlyWrapSvg && discordResult.sent) {
     try {

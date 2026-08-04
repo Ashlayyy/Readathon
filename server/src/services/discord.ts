@@ -190,6 +190,8 @@ export async function sendDiscordChannelMessage(opts: {
 	withPing: boolean;
 	/** test = short smoke string; announce = sample standings-style line */
 	kind?: 'test' | 'announce';
+	/** When set, use this text instead of the built-in test/announce sample. */
+	message?: string | null;
 	/** Target Discord server; defaults to primary */
 	guildId?: string | null;
 	/** When set, use this role for ping/check instead of saved settings */
@@ -240,10 +242,12 @@ export async function sendDiscordChannelMessage(opts: {
 		}
 	}
 
+	const custom = opts.message?.trim();
 	const bodyText =
-		kind === 'announce'
+		custom ||
+		(kind === 'announce'
 			? DISCORD_SAMPLE_ANNOUNCE_CONTENT
-			: DISCORD_TEST_WEBHOOK_CONTENT;
+			: DISCORD_TEST_WEBHOOK_CONTENT);
 	const content = withPing && roleId ? `<@&${roleId}> ${bodyText}` : bodyText;
 	const metric = `${channel}_${withPing ? 'ping' : 'nopping'}`;
 
@@ -441,6 +445,35 @@ export async function notifyDiscordStandingsPublished(
 		if (!standingsSent)
 			return { sent: false, error: 'Discord rejected standings image' };
 
+		if (hasVibes && opts.vibesSvg) {
+			console.log('[discord] vibes: rasterizing SVG to PNG…');
+			const vibesPng = svgToPng(opts.vibesSvg);
+			const vibesFallback =
+				channel === 'test'
+					? `**[TEST]** ${heading} reading vibes`
+					: `**${heading} reading vibes**`;
+			const vibesContent = renderDiscordCaption(
+				themeTpl?.vibes,
+				{ ...captionVarsBase, mention: '' },
+				vibesFallback,
+			);
+			const vibesSent = await postChannelImage(
+				'vibes',
+				channel,
+				vibesPng,
+				vibesFilename,
+				vibesContent,
+				undefined,
+				guildId,
+			);
+			if (!vibesSent) {
+				console.error('[discord] vibes failed after earlier posts succeeded');
+				return { sent: false, error: 'Discord rejected vibes image' };
+			}
+		} else {
+			console.log('[discord] vibes: skipped (no vibes SVG)');
+		}
+
 		if (hasBreakdown && opts.breakdownSvg) {
 			console.log('[discord] breakdown: rasterizing SVG to PNG…');
 			const breakdownPng = svgToPng(opts.breakdownSvg);
@@ -470,35 +503,6 @@ export async function notifyDiscordStandingsPublished(
 			}
 		} else {
 			console.log('[discord] breakdown: skipped (no breakdown SVG)');
-		}
-
-		if (hasVibes && opts.vibesSvg) {
-			console.log('[discord] vibes: rasterizing SVG to PNG…');
-			const vibesPng = svgToPng(opts.vibesSvg);
-			const vibesFallback =
-				channel === 'test'
-					? `**[TEST]** ${heading} reading vibes`
-					: `**${heading} reading vibes**`;
-			const vibesContent = renderDiscordCaption(
-				themeTpl?.vibes,
-				{ ...captionVarsBase, mention: '' },
-				vibesFallback,
-			);
-			const vibesSent = await postChannelImage(
-				'vibes',
-				channel,
-				vibesPng,
-				vibesFilename,
-				vibesContent,
-				undefined,
-				guildId,
-			);
-			if (!vibesSent) {
-				console.error('[discord] vibes failed after earlier posts succeeded');
-				return { sent: false, error: 'Discord rejected vibes image' };
-			}
-		} else {
-			console.log('[discord] vibes: skipped (no vibes SVG)');
 		}
 
 		if (hasWrap && opts.monthlyWrapSvg) {

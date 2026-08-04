@@ -23,8 +23,12 @@ const prompts = computed(() => {
           p.description.toLowerCase().includes(q),
       )
     : list
-  // Featured theme prompts float to the top while a month is live.
-  return [...filtered].sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)))
+  // Featured theme prompts float to the top; then highest points first.
+  return [...filtered].sort((a, b) => {
+    const featured = Number(Boolean(b.featured)) - Number(Boolean(a.featured))
+    if (featured !== 0) return featured
+    return b.points - a.points
+  })
 })
 
 const tabLabel = computed(() => {

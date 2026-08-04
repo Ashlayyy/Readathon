@@ -290,6 +290,20 @@ export function promptToAdminPublic(p: IPrompt) {
 	};
 }
 
+/** Active prompts whose go-live falls in [from, toExclusive). */
+export async function countPromptsWentLiveInRange(
+	from: Date,
+	toExclusive: Date,
+): Promise<number> {
+	if (!(from instanceof Date) || !(toExclusive instanceof Date)) return 0;
+	if (Number.isNaN(from.getTime()) || Number.isNaN(toExclusive.getTime())) return 0;
+	if (toExclusive <= from) return 0;
+	return Prompt.countDocuments({
+		isActive: true,
+		goesLiveAt: { $gte: from, $lt: toExclusive },
+	});
+}
+
 export type PromptInput = {
 	promptId: string;
 	kind: 'positive' | 'negative' | 'team_bonus';

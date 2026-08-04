@@ -1560,23 +1560,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								<button
 									type="button"
 									class="preview-image-btn"
-									aria-label="View score breakdown preview larger"
-									@click="
-										showLightbox(
-											apiUrl(previewData.breakdownSvgUrl),
-											'Score breakdown preview',
-										)
-									"
-								>
-									<img
-										:src="apiUrl(previewData.breakdownSvgUrl)"
-										alt="Score breakdown preview"
-										class="preview-image"
-									/>
-								</button>
-								<button
-									type="button"
-									class="preview-image-btn"
 									aria-label="View vibes preview larger"
 									@click="
 										showLightbox(
@@ -1588,6 +1571,23 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 									<img
 										:src="apiUrl(previewData.vibesSvgUrl)"
 										alt="Vibes preview"
+										class="preview-image"
+									/>
+								</button>
+								<button
+									type="button"
+									class="preview-image-btn"
+									aria-label="View score breakdown preview larger"
+									@click="
+										showLightbox(
+											apiUrl(previewData.breakdownSvgUrl),
+											'Score breakdown preview',
+										)
+									"
+								>
+									<img
+										:src="apiUrl(previewData.breakdownSvgUrl)"
+										alt="Score breakdown preview"
 										class="preview-image"
 									/>
 								</button>
