@@ -16,6 +16,8 @@ const props = defineProps<{
 	positivePrompts: Prompt[];
 	negativePrompts: Prompt[];
 	maxPrompts: number;
+	globalBonuses?: { id: string; label: string; description: string; points: number }[];
+	/** @deprecated use globalBonuses */
 	globalBonusLabel?: string;
 	/** When set, modal shows/edits this submission instead of creating. */
 	editing?: AdminSubmission | null;
@@ -117,11 +119,38 @@ const finishedAt = ref('');
 const submissionType = ref<'add' | 'sabotage'>('add');
 const targetTeamId = ref('');
 const promptIds = ref<string[]>([]);
-const bonusCompetition = ref(false);
+const bonusGlobalPromptId = ref<string | null>(null);
 const bonusTeamPromptIds = ref<string[]>([]);
 const promptSearch = ref('');
 const submitting = ref(false);
 const hydrating = ref(false);
+
+const sortedGlobalBonuses = computed(() => {
+	const list = props.globalBonuses?.length
+		? props.globalBonuses
+		: props.globalBonusLabel
+			? [
+					{
+						id: 'competition-trials',
+						label: props.globalBonusLabel,
+						description: '',
+						points: 10,
+					},
+				]
+			: [];
+	return [...list].sort((a, b) => {
+		if (a.points !== b.points) return a.points - b.points;
+		return a.label.localeCompare(b.label);
+	});
+});
+
+const sortedTeamBonuses = computed(() => {
+	const list = readerTeam.value?.bonusPrompts ?? [];
+	return [...list].sort((a, b) => {
+		if (a.points !== b.points) return a.points - b.points;
+		return a.label.localeCompare(b.label);
+	});
+});
 
 const selectedUser = computed(() => {
 	if (props.editing) {
@@ -209,7 +238,11 @@ function hydrateFromEditing(s: AdminSubmission) {
 	submissionType.value = s.submissionType;
 	targetTeamId.value = s.targetTeamId ?? '';
 	promptIds.value = [...s.promptIds];
-	bonusCompetition.value = s.bonusCompetition;
+	bonusGlobalPromptId.value =
+		s.bonusGlobalPromptId ??
+		(s.bonusCompetition
+			? (props.globalBonuses?.[0]?.id ?? 'competition-trials')
+			: null);
 	bonusTeamPromptIds.value = [...s.bonusTeamPromptIds];
 	promptSearch.value = '';
 	// next tick-ish: allow watchers to skip clear
@@ -268,6 +301,15 @@ function toggleTeamBonus(id: string) {
 	}
 }
 
+function toggleGlobalBonus(id: string) {
+	bonusGlobalPromptId.value =
+		bonusGlobalPromptId.value === id ? null : id;
+}
+
+function isGlobalBonusSelected(id: string) {
+	return bonusGlobalPromptId.value === id;
+}
+
 function payload() {
 	return {
 		bookTitle: bookTitle.value,
@@ -280,7 +322,8 @@ function payload() {
 		targetTeamId:
 			submissionType.value === 'sabotage' ? targetTeamId.value : undefined,
 		promptIds: promptIds.value,
-		bonusCompetition: bonusCompetition.value,
+		bonusCompetition: Boolean(bonusGlobalPromptId.value),
+		bonusGlobalPromptId: bonusGlobalPromptId.value,
 		bonusTeamPromptIds: bonusTeamPromptIds.value,
 	};
 }
@@ -655,30 +698,15 @@ async function submit() {
 						Bonuses <span v-if="!isView" class="optional">(optional)</span>
 					</h3>
 					<div class="bonus-list">
-						<button
-							type="button"
-							class="bonus-toggle"
-							:class="{ selected: bonusCompetition }"
-							:aria-pressed="bonusCompetition"
-							:disabled="isView"
-							@click="bonusCompetition = !bonusCompetition"
-						>
-							<span class="bonus-check" aria-hidden="true">{{
-								bonusCompetition ? '✓' : ''
-							}}</span>
-							<span class="bonus-text">{{
-								globalBonusLabel || 'Competition / trials'
-							}}</span>
-						</button>
-						<template v-if="readerTeam?.bonusPrompts?.length">
+						<template v-if="sortedTeamBonuses.length">
 							<p
 								class="bonus-label"
 								:style="readerTeam ? { color: readerTeam.color } : undefined"
 							>
-								{{ readerTeam.name }} bonuses
+								{{ readerTeam?.name ?? 'Team' }} bonuses
 							</p>
 							<button
-								v-for="bp in readerTeam.bonusPrompts"
+								v-for="bp in sortedTeamBonuses"
 								:key="bp.id"
 								type="button"
 								class="bonus-toggle"
@@ -695,6 +723,31 @@ async function submit() {
 									<span class="bonus-pts"
 										>({{
 											bp.points > 0 ? `+${bp.points}` : bp.points
+										}})</span
+									>
+								</span>
+							</button>
+						</template>
+						<template v-if="sortedGlobalBonuses.length">
+							<p class="bonus-label">Global bonuses</p>
+							<button
+								v-for="gb in sortedGlobalBonuses"
+								:key="gb.id"
+								type="button"
+								class="bonus-toggle"
+								:class="{ selected: isGlobalBonusSelected(gb.id) }"
+								:aria-pressed="isGlobalBonusSelected(gb.id)"
+								:disabled="isView"
+								@click="toggleGlobalBonus(gb.id)"
+							>
+								<span class="bonus-check" aria-hidden="true">{{
+									isGlobalBonusSelected(gb.id) ? '✓' : ''
+								}}</span>
+								<span class="bonus-text">
+									{{ gb.label }}
+									<span class="bonus-pts"
+										>({{
+											gb.points > 0 ? `+${gb.points}` : gb.points
 										}})</span
 									>
 								</span>

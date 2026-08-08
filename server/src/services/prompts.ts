@@ -81,22 +81,23 @@ function toPublicGlobalPrompt(p: IPrompt): PublicPrompt {
 	};
 }
 
+/** Per-team: 0 DB rows → JSON defaults; ≥1 → DB only. */
+export function resolveTeamBonusPrompts<T>(
+	jsonBonuses: T[],
+	dbBonuses: T[],
+): T[] {
+	return dbBonuses.length === 0 ? jsonBonuses : dbBonuses;
+}
+
 function mergeTeams(baseTeams: Team[], pool: IPrompt[]): Team[] {
 	return baseTeams.map((team) => {
 		const fromDb = pool
 			.filter((p) => p.kind === 'team_bonus' && p.teamId === team.id)
 			.map((p) => ({ id: p.promptId, label: p.label, points: p.points }));
 
-		if (fromDb.length === 0) {
-			return team;
-		}
-
-		const dbIds = new Set(fromDb.map((p) => p.id));
-		const fromStatic = team.bonusPrompts.filter((p) => !dbIds.has(p.id));
-
 		return {
 			...team,
-			bonusPrompts: [...fromDb, ...fromStatic],
+			bonusPrompts: resolveTeamBonusPrompts(team.bonusPrompts, fromDb),
 		};
 	});
 }

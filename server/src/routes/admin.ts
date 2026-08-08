@@ -30,6 +30,7 @@ import {
 import {
   calculateScore,
   calculateStandings,
+  normalizeGlobalBonusFields,
   submissionToPublic,
   validateSubmission,
   type SubmissionInput,
@@ -746,6 +747,7 @@ adminRoutes.get('/submissions', async (c) => {
       finishedAt: null,
       promptIds: [] as string[],
       bonusCompetition: false,
+      bonusGlobalPromptId: null as string | null,
       bonusTeamPromptIds: [] as string[],
       deletedAt: sub.deletedAt ?? null,
       deletedBy: sub.deletedBy?.toString() ?? null,
@@ -856,6 +858,7 @@ adminRoutes.post('/submissions', async (c) => {
   if (error) return c.json({ error }, 400)
 
   const score = calculateScore(owner, body)
+  const globalFields = normalizeGlobalBonusFields(body)
 
   const submission = await Submission.create({
     userId: owner._id,
@@ -869,7 +872,8 @@ adminRoutes.post('/submissions', async (c) => {
     submissionType: body.submissionType,
     targetTeamId: body.submissionType === 'sabotage' ? (body.targetTeamId ?? null) : null,
     promptIds: body.promptIds,
-    bonusCompetition: body.bonusCompetition,
+    bonusCompetition: globalFields.bonusCompetition,
+    bonusGlobalPromptId: globalFields.bonusGlobalPromptId,
     bonusTeamPromptIds: body.bonusTeamPromptIds,
     pageBonus: score.pageBonus,
     promptPoints: score.promptPoints,
@@ -906,6 +910,7 @@ adminRoutes.patch('/submissions/:id', async (c) => {
   if (error) return c.json({ error }, 400)
 
   const score = calculateScore(owner, body)
+  const globalFields = normalizeGlobalBonusFields(body)
 
   submission.bookTitle = body.bookTitle.trim()
   submission.bookAuthor = body.bookAuthor.trim()
@@ -917,7 +922,8 @@ adminRoutes.patch('/submissions/:id', async (c) => {
   submission.submissionType = body.submissionType
   submission.targetTeamId = body.submissionType === 'sabotage' ? (body.targetTeamId ?? null) : null
   submission.promptIds = body.promptIds
-  submission.bonusCompetition = body.bonusCompetition
+  submission.bonusCompetition = globalFields.bonusCompetition
+  submission.bonusGlobalPromptId = globalFields.bonusGlobalPromptId
   submission.bonusTeamPromptIds = body.bonusTeamPromptIds
   submission.pageBonus = score.pageBonus
   submission.promptPoints = score.promptPoints
@@ -1233,6 +1239,37 @@ adminRoutes.get('/prompts', async (c) => {
       (p) => p.isActive && p.goesLiveAt && new Date(p.goesLiveAt) > new Date(),
     ).length,
     draftCount: rows.filter((p) => !p.isActive).length,
+  })
+})
+
+/** Per-team bonus setup: JSON defaults vs DB overrides. */
+adminRoutes.get('/team-bonuses', async (c) => {
+  const staticTeams = getStaticConfig().teams
+  const rows = await Prompt.find({ kind: 'team_bonus' }).sort({
+    sortOrder: 1,
+    label: 1,
+  })
+  const byTeam = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const tid = row.teamId ?? ''
+    const list = byTeam.get(tid) ?? []
+    list.push(row)
+    byTeam.set(tid, list)
+  }
+
+  return c.json({
+    teams: staticTeams.map((team) => {
+      const dbRows = byTeam.get(team.id) ?? []
+      return {
+        teamId: team.id,
+        teamName: team.name,
+        color: team.color,
+        icon: team.icon,
+        source: dbRows.length === 0 ? 'json' : 'db',
+        jsonDefaults: team.bonusPrompts,
+        prompts: dbRows.map(promptToAdminPublic),
+      }
+    }),
   })
 })
 

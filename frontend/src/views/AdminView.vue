@@ -19,6 +19,7 @@ import {
 import StandingsPanel from '../components/StandingsPanel.vue';
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue';
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue';
+import AdminTeamBonusesPanel from '../components/AdminTeamBonusesPanel.vue';
 import AdminStatsPanel from '../components/AdminStatsPanel.vue';
 import AdminSettingsPanel from '../components/AdminSettingsPanel.vue';
 import AdminMonthlyThemesPanel from '../components/AdminMonthlyThemesPanel.vue';
@@ -138,6 +139,7 @@ const activeTab = ref<
 	| 'users'
 	| 'submissions'
 	| 'prompts'
+	| 'teamBonuses'
 	| 'stats'
 	| 'audit'
 	| 'themes'
@@ -356,6 +358,7 @@ onMounted(async () => {
 			'users',
 			'submissions',
 			'prompts',
+			'teamBonuses',
 			'stats',
 			'audit',
 			'themes',
@@ -1309,6 +1312,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						@click="setTab('prompts')"
 					>
 						{{ section('tabs').prompts }}
+					</button>
+					<button
+						type="button"
+						:class="{ active: activeTab === 'teamBonuses' }"
+						@click="setTab('teamBonuses')"
+					>
+						{{ section('tabs').teamBonuses ?? 'Team bonuses' }}
 					</button>
 					<button
 						type="button"
@@ -2558,6 +2568,16 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					"
 				/>
 
+				<AdminTeamBonusesPanel
+					v-if="activeTab === 'teamBonuses'"
+					@message="
+						(text, isError) => {
+							showMessage(text, isError);
+							loadConfig(true);
+						}
+					"
+				/>
+
 				<!-- Audit log -->
 				<section v-if="activeTab === 'audit'" class="card admin-section audit-section">
 					<header class="audit-header">
@@ -2702,7 +2722,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 			:positive-prompts="config.prompts.positive"
 			:negative-prompts="config.prompts.negative"
 			:max-prompts="config.scoringRules.maxPromptsPerBook ?? 5"
-			:global-bonus-label="config.globalBonuses?.[0]?.label"
+			:global-bonuses="config.globalBonuses"
 			:editing="editSubmission || viewSubmission"
 			:readonly="!!viewSubmission && !editSubmission"
 			@close="closeSubmissionModal"
