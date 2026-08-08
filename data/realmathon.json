@@ -121,6 +121,7 @@
 		"submitBonusesTitle": "Bonus prompts",
 		"submitBonusesHint": "Optional extras - they don't count toward your {maxPrompts} prompts.",
 		"submitTeamBonusesLabel": "{teamName} team bonuses",
+		"submitGlobalBonusesLabel": "Global bonuses",
 		"submitTeamBonusSub": "Team bonus prompt",
 		"submitReviewTitle": "Review & submit",
 		"submitReviewHint": "Double-check everything - submissions can't be edited after sending.",
@@ -194,6 +195,7 @@
 				"submissions": "Submissions",
 				"stats": "Stats",
 				"prompts": "Prompts",
+				"teamBonuses": "Team bonuses",
 				"audit": "Audit",
 				"settings": "Settings",
 				"config": "Config"
@@ -649,6 +651,30 @@
 			"id": "competition-trials",
 			"label": "Competition / trials in the book",
 			"description": "The story involves a competition or trials.",
+			"points": 10
+		},
+		{
+			"id": "amnesia-memory-loss",
+			"label": "Amnesia / memory loss",
+			"description": "A character has forgotten something important.",
+			"points": 10
+		},
+		{
+			"id": "dual-timeline",
+			"label": "Dual timeline",
+			"description": "Past and present (or two eras) braid together.",
+			"points": 10
+		},
+		{
+			"id": "under-250-pages",
+			"label": "Under 250 pages",
+			"description": "A short, complete read.",
+			"points": 10
+		},
+		{
+			"id": "rivals-to-allies",
+			"label": "Rivals to allies",
+			"description": "Competitors who learn to fight on the same side.",
 			"points": 10
 		}
 	],
