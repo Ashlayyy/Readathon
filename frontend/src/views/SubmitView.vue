@@ -66,7 +66,7 @@ const duplicateWarning = ref(false)
 const submissionType = ref<'add' | 'sabotage' | null>(null)
 const targetTeamId = ref('')
 const selectedPromptIds = ref<string[]>([])
-const bonusCompetition = ref(false)
+const bonusGlobalPromptId = ref<string | null>(null)
 const bonusTeamPromptIds = ref<string[]>([])
 
 onMounted(loadConfig)
@@ -142,8 +142,9 @@ const submissionSign = computed(() => (submissionType.value === 'add' ? 1 : subm
 const estimatedBonusPoints = computed(() => {
   if (!config.value || !userTeam.value || !submissionSign.value) return 0
   let sum = 0
-  if (bonusCompetition.value) {
-    sum += (config.value.globalBonuses[0]?.points ?? 10) * submissionSign.value
+  if (bonusGlobalPromptId.value) {
+    const gb = config.value.globalBonuses.find((g) => g.id === bonusGlobalPromptId.value)
+    if (gb) sum += gb.points * submissionSign.value
   }
   for (const id of bonusTeamPromptIds.value) {
     const tp = userTeam.value.bonusPrompts.find((p) => p.id === id)
@@ -167,17 +168,36 @@ const selectedPromptDetails = computed(() => {
 const selectedBonusDetails = computed(() => {
   if (!config.value || !userTeam.value || !submissionSign.value) return [] as Array<{ label: string; points: number }>
   const rows: Array<{ label: string; points: number }> = []
-  if (bonusCompetition.value && config.value.globalBonuses[0]) {
-    rows.push({
-      label: config.value.globalBonuses[0].label,
-      points: config.value.globalBonuses[0].points * submissionSign.value,
-    })
+  if (bonusGlobalPromptId.value) {
+    const gb = config.value.globalBonuses.find((g) => g.id === bonusGlobalPromptId.value)
+    if (gb) {
+      rows.push({
+        label: gb.label,
+        points: gb.points * submissionSign.value,
+      })
+    }
   }
   for (const id of bonusTeamPromptIds.value) {
     const tp = userTeam.value.bonusPrompts.find((p) => p.id === id)
     if (tp) rows.push({ label: tp.label, points: tp.points * submissionSign.value })
   }
   return rows
+})
+
+const sortedTeamBonuses = computed(() => {
+  const list = userTeam.value?.bonusPrompts ?? []
+  return [...list].sort((a, b) => {
+    if (a.points !== b.points) return a.points - b.points
+    return a.label.localeCompare(b.label)
+  })
+})
+
+const sortedGlobalBonuses = computed(() => {
+  const list = config.value?.globalBonuses ?? []
+  return [...list].sort((a, b) => {
+    if (a.points !== b.points) return a.points - b.points
+    return a.label.localeCompare(b.label)
+  })
 })
 
 function formatSignedXp(value: number): string {
@@ -201,20 +221,16 @@ function bonusPointsLabel(points: number): string {
 
 const bonusCount = computed(
   () =>
-    bonusTeamPromptIds.value.length +
-    (bonusCompetition.value ? (config.value?.globalBonuses.length ?? 0) > 0 ? 1 : 0 : 0),
+    bonusTeamPromptIds.value.length + (bonusGlobalPromptId.value ? 1 : 0),
 )
 
 function toggleGlobalBonus(bonusId: string) {
-  const firstId = config.value?.globalBonuses[0]?.id
-  if (bonusId === firstId) {
-    bonusCompetition.value = !bonusCompetition.value
-  }
+  bonusGlobalPromptId.value =
+    bonusGlobalPromptId.value === bonusId ? null : bonusId
 }
 
 function isGlobalBonusSelected(bonusId: string) {
-  const firstId = config.value?.globalBonuses[0]?.id
-  return bonusId === firstId && bonusCompetition.value
+  return bonusGlobalPromptId.value === bonusId
 }
 
 function globalBonusLabel(bonus: { points: number }) {
@@ -419,7 +435,8 @@ async function submit() {
         submissionType: submissionType.value,
         targetTeamId: submissionType.value === 'sabotage' ? targetTeamId.value : undefined,
         promptIds: selectedPromptIds.value,
-        bonusCompetition: bonusCompetition.value,
+        bonusCompetition: Boolean(bonusGlobalPromptId.value),
+        bonusGlobalPromptId: bonusGlobalPromptId.value,
         bonusTeamPromptIds: bonusTeamPromptIds.value,
       }),
     })
@@ -513,7 +530,7 @@ function reset() {
   audiobookMinutes.value = null
   duplicateWarning.value = false
   selectedPromptIds.value = []
-  bonusCompetition.value = false
+  bonusGlobalPromptId.value = null
   bonusTeamPromptIds.value = []
   submissionType.value = null
   targetTeamId.value = ''
@@ -769,32 +786,10 @@ function reset() {
         </div>
 
         <div class="pick-list">
-          <button
-            v-for="gb in config.globalBonuses"
-            :key="gb.id"
-            type="button"
-            class="pick-item bonus"
-            :class="{ selected: isGlobalBonusSelected(gb.id) }"
-            :aria-pressed="isGlobalBonusSelected(gb.id)"
-            @click="toggleGlobalBonus(gb.id)"
-          >
-            <span class="pick-check" aria-hidden="true">{{ isGlobalBonusSelected(gb.id) ? '✓' : '' }}</span>
-            <span class="pick-content">
-              <span class="pick-top">
-                <span
-                  class="xp-pill"
-                  :class="submissionSign < 0 ? 'attack' : 'gain'"
-                >{{ globalBonusLabel(gb) }} points</span>
-                <strong>{{ gb.label }}</strong>
-              </span>
-              <span class="pick-sub">{{ gb.description }}</span>
-            </span>
-          </button>
-
-          <template v-if="userTeam">
+          <template v-if="userTeam && sortedTeamBonuses.length">
             <p class="bonus-section-label">{{ t(String(config.copy.submitTeamBonusesLabel), { teamName: userTeam.name }) }}</p>
             <button
-              v-for="tp in userTeam.bonusPrompts"
+              v-for="tp in sortedTeamBonuses"
               :key="tp.id"
               type="button"
               class="pick-item bonus"
@@ -815,6 +810,29 @@ function reset() {
               </span>
             </button>
           </template>
+
+          <p v-if="sortedGlobalBonuses.length" class="bonus-section-label">{{ config.copy.submitGlobalBonusesLabel ?? 'Global bonuses' }}</p>
+          <button
+            v-for="gb in sortedGlobalBonuses"
+            :key="gb.id"
+            type="button"
+            class="pick-item bonus"
+            :class="{ selected: isGlobalBonusSelected(gb.id) }"
+            :aria-pressed="isGlobalBonusSelected(gb.id)"
+            @click="toggleGlobalBonus(gb.id)"
+          >
+            <span class="pick-check" aria-hidden="true">{{ isGlobalBonusSelected(gb.id) ? '✓' : '' }}</span>
+            <span class="pick-content">
+              <span class="pick-top">
+                <span
+                  class="xp-pill"
+                  :class="submissionSign < 0 ? 'attack' : 'gain'"
+                >{{ globalBonusLabel(gb) }} points</span>
+                <strong>{{ gb.label }}</strong>
+              </span>
+              <span class="pick-sub">{{ gb.description }}</span>
+            </span>
+          </button>
         </div>
 
         <SubmitXpPreview
@@ -1913,9 +1931,11 @@ function reset() {
 
   .wizard :deep(.xp-preview-panel) {
     position: sticky;
-    bottom: 0.75rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
     z-index: 5;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+    max-height: 40dvh;
+    overflow: auto;
   }
 
   .progress-step:not(.current) .progress-label {

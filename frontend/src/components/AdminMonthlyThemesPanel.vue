@@ -59,6 +59,7 @@ type PromptRow = {
 	label: string
 	kind: string
 	gameName: string
+	points: number
 }
 
 const loaded = ref(false)
@@ -248,6 +249,7 @@ async function loadPrompts() {
 				label: string
 				kind: string
 				gameName: string
+				points?: number
 				isLive?: boolean
 			}[]
 		}>('/admin/prompts')
@@ -259,7 +261,9 @@ async function loadPrompts() {
 				label: p.label,
 				kind: p.kind,
 				gameName: p.gameName,
+				points: typeof p.points === 'number' ? p.points : 0,
 			}))
+			.sort((a, b) => Math.abs(b.points) - Math.abs(a.points) || b.points - a.points)
 		if (rows.length > 0) {
 			allPrompts.value = rows
 			return
@@ -279,6 +283,7 @@ async function loadPrompts() {
 			label: p.label,
 			kind: 'positive',
 			gameName: p.gameName,
+			points: p.points,
 		})),
 		...cfg.prompts.negative.map((p) => ({
 			id: p.id,
@@ -286,8 +291,9 @@ async function loadPrompts() {
 			label: p.label,
 			kind: 'negative',
 			gameName: p.gameName,
+			points: p.points,
 		})),
-	]
+	].sort((a, b) => Math.abs(b.points) - Math.abs(a.points) || b.points - a.points)
 }
 
 function seedBaseColorsFromConfig() {
@@ -986,9 +992,12 @@ Paragraph two…"
 										/>
 										<span>
 											<strong>{{ p.label }}</strong>
-											<span class="prompt-meta"
-												>{{ p.kind }} · {{ p.gameName || p.promptId }}</span
-											>
+											<span class="prompt-meta">
+												{{ p.kind }} · {{ p.gameName || p.promptId }} ·
+												<span class="prompt-pts"
+													>{{ p.points > 0 ? '+' : '' }}{{ p.points }}</span
+												>
+											</span>
 										</span>
 									</label>
 								</li>
@@ -1550,6 +1559,12 @@ Paragraph two…"
 	display: block;
 	font-size: 0.72rem;
 	color: var(--realm-text-muted);
+}
+
+.prompt-pts {
+	font-weight: 700;
+	color: var(--realm-accent);
+	font-variant-numeric: tabular-nums;
 }
 
 .mono {

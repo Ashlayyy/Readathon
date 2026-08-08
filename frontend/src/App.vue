@@ -50,12 +50,23 @@ const playNavItems = computed(() => [
 	},
 ]);
 
-const aboutNavItems = computed(() => [
-	{ to: '/how-it-works', label: nav.value.howItWorks ?? 'Rules' },
-	{ to: '/teams', label: nav.value.teams ?? 'Teams' },
-	{ to: '/shelf', label: nav.value.shelf ?? 'Shelf' },
-	{ to: '/faq', label: nav.value.faq ?? 'FAQ' },
-]);
+const aboutNavItems = computed(() => {
+	const items = [
+		{ to: '/how-it-works', label: nav.value.howItWorks ?? 'Rules' },
+		{ to: '/teams', label: nav.value.teams ?? 'Teams' },
+		{ to: '/shelf', label: nav.value.shelf ?? 'Shelf' },
+		{ to: '/hall-of-fame', label: nav.value.hallOfFame ?? 'Hall of Fame' },
+		{ to: '/faq', label: nav.value.faq ?? 'FAQ' },
+	]
+	const slug = config.value?.site?.seasonArchive?.slug?.trim()
+	if (slug) {
+		items.splice(3, 0, {
+			to: `/archive/${slug}`,
+			label: nav.value.archive ?? 'Archive',
+		})
+	}
+	return items
+});
 
 watch(
 	() => user.value?.isAdmin,

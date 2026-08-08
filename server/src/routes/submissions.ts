@@ -5,6 +5,7 @@ import { getSessionUser, requireAuth } from '../services/auth.js';
 import {
 	calculateScore,
 	findDuplicateSubmission,
+	normalizeGlobalBonusFields,
 	submissionToPublic,
 	validateSubmission,
 	type SubmissionInput,
@@ -76,6 +77,7 @@ submissionRoutes.post('/', async (c) => {
 	if (error) return c.json({ error }, 400);
 
 	const score = calculateScore(user, body);
+	const globalFields = normalizeGlobalBonusFields(body);
 
 	const submission = await Submission.create({
 		userId: user._id,
@@ -89,7 +91,8 @@ submissionRoutes.post('/', async (c) => {
 		submissionType: body.submissionType,
 		targetTeamId: body.targetTeamId ?? null,
 		promptIds: body.promptIds,
-		bonusCompetition: body.bonusCompetition,
+		bonusCompetition: globalFields.bonusCompetition,
+		bonusGlobalPromptId: globalFields.bonusGlobalPromptId,
 		bonusTeamPromptIds: body.bonusTeamPromptIds,
 		pageBonus: score.pageBonus,
 		promptPoints: score.promptPoints,
@@ -142,6 +145,7 @@ submissionRoutes.post('/', async (c) => {
 							: globalTemplates,
 				},
 			),
+			submission.coverUrl?.trim() || null,
 		);
 	}
 

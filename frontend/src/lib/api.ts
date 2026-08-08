@@ -337,6 +337,7 @@ export type Submission = {
   targetTeamId: string | null
   promptIds: string[]
   bonusCompetition: boolean
+  bonusGlobalPromptId?: string | null
   bonusTeamPromptIds: string[]
   pageBonus: number
   promptPoints: number

@@ -15,6 +15,8 @@ const submissionSchema = new Schema(
     targetTeamId: { type: String, default: null },
     promptIds: { type: [String], required: true },
     bonusCompetition: { type: Boolean, default: false },
+    /** Selected global bonus id; null = none. Legacy rows may only set bonusCompetition. */
+    bonusGlobalPromptId: { type: String, default: null },
     bonusTeamPromptIds: { type: [String], default: [] },
     pageBonus: { type: Number, default: 0 },
     promptPoints: { type: Number, default: 0 },

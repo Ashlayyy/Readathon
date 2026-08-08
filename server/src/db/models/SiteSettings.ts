@@ -61,6 +61,10 @@ const siteSettingsSchema = new Schema(
     monthlyWrapOnPublish: { type: Boolean, default: false },
     /** Idempotency key for auto wrap, e.g. "2026-08" */
     lastMonthlyWrapMonthKey: { type: String, default: '' },
+    /** Last 4-week wrap SVG for site display (Home / Standings / Archive). */
+    lastMonthlyWrapSvg: { type: String, default: '' },
+    lastMonthlyWrapLabel: { type: String, default: '' },
+    lastMonthlyWrapAt: { type: Date, default: null },
   },
   { timestamps: true },
 )

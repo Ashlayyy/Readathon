@@ -5,6 +5,8 @@ export type DiscordDeliveryMode = 'webhook' | 'bot'
 export type DiscordTextSendOpts = {
 	content: string
 	roleId?: string
+	/** Public image URL for an embed (e.g. book cover). Skipped when empty. */
+	imageUrl?: string
 }
 
 export type DiscordImageSendOpts = {
@@ -40,9 +42,13 @@ export function webhookUrlWithWait(webhookUrl: string): string {
 export function createWebhookTransport(webhookUrl: string): DiscordTransport {
 	return {
 		async sendText(opts) {
-			const payload = {
+			const payload: Record<string, unknown> = {
 				content: opts.content,
 				allowed_mentions: buildAllowedMentions(opts.roleId),
+			}
+			const imageUrl = opts.imageUrl?.trim()
+			if (imageUrl) {
+				payload.embeds = [{ image: { url: imageUrl } }]
 			}
 			try {
 				const res = await fetch(webhookUrlWithWait(webhookUrl), {
@@ -111,9 +117,13 @@ export function createBotTransport(
 
 	return {
 		async sendText(opts) {
-			const payload = {
+			const payload: Record<string, unknown> = {
 				content: opts.content,
 				allowed_mentions: buildAllowedMentions(opts.roleId),
+			}
+			const imageUrl = opts.imageUrl?.trim()
+			if (imageUrl) {
+				payload.embeds = [{ image: { url: imageUrl } }]
 			}
 			try {
 				const res = await fetch(

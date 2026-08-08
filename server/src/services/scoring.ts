@@ -19,8 +19,33 @@ export type SubmissionInput = {
 	targetTeamId?: string;
 	promptIds: string[];
 	bonusCompetition: boolean;
+	/** Preferred: which global bonus was picked. Legacy clients may only set bonusCompetition. */
+	bonusGlobalPromptId?: string | null;
 	bonusTeamPromptIds: string[];
 };
+
+/** Resolve selected global bonus id with legacy bonusCompetition fallback. */
+export function resolveGlobalBonusId(
+	input: Pick<SubmissionInput, 'bonusCompetition' | 'bonusGlobalPromptId'>,
+	globalBonuses: { id: string }[],
+): string | null {
+	const explicit = input.bonusGlobalPromptId?.trim() || null;
+	if (explicit) return explicit;
+	if (input.bonusCompetition && globalBonuses[0]) return globalBonuses[0].id;
+	return null;
+}
+
+/** Normalize stored fields: keep bonusCompetition in sync with selected id. */
+export function normalizeGlobalBonusFields(
+	input: Pick<SubmissionInput, 'bonusCompetition' | 'bonusGlobalPromptId'>,
+	globalBonuses: { id: string }[] = getConfigWithPrompts().globalBonuses,
+): { bonusGlobalPromptId: string | null; bonusCompetition: boolean } {
+	const id = resolveGlobalBonusId(input, globalBonuses);
+	return {
+		bonusGlobalPromptId: id,
+		bonusCompetition: Boolean(id),
+	};
+}
 
 function normalizeBook(title: string, author: string) {
 	return {
@@ -156,6 +181,12 @@ export async function validateSubmission(
 		}
 	}
 
+	const config = getConfigWithPrompts();
+	const globalId = resolveGlobalBonusId(input, config.globalBonuses);
+	if (globalId && !config.globalBonuses.some((g) => g.id === globalId)) {
+		return 'Invalid global bonus prompt.';
+	}
+
 	return null;
 }
 
@@ -174,13 +205,16 @@ export function calculateScore(
 
 	const bonusDetails: { id: string; label: string; points: number }[] = [];
 
-	if (input.bonusCompetition) {
-		const pts = (config.globalBonuses[0]?.points ?? 10) * sign;
-		bonusDetails.push({
-			id: 'competition-trials',
-			label: config.globalBonuses[0]?.label ?? 'Competition / trials',
-			points: pts,
-		});
+	const globalId = resolveGlobalBonusId(input, config.globalBonuses);
+	if (globalId) {
+		const gb = config.globalBonuses.find((g) => g.id === globalId);
+		if (gb) {
+			bonusDetails.push({
+				id: gb.id,
+				label: gb.label,
+				points: gb.points * sign,
+			});
+		}
 	}
 
 	for (const id of input.bonusTeamPromptIds) {
@@ -352,6 +386,11 @@ export function submissionToPublic(sub: ISubmission & { createdAt?: Date }) {
 		targetTeamId: sub.targetTeamId,
 		promptIds: sub.promptIds,
 		bonusCompetition: sub.bonusCompetition,
+		bonusGlobalPromptId:
+			(sub as { bonusGlobalPromptId?: string | null }).bonusGlobalPromptId ??
+			(sub.bonusCompetition
+				? (getConfigWithPrompts().globalBonuses[0]?.id ?? null)
+				: null),
 		bonusTeamPromptIds: sub.bonusTeamPromptIds,
 		pageBonus: sub.pageBonus,
 		promptPoints: sub.promptPoints,

@@ -19,6 +19,7 @@ import {
 import StandingsPanel from '../components/StandingsPanel.vue';
 import StandingsBreakdownPanel from '../components/StandingsBreakdownPanel.vue';
 import AdminPromptsPanel from '../components/AdminPromptsPanel.vue';
+import AdminTeamBonusesPanel from '../components/AdminTeamBonusesPanel.vue';
 import AdminStatsPanel from '../components/AdminStatsPanel.vue';
 import AdminSettingsPanel from '../components/AdminSettingsPanel.vue';
 import AdminMonthlyThemesPanel from '../components/AdminMonthlyThemesPanel.vue';
@@ -138,6 +139,7 @@ const activeTab = ref<
 	| 'users'
 	| 'submissions'
 	| 'prompts'
+	| 'teamBonuses'
 	| 'stats'
 	| 'audit'
 	| 'themes'
@@ -356,6 +358,7 @@ onMounted(async () => {
 			'users',
 			'submissions',
 			'prompts',
+			'teamBonuses',
 			'stats',
 			'audit',
 			'themes',
@@ -1312,6 +1315,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					</button>
 					<button
 						type="button"
+						:class="{ active: activeTab === 'teamBonuses' }"
+						@click="setTab('teamBonuses')"
+					>
+						{{ section('tabs').teamBonuses ?? 'Team bonuses' }}
+					</button>
+					<button
+						type="button"
 						:class="{ active: activeTab === 'audit' }"
 						@click="setTab('audit')"
 					>
@@ -1560,23 +1570,6 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 								<button
 									type="button"
 									class="preview-image-btn"
-									aria-label="View score breakdown preview larger"
-									@click="
-										showLightbox(
-											apiUrl(previewData.breakdownSvgUrl),
-											'Score breakdown preview',
-										)
-									"
-								>
-									<img
-										:src="apiUrl(previewData.breakdownSvgUrl)"
-										alt="Score breakdown preview"
-										class="preview-image"
-									/>
-								</button>
-								<button
-									type="button"
-									class="preview-image-btn"
 									aria-label="View vibes preview larger"
 									@click="
 										showLightbox(
@@ -1591,6 +1584,23 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 										class="preview-image"
 									/>
 								</button>
+								<button
+									type="button"
+									class="preview-image-btn"
+									aria-label="View score breakdown preview larger"
+									@click="
+										showLightbox(
+											apiUrl(previewData.breakdownSvgUrl),
+											'Score breakdown preview',
+										)
+									"
+								>
+									<img
+										:src="apiUrl(previewData.breakdownSvgUrl)"
+										alt="Score breakdown preview"
+										class="preview-image"
+									/>
+								</button>
 								<p class="webhook-status">
 									Notifies: {{ previewData.whoGetsNotified.emails }} email{{
 										previewData.whoGetsNotified.emails === 1 ? '' : 's'
@@ -1602,6 +1612,29 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 										(role {{ previewData.whoGetsNotified.discordRoleId }})</span
 									>
 								</p>
+								<ul class="publish-checklist" aria-label="Publish checklist">
+									<li>
+										Standings + vibes + breakdown images ready for
+										{{ previewData.weekLabel }}
+									</li>
+									<li>
+										Email recipients:
+										{{ previewData.whoGetsNotified.emails }}
+									</li>
+									<li>
+										Discord:
+										{{
+											previewData.whoGetsNotified.discord
+												? 'will post to production channel'
+												: 'not configured / skipped'
+										}}
+									</li>
+									<li v-if="includeMonthlyWrapOnPublish">
+										4-week wrap attached
+										<span v-if="wrapStatus?.atypical"> (atypical — confirm below)</span>
+									</li>
+									<li v-else>4-week wrap not included</li>
+								</ul>
 								<div class="modal-actions">
 									<button type="button" class="btn btn-ghost" @click="closePreview">
 										Cancel
@@ -2535,6 +2568,16 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					"
 				/>
 
+				<AdminTeamBonusesPanel
+					v-if="activeTab === 'teamBonuses'"
+					@message="
+						(text, isError) => {
+							showMessage(text, isError);
+							loadConfig(true);
+						}
+					"
+				/>
+
 				<!-- Audit log -->
 				<section v-if="activeTab === 'audit'" class="card admin-section audit-section">
 					<header class="audit-header">
@@ -2679,7 +2722,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 			:positive-prompts="config.prompts.positive"
 			:negative-prompts="config.prompts.negative"
 			:max-prompts="config.scoringRules.maxPromptsPerBook ?? 5"
-			:global-bonus-label="config.globalBonuses?.[0]?.label"
+			:global-bonuses="config.globalBonuses"
 			:editing="editSubmission || viewSubmission"
 			:readonly="!!viewSubmission && !editSubmission"
 			@close="closeSubmissionModal"
@@ -3780,6 +3823,21 @@ small {
 	margin: 0;
 	font-size: 0.88rem;
 	color: var(--realm-text-muted);
+}
+
+.publish-checklist {
+	margin: 0.75rem 0 0;
+	padding: 0.65rem 0.85rem 0.65rem 1.4rem;
+	border-radius: 8px;
+	border: 1px solid var(--realm-border);
+	background: color-mix(in srgb, var(--realm-bg) 70%, transparent);
+	font-size: 0.85rem;
+	color: var(--realm-text-muted);
+	line-height: 1.45;
+}
+
+.publish-checklist li {
+	margin: 0.2rem 0;
 }
 
 .publish-range-section {

@@ -30,6 +30,7 @@ import {
 import {
   calculateScore,
   calculateStandings,
+  normalizeGlobalBonusFields,
   submissionToPublic,
   validateSubmission,
   type SubmissionInput,
@@ -46,6 +47,7 @@ import {
   type SiteSettingsAdminPatch,
 } from '../services/siteSettings.js'
 import { publishStandings, PublishWrapConfirmationRequiredError, getMonthlyWrapPublishInfo } from '../services/standingsPublish.js'
+import { closeSeason } from '../services/seasonClose.js'
 import { buildStandingsDigestDraft } from '../services/standingsDigest.js'
 import {
   sendDiscordChannelMessage,
@@ -146,7 +148,15 @@ adminRoutes.post('/users', async (c) => {
 })
 
 adminRoutes.get('/settings', (c) => {
-  return c.json({ settings: getSiteSettingsAdminSync() })
+  const settings = getSiteSettingsAdminSync()
+  // Never ship the wrap SVG blob to the admin SPA (can be huge).
+  const { lastMonthlyWrapSvg: _svg, ...safe } = settings
+  return c.json({
+    settings: {
+      ...safe,
+      lastMonthlyWrapConfigured: Boolean(_svg?.trim()),
+    },
+  })
 })
 
 /**
@@ -221,7 +231,15 @@ adminRoutes.patch('/settings', async (c) => {
       })
     }
 
-    return c.json({ settings })
+    return c.json({
+      settings: (() => {
+        const { lastMonthlyWrapSvg: _svg, ...safe } = settings
+        return {
+          ...safe,
+          lastMonthlyWrapConfigured: Boolean(_svg?.trim()),
+        }
+      })(),
+    })
   } catch (e) {
     if (e instanceof Error && e.message === 'Invalid Discord webhook URL') {
       return c.json({ error: e.message }, 400)
@@ -244,6 +262,63 @@ adminRoutes.patch('/settings', async (c) => {
     }
     throw e
   }
+})
+
+/**
+ * One-click season archive. Sets seasonArchive (and optional downtime).
+ * Does not run automatically — admin must call this.
+ */
+adminRoutes.post('/season/close', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
+  const body = await c.req.json<{
+    enableDowntime?: boolean
+    title?: string
+    message?: string
+    slug?: string
+    from?: string
+    to?: string
+  }>()
+  const result = await closeSeason(admin, {
+    enableDowntime: Boolean(body.enableDowntime),
+    title: body.title,
+    message: body.message,
+    slug: body.slug,
+    from: body.from,
+    to: body.to,
+  })
+  return c.json(result)
+})
+
+/** Aggregated Discord readiness for Admin health card. */
+adminRoutes.get('/discord/health', async (c) => {
+  requireAdmin(await getSessionUser(c))
+  const settings = getSiteSettingsAdminSync()
+  const { getDiscordGatewayStatus } = await import('../discord/gateway.js')
+  const { isDiscordChannelConfigured } = await import('../discord/delivery.js')
+  const gateway = getDiscordGatewayStatus()
+  const published = await PublishedStandings.findOne({ isActive: true }).sort({
+    createdAt: -1,
+  })
+  return c.json({
+    health: {
+      botTokenConfigured: settings.discordBotTokenConfigured,
+      primaryGuildId: settings.discordPrimaryGuildId || null,
+      productionConfigured: isDiscordChannelConfigured('production'),
+      testConfigured: isDiscordChannelConfigured('test'),
+      productionRoleId: Boolean(settings.discordProductionRoleId?.trim()),
+      testRoleId: Boolean(settings.discordTestRoleId?.trim()),
+      teamChatHooksEnabled: settings.teamChatHooksEnabled,
+      scheduledPublishEnabled: settings.scheduledPublishEnabled,
+      monthlyWrapOnPublish: settings.monthlyWrapOnPublish,
+      lastMonthlyWrapMonthKey: settings.lastMonthlyWrapMonthKey || null,
+      lastMonthlyWrapAt: settings.lastMonthlyWrapAt,
+      gatewayReady: gateway.ready,
+      gatewayUser: gateway.user,
+      lastPublishedAt: published?.createdAt?.toISOString() ?? null,
+      lastPublishedWeekLabel: published?.weekLabel ?? null,
+      botGuildsCacheAt: settings.discordBotGuildsCache?.fetchedAt ?? null,
+    },
+  })
 })
 
 /** List guilds the bot is currently in (memory + DB cached; ?refresh=1 forces Discord). */
@@ -672,6 +747,7 @@ adminRoutes.get('/submissions', async (c) => {
       finishedAt: null,
       promptIds: [] as string[],
       bonusCompetition: false,
+      bonusGlobalPromptId: null as string | null,
       bonusTeamPromptIds: [] as string[],
       deletedAt: sub.deletedAt ?? null,
       deletedBy: sub.deletedBy?.toString() ?? null,
@@ -782,6 +858,7 @@ adminRoutes.post('/submissions', async (c) => {
   if (error) return c.json({ error }, 400)
 
   const score = calculateScore(owner, body)
+  const globalFields = normalizeGlobalBonusFields(body)
 
   const submission = await Submission.create({
     userId: owner._id,
@@ -795,7 +872,8 @@ adminRoutes.post('/submissions', async (c) => {
     submissionType: body.submissionType,
     targetTeamId: body.submissionType === 'sabotage' ? (body.targetTeamId ?? null) : null,
     promptIds: body.promptIds,
-    bonusCompetition: body.bonusCompetition,
+    bonusCompetition: globalFields.bonusCompetition,
+    bonusGlobalPromptId: globalFields.bonusGlobalPromptId,
     bonusTeamPromptIds: body.bonusTeamPromptIds,
     pageBonus: score.pageBonus,
     promptPoints: score.promptPoints,
@@ -832,6 +910,7 @@ adminRoutes.patch('/submissions/:id', async (c) => {
   if (error) return c.json({ error }, 400)
 
   const score = calculateScore(owner, body)
+  const globalFields = normalizeGlobalBonusFields(body)
 
   submission.bookTitle = body.bookTitle.trim()
   submission.bookAuthor = body.bookAuthor.trim()
@@ -843,7 +922,8 @@ adminRoutes.patch('/submissions/:id', async (c) => {
   submission.submissionType = body.submissionType
   submission.targetTeamId = body.submissionType === 'sabotage' ? (body.targetTeamId ?? null) : null
   submission.promptIds = body.promptIds
-  submission.bonusCompetition = body.bonusCompetition
+  submission.bonusCompetition = globalFields.bonusCompetition
+  submission.bonusGlobalPromptId = globalFields.bonusGlobalPromptId
   submission.bonusTeamPromptIds = body.bonusTeamPromptIds
   submission.pageBonus = score.pageBonus
   submission.promptPoints = score.promptPoints
@@ -1159,6 +1239,37 @@ adminRoutes.get('/prompts', async (c) => {
       (p) => p.isActive && p.goesLiveAt && new Date(p.goesLiveAt) > new Date(),
     ).length,
     draftCount: rows.filter((p) => !p.isActive).length,
+  })
+})
+
+/** Per-team bonus setup: JSON defaults vs DB overrides. */
+adminRoutes.get('/team-bonuses', async (c) => {
+  const staticTeams = getStaticConfig().teams
+  const rows = await Prompt.find({ kind: 'team_bonus' }).sort({
+    sortOrder: 1,
+    label: 1,
+  })
+  const byTeam = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const tid = row.teamId ?? ''
+    const list = byTeam.get(tid) ?? []
+    list.push(row)
+    byTeam.set(tid, list)
+  }
+
+  return c.json({
+    teams: staticTeams.map((team) => {
+      const dbRows = byTeam.get(team.id) ?? []
+      return {
+        teamId: team.id,
+        teamName: team.name,
+        color: team.color,
+        icon: team.icon,
+        source: dbRows.length === 0 ? 'json' : 'db',
+        jsonDefaults: team.bonusPrompts,
+        prompts: dbRows.map(promptToAdminPublic),
+      }
+    }),
   })
 })
 
