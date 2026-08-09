@@ -1612,7 +1612,7 @@ function openWrapPreview() {
 				</div>
 			</article>
 
-			<article id="discord" class="card settings-card settings-card-wide">
+			<article class="card settings-card settings-card-wide">
 				<div class="settings-card-head">
 					<div>
 						<h3>Discord settings</h3>

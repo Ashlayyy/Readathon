@@ -10,11 +10,8 @@ import SiteNavDropdown from './components/SiteNavDropdown.vue';
 import ThemeSwitcher from './components/ThemeSwitcher.vue';
 import UserAvatar from './components/UserAvatar.vue';
 import ImageLightbox from './components/ImageLightbox.vue';
-import EventSwitcher from './components/EventSwitcher.vue';
-import EventUnavailableView from './views/EventUnavailableView.vue';
 import { useBodyScrollLock } from './composables/useBodyScrollLock';
 import { useMonthlyThemePreview } from './composables/useMonthlyThemePreview';
-import { useTenant } from './composables/useTenant';
 import { APP_VERSION } from './lib/version';
 
 function prefetchProfile() {
@@ -22,25 +19,10 @@ function prefetchProfile() {
 }
 
 const { user, logout } = useAuth();
-const {
-	config,
-	configLoading,
-	configError,
-	tenantUnavailable,
-	loadConfig,
-	exitMonthlyThemePreview,
-} = useConfig();
+const { config, configLoading, configError, loadConfig, exitMonthlyThemePreview } =
+	useConfig();
 const { previewActive, previewTitle } = useMonthlyThemePreview();
 const { admin } = useAdminCopy();
-const { tenantHref, showTenantCue, accessModeLabel, tenantSlug, accessMode, productApex } =
-	useTenant();
-/** Path/subdomain URL hint under the brand — never repeat the event title. */
-const tenantUrlCue = computed(() => {
-	if (!showTenantCue.value || !tenantSlug.value) return null;
-	if (accessMode.value === 'path') return `/e/${tenantSlug.value}`;
-	if (accessMode.value === 'subdomain') return `${tenantSlug.value}.${productApex}`;
-	return null;
-});
 const route = useRoute();
 const router = useRouter();
 const unreadQuestions = ref(0);
@@ -51,17 +33,7 @@ async function exitThemePreview() {
 	await exitMonthlyThemePreview();
 }
 
-const isMaintenancePage = computed(
-	() =>
-		routeBaseName(route.name) === 'maintenance' ||
-		route.name === 'maintenance',
-);
-const isPlatformSurface = computed(() => route.meta.platform === true);
-
-function routeBaseName(name: unknown): string {
-	const s = String(name ?? '');
-	return s.startsWith('tenant-') ? s.slice('tenant-'.length) : s;
-}
+const isMaintenancePage = computed(() => route.name === 'maintenance');
 const downtimeActive = computed(
 	() => config.value?.site?.downtimeMode === true,
 );
@@ -69,10 +41,10 @@ const downtimeActive = computed(
 const nav = computed(() => config.value?.copy.nav ?? {});
 
 const playNavItems = computed(() => [
-	{ to: tenantHref('/prompts'), label: nav.value.prompts ?? 'Prompts' },
-	{ to: tenantHref('/standings'), label: nav.value.standings ?? 'Standings' },
+	{ to: '/prompts', label: nav.value.prompts ?? 'Prompts' },
+	{ to: '/standings', label: nav.value.standings ?? 'Standings' },
 	{
-		to: tenantHref('/submit'),
+		to: '/submit',
 		label: String(config.value?.copy.submitNav ?? 'Submit'),
 		show: user.value?.status === 'assigned',
 	},
@@ -80,16 +52,16 @@ const playNavItems = computed(() => [
 
 const aboutNavItems = computed(() => {
 	const items = [
-		{ to: tenantHref('/how-it-works'), label: nav.value.howItWorks ?? 'Rules' },
-		{ to: tenantHref('/teams'), label: nav.value.teams ?? 'Teams' },
-		{ to: tenantHref('/shelf'), label: nav.value.shelf ?? 'Shelf' },
-		{ to: tenantHref('/hall-of-fame'), label: nav.value.hallOfFame ?? 'Hall of Fame' },
-		{ to: tenantHref('/faq'), label: nav.value.faq ?? 'FAQ' },
+		{ to: '/how-it-works', label: nav.value.howItWorks ?? 'Rules' },
+		{ to: '/teams', label: nav.value.teams ?? 'Teams' },
+		{ to: '/shelf', label: nav.value.shelf ?? 'Shelf' },
+		{ to: '/hall-of-fame', label: nav.value.hallOfFame ?? 'Hall of Fame' },
+		{ to: '/faq', label: nav.value.faq ?? 'FAQ' },
 	]
 	const slug = config.value?.site?.seasonArchive?.slug?.trim()
 	if (slug) {
 		items.splice(3, 0, {
-			to: tenantHref(`/archive/${slug}`),
+			to: `/archive/${slug}`,
 			label: nav.value.archive ?? 'Archive',
 		})
 	}
@@ -168,8 +140,7 @@ function closeMenu() {
 </script>
 
 <template>
-	<RouterView v-if="isPlatformSurface" />
-	<div v-else class="app-shell">
+	<div class="app-shell">
 		<a href="#main-content" class="skip-link">Skip to content</a>
 
 		<header
@@ -179,23 +150,12 @@ function closeMenu() {
 		>
 			<div class="header-inner">
 				<div class="header-top">
-					<RouterLink
-						:to="tenantHref('/')"
-						class="brand"
-						:class="{ 'brand--tenant': Boolean(tenantUrlCue) }"
-						:title="accessModeLabel"
-						@click="closeMenu"
-					>
+					<RouterLink to="/" class="brand" @click="closeMenu">
 						<span class="brand-icon">⚔</span>
-						<span class="brand-stack">
-							<span v-if="config" class="brand-text">{{
-								config.event.name
-							}}</span>
-							<span v-else class="brand-text">Readathon 2026</span>
-							<span v-if="tenantUrlCue" class="brand-slug">{{
-								tenantUrlCue
-							}}</span>
-						</span>
+						<span v-if="config" class="brand-text">{{
+							config.event.name
+						}}</span>
+						<span v-else class="brand-text">Readathon 2026</span>
 					</RouterLink>
 
 					<button
@@ -212,8 +172,8 @@ function closeMenu() {
 					</button>
 				</div>
 
-				<nav v-if="!tenantUnavailable" class="main-nav" aria-label="Main">
-					<RouterLink :to="tenantHref('/')" class="nav-home" @click="closeMenu">{{
+				<nav class="main-nav" aria-label="Main">
+					<RouterLink to="/" class="nav-home" @click="closeMenu">{{
 						nav.home ?? 'Home'
 					}}</RouterLink>
 
@@ -235,11 +195,10 @@ function closeMenu() {
 
 				<div class="header-actions">
 					<ThemeSwitcher compact class="nav-theme-switcher" />
-					<EventSwitcher v-if="!tenantUnavailable" />
 
-					<div v-if="user?.isAdmin && !tenantUnavailable" class="action-buttons">
+					<div v-if="user?.isAdmin" class="action-buttons">
 						<RouterLink
-							:to="tenantHref('/admin')"
+							to="/admin"
 							class="btn btn-secondary btn-sm action-btn"
 							@click="closeMenu"
 						>
@@ -289,7 +248,7 @@ function closeMenu() {
 					</template>
 					<RouterLink
 						v-else
-						:to="tenantHref('/login')"
+						to="/login"
 						class="btn btn-primary btn-sm join-btn"
 						@click="closeMenu"
 					>
@@ -312,7 +271,7 @@ function closeMenu() {
 				class="mobile-drawer"
 			>
 				<nav class="mobile-drawer-nav" aria-label="Main">
-					<RouterLink :to="tenantHref('/')" class="nav-home" @click="closeMenu">{{
+					<RouterLink to="/" class="nav-home" @click="closeMenu">{{
 						nav.home ?? 'Home'
 					}}</RouterLink>
 					<SiteNavDropdown
@@ -336,7 +295,7 @@ function closeMenu() {
 
 					<div v-if="user?.isAdmin" class="action-buttons">
 						<RouterLink
-							:to="tenantHref('/admin')"
+							to="/admin"
 							class="btn btn-secondary btn-sm action-btn"
 							@click="closeMenu"
 						>
@@ -386,7 +345,7 @@ function closeMenu() {
 					</template>
 					<RouterLink
 						v-else
-						:to="tenantHref('/login')"
+						to="/login"
 						class="btn btn-primary btn-sm join-btn"
 						@click="closeMenu"
 					>
@@ -428,15 +387,10 @@ function closeMenu() {
 				<strong>Awaiting assignment.</strong> {{ config.copy.pendingBanner }}
 			</div>
 
-			<div v-if="configLoading && !config && !tenantUnavailable" class="page-state">
+			<div v-if="configLoading && !config" class="page-state">
 				<div class="page-spinner" role="status" aria-label="Loading" />
 				<p>Loading event…</p>
 			</div>
-
-			<EventUnavailableView
-				v-else-if="tenantUnavailable"
-				:unavailable="tenantUnavailable"
-			/>
 
 			<div v-else-if="configError && !config" class="page-state">
 				<div class="alert alert-error">
@@ -461,16 +415,16 @@ function closeMenu() {
 					<span class="footer-sub">{{ config.event.subtitle }}</span>
 				</p>
 				<nav class="footer-links" aria-label="Footer">
-					<RouterLink :to="tenantHref('/how-it-works')">{{
+					<RouterLink to="/how-it-works">{{
 						nav.howItWorks ?? 'Rules'
 					}}</RouterLink>
-					<RouterLink :to="tenantHref('/standings')">{{
+					<RouterLink to="/standings">{{
 						nav.standings ?? 'Standings'
 					}}</RouterLink>
-					<RouterLink :to="tenantHref('/faq')">{{ nav.faq ?? 'FAQ' }}</RouterLink>
-					<RouterLink :to="tenantHref('/changelog')">Changelog</RouterLink>
+					<RouterLink to="/faq">{{ nav.faq ?? 'FAQ' }}</RouterLink>
+					<RouterLink to="/changelog">Changelog</RouterLink>
 				</nav>
-				<RouterLink :to="tenantHref('/changelog')" class="app-version" :title="`v${APP_VERSION}`">
+				<RouterLink to="/changelog" class="app-version" :title="`v${APP_VERSION}`">
 					v{{ APP_VERSION }}
 				</RouterLink>
 			</div>
@@ -554,28 +508,14 @@ function closeMenu() {
 	justify-self: start;
 	display: flex;
 	align-items: center;
-	gap: 0.65rem;
+	gap: 0.6rem;
 	color: var(--realm-text);
-	text-decoration: none;
-	min-width: 0;
-}
-
-.brand--tenant {
-	align-items: flex-start;
+	white-space: nowrap;
 }
 
 .brand-icon {
 	font-size: 1.5rem;
 	color: var(--realm-accent);
-	line-height: 1;
-	flex-shrink: 0;
-	margin-top: 0.1rem;
-}
-
-.brand-stack {
-	display: grid;
-	gap: 0.12rem;
-	min-width: 0;
 }
 
 .brand-text {
@@ -583,28 +523,12 @@ function closeMenu() {
 	font-size: clamp(0.95rem, 3.5vw, 1.15rem);
 	font-weight: 700;
 	letter-spacing: 0.08em;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
 }
 
 .brand-text em {
 	font-style: normal;
 	color: var(--realm-accent-glow);
 	font-size: 0.85em;
-}
-
-.brand-slug {
-	font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', Menlo, monospace;
-	font-size: 0.72rem;
-	font-weight: 500;
-	letter-spacing: 0.01em;
-	color: var(--realm-text-muted);
-	opacity: 0.9;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	max-width: min(18rem, 42vw);
 }
 
 .menu-toggle {

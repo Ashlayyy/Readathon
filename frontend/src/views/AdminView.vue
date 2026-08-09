@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onMounted, ref, watch } from 'vue';
 import {
 	api,
 	apiUrl,
@@ -39,24 +38,8 @@ import { useImageLightbox } from '../composables/useImageLightbox';
 const { config, loadConfig } = useConfig();
 const { t } = useCopy();
 const { admin, section, msg, confirmMsg } = useAdminCopy();
-const { user: me, account } = useAuth();
-const route = useRoute();
-const fromHost = computed(() => String(route.query.from || '') === 'host');
-const productUrl = (
-	(import.meta.env.VITE_PRODUCT_URL as string | undefined)?.trim() ||
-	'http://localhost:5174'
-).replace(/\/+$/, '');
+const { user: me } = useAuth();
 const { show: showLightbox } = useImageLightbox();
-
-function scrollToDiscordSection() {
-	if (route.hash !== '#discord') return;
-	void nextTick(() => {
-		document.getElementById('discord')?.scrollIntoView({
-			behavior: 'smooth',
-			block: 'start',
-		});
-	});
-}
 const users = ref<AdminUser[]>([]);
 const pending = ref(0);
 const stats = ref({
@@ -382,9 +365,7 @@ onMounted(async () => {
 			'settings',
 		]);
 		await loadStats();
-		if (route.hash === '#discord') {
-			activeTab.value = 'settings';
-		} else if (tabParam && allowed.has(tabParam)) {
+		if (tabParam && allowed.has(tabParam)) {
 			activeTab.value = tabParam as typeof activeTab.value;
 		} else if (stats.value.unreadQuestions > 0) {
 			activeTab.value = 'inbox';
@@ -392,22 +373,10 @@ onMounted(async () => {
 		if (activeTab.value === 'settings') settingsMounted.value = true;
 		if (activeTab.value === 'themes') themesMounted.value = true;
 		await ensureTabData(activeTab.value);
-		scrollToDiscordSection();
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('loadFailed'), true);
 	}
 });
-
-watch(
-	() => route.hash,
-	() => {
-		if (route.hash === '#discord') {
-			activeTab.value = 'settings';
-			settingsMounted.value = true;
-			scrollToDiscordSection();
-		}
-	},
-);
 
 async function loadStats() {
 	const data = await api<{
@@ -1220,81 +1189,19 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 	<main v-if="config" class="page admin-page">
 		<header class="admin-topbar">
 			<div class="admin-topbar-text">
-				<p class="admin-kicker">Challenge ops</p>
 				<h1 class="page-title">{{ admin?.title }}</h1>
-				<p class="page-lead">
-					<span class="admin-event-chip">{{
-						config.tenant?.name || config.event.name
-					}}</span>
-					{{ admin?.lead }}
-				</p>
+				<p class="page-lead">{{ admin?.lead }}</p>
 			</div>
-			<div class="admin-topbar-actions">
-				<button
-					type="button"
-					class="btn btn-secondary btn-sm"
-					@click="setTab('standings')"
-				>
-					Publish
-				</button>
-				<button
-					type="button"
-					class="btn btn-secondary btn-sm"
-					@click="setTab('settings')"
-				>
-					Settings
-				</button>
-				<button
-					type="button"
-					class="btn btn-secondary btn-sm admin-nav-toggle"
-					:aria-expanded="navOpen"
-					aria-controls="admin-sidebar"
-					@click="navOpen = !navOpen"
-				>
-					{{ navOpen ? 'Close menu' : 'Sections' }}
-				</button>
-			</div>
-		</header>
-
-		<div v-if="fromHost" class="admin-host-banner" role="status">
-			<p>
-				Editing
-				<strong>{{ config.tenant?.name || config.event.name }}</strong>
-				<template v-if="account"> as {{ account.displayName }}</template>.
-				Deep work stays here; links and onboarding live in the host panel.
-			</p>
-			<a class="btn btn-secondary btn-sm" :href="`${productUrl}/host`">
-				Back to host panel
-			</a>
-		</div>
-
-		<section class="admin-overview" aria-label="Challenge overview">
-			<button type="button" class="admin-stat" @click="setTab('users')">
-				<span class="admin-stat-label">Readers</span>
-				<strong>{{ usersCount }}</strong>
-				<em>{{ assignedUserCount }} assigned</em>
-			</button>
-			<button type="button" class="admin-stat" @click="setTab('users')">
-				<span class="admin-stat-label">Pending</span>
-				<strong>{{ pending }}</strong>
-				<em>awaiting teams</em>
-			</button>
-			<button type="button" class="admin-stat" @click="setTab('submissions')">
-				<span class="admin-stat-label">Books</span>
-				<strong>{{ submissionsCount }}</strong>
-				<em>logged</em>
-			</button>
 			<button
 				type="button"
-				class="admin-stat"
-				:class="{ hot: unreadQuestions > 0 }"
-				@click="setTab('inbox')"
+				class="btn btn-secondary btn-sm admin-nav-toggle"
+				:aria-expanded="navOpen"
+				aria-controls="admin-sidebar"
+				@click="navOpen = !navOpen"
 			>
-				<span class="admin-stat-label">Inbox</span>
-				<strong>{{ unreadQuestions }}</strong>
-				<em>unread</em>
+				{{ navOpen ? 'Close menu' : 'Sections' }}
 			</button>
-		</section>
+		</header>
 
 		<Teleport to="body">
 			<div
@@ -1349,12 +1256,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 				:class="{ open: navOpen }"
 				aria-label="Admin sections"
 			>
-				<div class="admin-sidebar-brand">
-					<span>Command</span>
-					<strong>{{ config.tenant?.name || config.event.name }}</strong>
-				</div>
 				<nav class="admin-side-nav">
-					<p class="admin-nav-group">Ops</p>
 					<button
 						type="button"
 						:class="{ active: activeTab === 'inbox' }"
@@ -1367,17 +1269,17 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					</button>
 					<button
 						type="button"
-						:class="{ active: activeTab === 'standings' }"
-						@click="setTab('standings')"
-					>
-						{{ section('tabs').standings }}
-					</button>
-					<button
-						type="button"
 						:class="{ active: activeTab === 'teams' }"
 						@click="setTab('teams')"
 					>
 						{{ section('tabs').teams }}
+					</button>
+					<button
+						type="button"
+						:class="{ active: activeTab === 'standings' }"
+						@click="setTab('standings')"
+					>
+						{{ section('tabs').standings }}
 					</button>
 					<button
 						type="button"
@@ -1397,8 +1299,13 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 						{{ section('tabs').submissions }}
 						<span class="nav-meta">{{ submissionsCount }}</span>
 					</button>
-
-					<p class="admin-nav-group">Content</p>
+					<button
+						type="button"
+						:class="{ active: activeTab === 'stats' }"
+						@click="setTab('stats')"
+					>
+						{{ section('tabs').stats ?? 'Stats' }}
+					</button>
 					<button
 						type="button"
 						:class="{ active: activeTab === 'prompts' }"
@@ -1415,26 +1322,17 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 					</button>
 					<button
 						type="button"
-						:class="{ active: activeTab === 'themes' }"
-						@click="setTab('themes')"
-					>
-						Themes
-					</button>
-
-					<p class="admin-nav-group">System</p>
-					<button
-						type="button"
-						:class="{ active: activeTab === 'stats' }"
-						@click="setTab('stats')"
-					>
-						{{ section('tabs').stats ?? 'Stats' }}
-					</button>
-					<button
-						type="button"
 						:class="{ active: activeTab === 'audit' }"
 						@click="setTab('audit')"
 					>
 						{{ section('tabs').audit ?? 'Audit' }}
+					</button>
+					<button
+						type="button"
+						:class="{ active: activeTab === 'themes' }"
+						@click="setTab('themes')"
+					>
+						Themes
 					</button>
 					<button
 						type="button"
@@ -2884,150 +2782,8 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 </template>
 
 <style scoped>
-.admin-page {
-	padding-top: 0.35rem;
-}
-
 .admin-page .page-lead {
 	margin-bottom: 0;
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 0.55rem 0.75rem;
-}
-
-.admin-kicker {
-	margin: 0 0 0.35rem;
-	font-size: 0.72rem;
-	font-weight: 700;
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: var(--realm-accent-glow);
-}
-
-.admin-event-chip {
-	display: inline-flex;
-	align-items: center;
-	padding: 0.2rem 0.55rem;
-	border-radius: 999px;
-	border: 1px solid color-mix(in srgb, var(--realm-accent) 40%, var(--realm-border));
-	background: color-mix(in srgb, var(--realm-accent) 14%, transparent);
-	color: var(--realm-text);
-	font-size: 0.78rem;
-	font-weight: 700;
-	letter-spacing: 0.02em;
-}
-
-.admin-topbar-actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 0.45rem;
-	align-items: center;
-	justify-content: flex-end;
-}
-
-.admin-overview {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 0.75rem;
-	margin-bottom: 1.25rem;
-}
-
-@media (min-width: 900px) {
-	.admin-overview {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-	}
-}
-
-.admin-stat {
-	display: grid;
-	gap: 0.15rem;
-	justify-items: start;
-	padding: 0.95rem 1.05rem;
-	border-radius: 16px;
-	border: 1px solid var(--realm-border);
-	background:
-		linear-gradient(
-			155deg,
-			color-mix(in srgb, var(--realm-surface) 92%, var(--realm-accent) 8%),
-			color-mix(in srgb, var(--realm-surface-alt) 88%, transparent)
-		);
-	color: inherit;
-	text-align: left;
-	cursor: pointer;
-	transition:
-		border-color 0.15s ease,
-		transform 0.15s ease,
-		box-shadow 0.15s ease;
-	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
-}
-
-.admin-stat:hover {
-	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
-	transform: translateY(-1px);
-}
-
-.admin-stat.hot {
-	border-color: color-mix(in srgb, var(--realm-accent-glow) 55%, var(--realm-border));
-	box-shadow: 0 0 0 1px color-mix(in srgb, var(--realm-accent) 25%, transparent);
-}
-
-.admin-stat-label {
-	font-size: 0.72rem;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--realm-text-muted);
-}
-
-.admin-stat strong {
-	font-family: var(--font-display);
-	font-size: 1.75rem;
-	line-height: 1.1;
-	color: var(--realm-text);
-}
-
-.admin-stat em {
-	font-style: normal;
-	font-size: 0.82rem;
-	color: var(--realm-text-muted);
-}
-
-.admin-sidebar-brand {
-	display: grid;
-	gap: 0.15rem;
-	padding: 0.75rem 0.85rem 1rem;
-	margin-bottom: 0.35rem;
-	border-bottom: 1px solid var(--realm-border);
-}
-
-.admin-sidebar-brand span {
-	font-size: 0.68rem;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--realm-text-muted);
-}
-
-.admin-sidebar-brand strong {
-	font-family: var(--font-display);
-	font-size: 1rem;
-	line-height: 1.25;
-	color: var(--realm-text);
-}
-
-.admin-nav-group {
-	margin: 0.85rem 0 0.35rem;
-	padding: 0 0.8rem;
-	font-size: 0.68rem;
-	font-weight: 700;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: color-mix(in srgb, var(--realm-text-muted) 85%, transparent);
-}
-
-.admin-nav-group:first-of-type {
-	margin-top: 0.25rem;
 }
 
 .admin-message-modal {
@@ -3105,47 +2861,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: 1rem;
-	margin-bottom: 1.1rem;
-	padding: 1.15rem 1.25rem;
-	border: 1px solid var(--realm-border);
-	border-radius: 18px;
-	background:
-		radial-gradient(
-			circle at 100% 0%,
-			color-mix(in srgb, var(--realm-accent) 16%, transparent),
-			transparent 42%
-		),
-		color-mix(in srgb, var(--realm-surface) 90%, transparent);
-	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
-}
-
-.admin-topbar .page-title {
-	margin: 0;
-	font-size: clamp(1.55rem, 2.6vw, 2rem);
-}
-
-.admin-host-banner {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.75rem 1rem;
-	margin: 0 0 1.1rem;
-	padding: 0.9rem 1.05rem;
-	border: 1px solid color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
-	border-radius: 14px;
-	background: color-mix(in srgb, var(--realm-accent) 12%, var(--realm-surface));
-}
-
-.admin-host-banner p {
-	margin: 0;
-	color: var(--realm-text-muted);
-	line-height: 1.45;
-	max-width: 46rem;
-}
-
-.admin-host-banner strong {
-	color: var(--realm-text);
+	margin-bottom: 1.25rem;
 }
 
 .admin-nav-toggle {
@@ -3155,7 +2871,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 
 .admin-layout {
 	display: grid;
-	grid-template-columns: 15.5rem minmax(0, 1fr);
+	grid-template-columns: 13.5rem minmax(0, 1fr);
 	gap: 1.25rem;
 	align-items: start;
 }
@@ -3164,22 +2880,16 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 	position: sticky;
 	top: 5.5rem;
 	border: 1px solid var(--realm-border);
-	border-radius: 18px;
-	background:
-		linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--realm-surface) 94%, #fff 2%),
-			color-mix(in srgb, var(--realm-surface-alt) 88%, transparent)
-		);
-	backdrop-filter: blur(12px);
-	padding: 0.55rem 0.45rem 0.7rem;
-	box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+	border-radius: 14px;
+	background: color-mix(in srgb, var(--realm-surface) 88%, transparent);
+	backdrop-filter: blur(10px);
+	padding: 0.55rem;
 }
 
 .admin-side-nav {
 	display: flex;
 	flex-direction: column;
-	gap: 0.22rem;
+	gap: 0.3rem;
 }
 
 .admin-side-nav button {
@@ -3188,8 +2898,8 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 	justify-content: space-between;
 	gap: 0.5rem;
 	width: 100%;
-	padding: 0.62rem 0.8rem;
-	border-radius: 11px;
+	padding: 0.65rem 0.8rem;
+	border-radius: 10px;
 	border: 1px solid transparent;
 	background: transparent;
 	color: var(--realm-text-muted);
@@ -3201,20 +2911,18 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 	transition:
 		background 0.15s,
 		border-color 0.15s,
-		color 0.15s,
-		transform 0.15s;
+		color 0.15s;
 }
 
 .admin-side-nav button:hover {
 	color: var(--realm-text);
-	background: color-mix(in srgb, var(--realm-text) 5%, transparent);
+	background: rgba(255, 255, 255, 0.04);
 }
 
 .admin-side-nav button.active {
-	background: color-mix(in srgb, var(--realm-accent) 16%, transparent);
-	border-color: color-mix(in srgb, var(--realm-accent) 48%, var(--realm-border));
+	background: rgba(212, 99, 74, 0.14);
+	border-color: rgba(212, 99, 74, 0.45);
 	color: var(--realm-accent-glow);
-	box-shadow: inset 3px 0 0 var(--realm-accent);
 }
 
 .nav-meta {
@@ -3240,18 +2948,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 }
 
 .admin-section {
-	padding: 1.45rem 1.5rem;
-	border-radius: 18px;
-	border-color: color-mix(in srgb, var(--realm-border) 90%, var(--realm-accent) 10%);
-	box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
-}
-
-.admin-section > h2,
-.admin-section .inbox-header h2,
-.admin-section .users-header h2,
-.admin-section .section-header-row h2 {
-	font-family: var(--font-display);
-	letter-spacing: -0.02em;
+	padding: 1.35rem 1.4rem;
 }
 
 .section-header-row,
@@ -3869,15 +3566,14 @@ small {
 		left: 0;
 		bottom: 0;
 		z-index: 320;
-		width: min(18rem, 88vw);
+		width: min(17rem, 86vw);
 		border-radius: 0;
 		border: none;
 		border-right: 1px solid var(--realm-border);
 		padding: 1rem 0.65rem;
 		transform: translateX(-105%);
 		transition: transform 0.2s ease;
-		background: color-mix(in srgb, var(--realm-bg) 96%, #000);
-		box-shadow: 18px 0 40px rgba(0, 0, 0, 0.45);
+		background: rgba(12, 10, 18, 0.97);
 	}
 
 	.admin-sidebar.open {

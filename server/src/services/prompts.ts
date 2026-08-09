@@ -18,41 +18,14 @@ import {
 	toActiveMonthlyEventPublic,
 	type MonthlyEventSlot,
 } from './monthlyEvents.js';
-import { getTenantIdString } from '../tenancy/context.js';
-import { getTenantContext } from '../tenancy/context.js';
-import type { ITenant } from '../db/models/Tenant.js';
 
 const configPath = join(
 	dirname(fileURLToPath(import.meta.url)),
-	'../../../data/realmathon.json',
+	'../../data/realmathon.json',
 );
 
 let cache: IPrompt[] = [];
 let usingDatabase = false;
-const promptsByTenant = new Map<string, { cache: IPrompt[]; usingDatabase: boolean }>();
-
-function promptsCacheKey(): string {
-	return getTenantIdString() ?? '_default';
-}
-
-function bindPromptsCache(): void {
-	const key = promptsCacheKey();
-	const entry = promptsByTenant.get(key);
-	if (entry) {
-		cache = entry.cache;
-		usingDatabase = entry.usingDatabase;
-	} else {
-		cache = [];
-		usingDatabase = false;
-	}
-}
-
-function persistPromptsCache(): void {
-	promptsByTenant.set(promptsCacheKey(), {
-		cache: [...cache],
-		usingDatabase,
-	});
-}
 
 export function isPromptLive(
 	p: Pick<IPrompt, 'isActive' | 'goesLiveAt'>,
@@ -91,11 +64,9 @@ export async function refreshPromptsCache(): Promise<void> {
 	}
 	cache = await Prompt.find().sort({ goesLiveAt: 1, sortOrder: 1, label: 1 });
 	usingDatabase = cache.length > 0;
-	persistPromptsCache();
 }
 
 export function promptsUseDatabase(): boolean {
-	bindPromptsCache();
 	return usingDatabase;
 }
 
@@ -132,8 +103,7 @@ function mergeTeams(baseTeams: Team[], pool: IPrompt[]): Team[] {
 }
 
 export function getConfigWithPrompts(publicOnly = true): RealmathonConfig {
-	bindPromptsCache();
-	const base = getTenantConfigBase();
+	const base = getStaticConfig();
 
 	if (!usingDatabase) {
 		return base;
@@ -155,16 +125,6 @@ export function getConfigWithPrompts(publicOnly = true): RealmathonConfig {
 				.map(toPublicGlobalPrompt),
 		},
 	};
-}
-
-/** Prefer tenant.config blob when set; default tenant keeps static JSON (null config). */
-function getTenantConfigBase(): RealmathonConfig {
-	const tenant = getTenantContext()?.tenant as ITenant | null | undefined;
-	const blob = tenant?.config;
-	if (blob && typeof blob === 'object' && !tenant?.isDefault) {
-		return blob as RealmathonConfig;
-	}
-	return getStaticConfig();
 }
 
 /** Merges the admin-staged live overlay (configOverrides.copy) over static copy, when present. */

@@ -4,12 +4,6 @@ import {
   encryptSecret,
 } from '../lib/secretsCrypto.js'
 import {
-  findSiteSettingsDoc,
-  getOrCreateSiteSettingsDoc,
-} from '../tenancy/siteSettingsDoc.js'
-import { getPlatformDiscordBotToken } from '../tenancy/platformDiscord.js'
-import { getTenantIdString } from '../tenancy/context.js'
-import {
   DEFAULT_TEAM_CHAT_ADD_TEMPLATES,
   DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES,
   normalizeTemplateList,
@@ -178,36 +172,6 @@ let cached: SiteSettingsCached = {
   monthlyEvents: [],
 }
 
-const settingsByTenant = new Map<string, SiteSettingsCached>()
-
-function settingsCacheKey(): string {
-  return getTenantIdString() ?? '_default'
-}
-
-/** Point module cache at the active tenant's entry (lazy empty until refresh). */
-function bindSettingsCache(): void {
-  const key = settingsCacheKey()
-  let entry = settingsByTenant.get(key)
-  if (!entry) {
-    entry = {
-      ...DEFAULTS,
-      teamChatWebhookUrls: {},
-      teamChatChannelIds: {},
-      discordBotCommandRoleIds: [],
-      discordGuildConfigs: {},
-      teamChatAddTemplates: [...DEFAULT_TEAM_CHAT_ADD_TEMPLATES],
-      teamChatSabotageTemplates: [...DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES],
-      monthlyEvents: [],
-    }
-    settingsByTenant.set(key, entry)
-  }
-  cached = entry
-}
-
-function persistSettingsCache(): void {
-  settingsByTenant.set(settingsCacheKey(), cached)
-}
-
 type DiscordBotRestartHook = () => void
 let discordBotRestartHook: DiscordBotRestartHook | null = null
 
@@ -233,7 +197,6 @@ function resolveActiveFromCache(
 }
 
 export function getSiteSettingsSync(): SiteSettingsPublic {
-  bindSettingsCache()
   return {
     showTeamRosters: cached.showTeamRosters,
     downtimeMode: cached.downtimeMode,
@@ -244,12 +207,10 @@ export function getSiteSettingsSync(): SiteSettingsPublic {
 
 /** Live copy/prompt overlay merged into getConfig() - promoted from configDraft. */
 export function getConfigOverridesSync(): unknown {
-  bindSettingsCache()
   return cached.configOverrides
 }
 
 export function getMonthlyEventsSync(): MonthlyEventSlot[] {
-  bindSettingsCache()
   return cached.monthlyEvents.map((s) => ({
     ...s,
     multipliers: { ...s.multipliers },
@@ -287,12 +248,10 @@ export function getMonthlyEventsSync(): MonthlyEventSlot[] {
 
 /** Currently live scheduled theme (null if draft-only or outside window). */
 export function getActiveMonthlyEventSync(now = new Date()): MonthlyEventSlot | null {
-  bindSettingsCache()
   return resolveActiveMonthlyEvent(cached.monthlyEvents, now)
 }
 
 export function getSiteSettingsAdminSync(): SiteSettingsAdmin {
-  bindSettingsCache()
   const { discordBotTokenEnc: _enc, ...safe } = cached
   return {
     ...safe,
@@ -364,7 +323,8 @@ export async function setDiscordBotGuildsCache(
 ): Promise<void> {
   const normalized = normalizeBotGuildsCache(next)
   if (!normalized) return
-  const doc = await getOrCreateSiteSettingsDoc()
+  let doc = await SiteSettings.findOne()
+  if (!doc) doc = await SiteSettings.create({})
   doc.set('discordBotGuildsCache', normalized)
   // Also stamp names onto known guild configs for offline display
   const configs = normalizeGuildConfigsMap(doc.get('discordGuildConfigs'))
@@ -378,19 +338,17 @@ export async function setDiscordBotGuildsCache(
   if (configsChanged) doc.set('discordGuildConfigs', configs)
   await doc.save()
   cached = toDocFromCache(doc)
-  persistSettingsCache()
 }
 
 export async function clearDiscordBotGuildsCache(): Promise<void> {
-  const doc = await findSiteSettingsDoc()
+  let doc = await SiteSettings.findOne()
   if (!doc) return
   doc.set('discordBotGuildsCache', null)
   await doc.save()
   cached = toDocFromCache(doc)
-  persistSettingsCache()
 }
 
-/** Decrypted bot token from DB, with platform env fallback. */
+/** Decrypted bot token from DB, with optional env fallback for migration. */
 export function getDiscordBotToken(): string {
   const enc = cached.discordBotTokenEnc.trim()
   if (enc) {
@@ -401,8 +359,7 @@ export function getDiscordBotToken(): string {
       return ''
     }
   }
-  // Platform bot (shared across tenants) — hosts invite the same application
-  return getPlatformDiscordBotToken()
+  return process.env.DISCORD_BOT_TOKEN?.trim() || ''
 }
 
 export function getDiscordGuildConfigs(): Record<string, DiscordGuildConfig> {
@@ -676,24 +633,26 @@ async function seedEmptyTeamChatTemplates(doc: InstanceType<typeof SiteSettings>
 }
 
 export async function refreshSiteSettingsCache(): Promise<SiteSettingsAdmin> {
-  bindSettingsCache()
-  let doc = await getOrCreateSiteSettingsDoc({
-    teamChatAddTemplates: [...DEFAULT_TEAM_CHAT_ADD_TEMPLATES],
-    teamChatSabotageTemplates: [...DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES],
-  })
-  if (await seedEmptyTeamChatTemplates(doc)) {
+  let doc = await SiteSettings.findOne()
+  if (!doc) {
+    doc = await SiteSettings.create({
+      teamChatAddTemplates: [...DEFAULT_TEAM_CHAT_ADD_TEMPLATES],
+      teamChatSabotageTemplates: [...DEFAULT_TEAM_CHAT_SABOTAGE_TEMPLATES],
+    })
+  } else if (await seedEmptyTeamChatTemplates(doc)) {
     await doc.save()
   }
   cached = toDocFromCache(doc)
-  persistSettingsCache()
   return getSiteSettingsAdminSync()
 }
 
 export async function updateSiteSettings(
   patch: SiteSettingsAdminPatch,
 ): Promise<SiteSettingsAdmin> {
-  bindSettingsCache()
-  const doc = await getOrCreateSiteSettingsDoc()
+  let doc = await SiteSettings.findOne()
+  if (!doc) {
+    doc = await SiteSettings.create({})
+  }
   let botSettingsChanged = false
   if (typeof patch.showTeamRosters === 'boolean') {
     doc.showTeamRosters = patch.showTeamRosters
@@ -1012,7 +971,6 @@ export async function updateSiteSettings(
 
   await doc.save()
   cached = toDocFromCache(doc)
-  persistSettingsCache()
   if (botSettingsChanged) {
     try {
       const { invalidateBotGuildsMemoryCache } = await import('./discordBotGuilds.js')
@@ -1027,30 +985,30 @@ export async function updateSiteSettings(
 
 /** Promote the staged configDraft to the live configOverrides overlay. Draft is kept as-is (still editable). */
 export async function publishConfigDraft(): Promise<SiteSettingsAdmin> {
-  const doc = await getOrCreateSiteSettingsDoc()
+  let doc = await SiteSettings.findOne()
+  if (!doc) doc = await SiteSettings.create({})
   doc.configOverrides = doc.configDraft ?? null
   await doc.save()
   cached = toDocFromCache(doc)
-  persistSettingsCache()
   return getSiteSettingsAdminSync()
 }
 
 /** Clear the staged draft without touching what's live. */
 export async function discardConfigDraft(): Promise<SiteSettingsAdmin> {
-  const doc = await getOrCreateSiteSettingsDoc()
+  let doc = await SiteSettings.findOne()
+  if (!doc) doc = await SiteSettings.create({})
   doc.configDraft = null
   await doc.save()
   cached = toDocFromCache(doc)
-  persistSettingsCache()
   return getSiteSettingsAdminSync()
 }
 
 /** Remove the live overlay, reverting getConfig() to the static copy. */
 export async function clearConfigOverrides(): Promise<SiteSettingsAdmin> {
-  const doc = await getOrCreateSiteSettingsDoc()
+  let doc = await SiteSettings.findOne()
+  if (!doc) doc = await SiteSettings.create({})
   doc.configOverrides = null
   await doc.save()
   cached = toDocFromCache(doc)
-  persistSettingsCache()
   return getSiteSettingsAdminSync()
 }

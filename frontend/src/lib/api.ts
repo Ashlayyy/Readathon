@@ -1,72 +1,34 @@
 import { apiUrl, googleLoginUrl } from './apiBase'
-import { currentTenantSlugHeader } from '../composables/useTenant'
 
 export { apiUrl, googleLoginUrl }
 
-export class ApiError extends Error {
-  status: number
-  code?: string
-  reason?: string
-  slug?: string | null
-
-  constructor(
-    message: string,
-    opts: { status: number; code?: string; reason?: string; slug?: string | null },
-  ) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = opts.status
-    this.code = opts.code
-    this.reason = opts.reason
-    this.slug = opts.slug
-  }
-}
-
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const tenantSlug = currentTenantSlugHeader()
   const res = await fetch(apiUrl(path), {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(tenantSlug ? { 'X-Tenant-Slug': tenantSlug } : {}),
       ...options.headers,
     },
     ...options,
   })
 
   const text = await res.text()
-  let data: {
-    error?: string
-    code?: string
-    reason?: string
-    slug?: string | null
-  } | null = null
+  let data: { error?: string } | null = null
 
   if (text) {
     try {
-      data = JSON.parse(text) as {
-        error?: string
-        code?: string
-        reason?: string
-        slug?: string | null
-      }
+      data = JSON.parse(text) as { error?: string }
     } catch {
-      throw new ApiError(
+      throw new Error(
         res.ok
           ? 'Server returned an invalid response'
           : `Server error (${res.status}). Please try again later.`,
-        { status: res.status },
       )
     }
   }
 
   if (!res.ok) {
-    throw new ApiError(data?.error ?? `Request failed (${res.status})`, {
-      status: res.status,
-      code: data?.code,
-      reason: data?.reason,
-      slug: data?.slug,
-    })
+    throw new Error(data?.error ?? `Request failed (${res.status})`)
   }
 
   return (data ?? {}) as T
@@ -346,13 +308,6 @@ export type RealmathonConfig = {
     seasonArchive?: SeasonArchive
     activeMonthlyEvent?: ActiveMonthlyEvent | null
   }
-  /** Active hosted event (null on marketing host). */
-  tenant?: {
-    slug: string
-    name: string
-    resolution: string | null
-    isDefault: boolean
-  } | null
 }
 
 export type TeamStanding = {
@@ -618,13 +573,7 @@ export type AdminStandingsData = {
 
 /** Download a file from an authenticated API path. */
 export async function downloadFile(path: string, filename: string) {
-  const tenantSlug = currentTenantSlugHeader()
-  const res = await fetch(apiUrl(path), {
-    credentials: 'include',
-    headers: {
-      ...(tenantSlug ? { 'X-Tenant-Slug': tenantSlug } : {}),
-    },
-  })
+  const res = await fetch(apiUrl(path), { credentials: 'include' })
   if (!res.ok) {
     let msg = `Download failed (${res.status})`
     try {

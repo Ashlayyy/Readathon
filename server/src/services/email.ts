@@ -1,13 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { getStaticConfig } from '../config.js'
-import {
-  magicLinkEmailHtml,
-  magicLinkEmailText,
-} from './emailTemplates.js'
+import { magicLinkEmailHtml, magicLinkEmailText } from './emailTemplates.js'
+
 import { apiPublicUrl } from '../lib/urls.js'
-import { getTenantContext } from '../tenancy/context.js'
-import { getProductName } from '../tenancy/context.js'
-import { getConfig } from './prompts.js'
 
 export function generateToken(): string {
   return randomBytes(32).toString('hex')
@@ -52,69 +47,14 @@ export async function sendEmail(opts: {
   return false
 }
 
-export type MagicLinkEmailContext = {
-  forPlatform?: boolean
-  tenantSlug?: string | null
-}
-
-function resolveEmailEvent(opts?: MagicLinkEmailContext): {
-  eventName: string
-  eventSubtitle: string
-  enterCta: string
-} {
-  if (opts?.forPlatform) {
-    const product = getProductName()
-    return {
-      eventName: product,
-      eventSubtitle: 'Host console',
-      enterCta: 'Open host console',
-    }
-  }
-
-  try {
-    const cfg = getConfig()
-    const ctx = getTenantContext()
-    const name =
-      ctx?.tenant?.name?.trim() ||
-      (cfg.event?.name as string) ||
-      (getStaticConfig().event.name as string)
-    return {
-      eventName: name,
-      eventSubtitle: (cfg.event?.subtitle as string) || '',
-      enterCta: String(
-        (cfg.copy as { enterCta?: string })?.enterCta ?? 'Enter the realm',
-      ),
-    }
-  } catch {
-    const { event, copy } = getStaticConfig()
-    return {
-      eventName: event.name as string,
-      eventSubtitle: event.subtitle as string,
-      enterCta: (copy as { enterCta: string }).enterCta,
-    }
-  }
-}
-
-export async function sendMagicLink(
-  email: string,
-  token: string,
-  opts?: MagicLinkEmailContext,
-): Promise<void> {
+export async function sendMagicLink(email: string, token: string): Promise<void> {
   const link = `${apiPublicUrl('/auth/verify')}?token=${token}`
-  const { eventName, eventSubtitle, enterCta } = resolveEmailEvent(opts)
-  const slugNote =
-    opts?.tenantSlug && !opts.forPlatform
-      ? ` (event: ${opts.tenantSlug})`
-      : ''
+  const eventName = getStaticConfig().event.name as string
 
   await sendEmail({
     to: email,
-    subject: `⚔ Your ${eventName} sign-in link${slugNote}`,
-    html: magicLinkEmailHtml(link, email, {
-      eventName,
-      eventSubtitle,
-      enterCta,
-    }),
-    text: magicLinkEmailText(link, { eventName, eventSubtitle }),
+    subject: `⚔ Your ${eventName} sign-in link`,
+    html: magicLinkEmailHtml(link, email),
+    text: magicLinkEmailText(link),
   })
 }

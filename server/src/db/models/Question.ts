@@ -1,10 +1,7 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose'
-import { tenantScopePlugin } from '../../tenancy/plugin.js'
 
 const questionSchema = new Schema(
   {
-    /** Multi-tenant scope (default tenant backfilled on boot). */
-    tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', default: null, index: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     displayName: { type: String, required: true },
     email: { type: String, required: true },
@@ -17,8 +14,6 @@ const questionSchema = new Schema(
   },
   { timestamps: true },
 )
-
-questionSchema.plugin(tenantScopePlugin)
 
 export type IQuestion = InferSchemaType<typeof questionSchema> & { _id: mongoose.Types.ObjectId }
 

@@ -15,24 +15,13 @@ function themeColors() {
 	};
 }
 
-export type MagicLinkEmailBrand = {
-	eventName: string
-	eventSubtitle: string
-	enterCta: string
-}
-
-export function magicLinkEmailHtml(
-	link: string,
-	email: string,
-	brand?: MagicLinkEmailBrand,
-): string {
+export function magicLinkEmailHtml(link: string, email: string): string {
 	const { event, copy } = getStaticConfig();
 	const theme = themeColors();
 	const year = new Date().getFullYear();
-	const eventTitle = brand?.eventName ?? (event.name as string);
-	const eventSubtitle = brand?.eventSubtitle ?? (event.subtitle as string);
-	const enterCta =
-		brand?.enterCta ?? (copy as { enterCta: string }).enterCta;
+	const eventTitle = event.name as string;
+	const eventSubtitle = event.subtitle as string;
+	const enterCta = (copy as { enterCta: string }).enterCta;
 
 	return `<!DOCTYPE html>
 <html lang="en">
@@ -110,18 +99,14 @@ export function magicLinkEmailHtml(
 </html>`;
 }
 
-export function magicLinkEmailText(
-	link: string,
-	brand?: Pick<MagicLinkEmailBrand, 'eventName' | 'eventSubtitle'>,
-): string {
+export function magicLinkEmailText(link: string): string {
 	const { event } = getStaticConfig();
-	const eventTitle = brand?.eventName ?? (event.name as string);
-	const eventSubtitle = brand?.eventSubtitle ?? (event.subtitle as string);
+	const eventTitle = event.name as string;
+	const eventSubtitle = event.subtitle as string;
 
 	return `${eventTitle} - ${eventSubtitle}
 
-This sign-in link is for ${eventTitle}.
-It expires in 15 minutes:
+Enter the realm using this sign-in link (expires in 15 minutes):
 
 ${link}
 

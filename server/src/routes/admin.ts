@@ -159,37 +159,6 @@ adminRoutes.get('/settings', (c) => {
   })
 })
 
-/** Multi-tenant backfill status (no manual DB work — use POST to run). */
-adminRoutes.get('/tenancy/migration', async (c) => {
-  requireAdmin(await getSessionUser(c))
-  const { getTenancyMigrationStatus } = await import('../tenancy/migrate.js')
-  return c.json({ status: await getTenancyMigrationStatus() })
-})
-
-/**
- * Run (or force-run) the automatic tenancy migration.
- * body: { force?: boolean }
- */
-adminRoutes.post('/tenancy/migration', async (c) => {
-  const admin = requireAdmin(await getSessionUser(c))
-  const body = (await c.req.json().catch(() => ({}))) as { force?: boolean }
-  const { runTenancyMigration } = await import('../tenancy/migrate.js')
-  const report = await runTenancyMigration({ force: body.force === true })
-  await logAudit({
-    actor: admin,
-    action: 'tenancy.migrate',
-    entityType: 'tenancy',
-    entityId: report.defaultTenantId,
-    detail: {
-      ran: report.ran,
-      mode: report.mode,
-      accountsLinked: report.accountsLinked,
-      force: body.force === true,
-    },
-  })
-  return c.json({ report })
-})
-
 /**
  * Preview a monthly theme slot as if it were live (drafts allowed).
  * body: MonthlyEventSlot (or partial that normalizes)
