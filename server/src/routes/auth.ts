@@ -4,10 +4,12 @@ import { getCookie, setCookie } from 'hono/cookie'
 import { rateLimit } from '../middleware/rateLimit.js'
 import {
   AuthError,
+  accountToPublic,
   clearSession,
   createSession,
   findOrCreateGoogleUser,
   getGoogleClient,
+  getSessionAccount,
   getSessionUser,
   registerWithEmail,
   loginByEmail,
@@ -16,18 +18,49 @@ import {
   verifyMagicLink,
 } from '../services/auth.js'
 import { Question } from '../db/models/Question.js'
+import { getTenantContext } from '../tenancy/context.js'
 
 const OAUTH_STATE_COOKIE = 'oauth_state'
 const OAUTH_VERIFIER_COOKIE = 'oauth_verifier'
+const OAUTH_TENANT_COOKIE = 'oauth_tenant'
 
 export const authRoutes = new Hono()
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'auth' })
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, keyPrefix: 'login' })
 
+function frontendBase(): string {
+  return process.env.FRONTEND_URL ?? 'http://localhost:5173'
+}
+
+function productBase(): string {
+  return (
+    process.env.PRODUCT_URL?.trim() ||
+    process.env.PRODUCT_MARKETING_URL?.trim() ||
+    'http://localhost:5174'
+  )
+}
+
 authRoutes.get('/me', async (c) => {
+  const tenancy = getTenantContext()
+  const account = await getSessionAccount(c)
+
+  if (tenancy?.isMarketingHost) {
+    return c.json({
+      user: null,
+      account: account ? accountToPublic(account) : null,
+      isMarketingHost: true,
+    })
+  }
+
   const user = await getSessionUser(c)
-  if (!user) return c.json({ user: null })
+  if (!user) {
+    return c.json({
+      user: null,
+      account: account ? accountToPublic(account) : null,
+      isMarketingHost: false,
+    })
+  }
 
   const unreadAnswers = await Question.countDocuments({
     userId: user._id,
@@ -40,6 +73,8 @@ authRoutes.get('/me', async (c) => {
       ...userToPublic(user),
       unreadAnswers,
     },
+    account: account ? accountToPublic(account) : null,
+    isMarketingHost: false,
   })
 })
 
@@ -73,8 +108,14 @@ authRoutes.post('/login', loginLimiter, async (c) => {
   }
 })
 
+function joinFrontendPath(frontend: string, path: string): string {
+  const base = frontend.replace(/\/+$/, '')
+  const p = path.startsWith('/') ? path : `/${path}`
+  return `${base}${p}`
+}
+
 authRoutes.get('/verify', async (c) => {
-  const frontend = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+  const frontend = frontendBase()
   const token = c.req.query('token')
 
   if (!token) {
@@ -82,9 +123,18 @@ authRoutes.get('/verify', async (c) => {
   }
 
   try {
-    const user = await verifyMagicLink(token)
-    await createSession(c, user._id.toString())
-    return c.redirect(`${frontend}/`)
+    const result = await verifyMagicLink(token)
+    if (result.kind === 'user') {
+      await createSession(c, {
+        userId: result.user._id.toString(),
+        accountId: result.account._id.toString(),
+      })
+      return c.redirect(joinFrontendPath(frontend, result.redirectPath))
+    }
+    await createSession(c, { accountId: result.account._id.toString() })
+    return c.redirect(
+      joinFrontendPath(productBase(), result.redirectPath || '/host'),
+    )
   } catch {
     return c.redirect(`${frontend}/login?error=invalid_link`)
   }
@@ -113,16 +163,26 @@ authRoutes.get('/google', (c) => {
   setCookie(c, OAUTH_STATE_COOKIE, state, opts)
   setCookie(c, OAUTH_VERIFIER_COOKIE, verifier, opts)
 
+  const qPlatform = c.req.query('platform')
+  const qTenant = (c.req.query('tenant') ?? '').trim().toLowerCase()
+  const tenancy = getTenantContext()
+  const tenantCookie =
+    qPlatform === '1' || tenancy?.isMarketingHost
+      ? 'platform'
+      : qTenant || tenancy?.slug || 'default'
+  setCookie(c, OAUTH_TENANT_COOKIE, tenantCookie, opts)
+
   return c.redirect(url.toString())
 })
 
 authRoutes.get('/google/callback', async (c) => {
-  const frontend = process.env.FRONTEND_URL ?? 'http://localhost:5173'
+  const frontend = frontendBase()
   const google = getGoogleClient()
   if (!google) return c.redirect(`${frontend}/login?error=google_not_configured`)
 
   const state = getCookie(c, OAUTH_STATE_COOKIE)
   const verifier = getCookie(c, OAUTH_VERIFIER_COOKIE)
+  const oauthTenant = getCookie(c, OAUTH_TENANT_COOKIE)
   const code = c.req.query('code')
   const returnedState = c.req.query('state')
 
@@ -142,14 +202,30 @@ authRoutes.get('/google/callback', async (c) => {
       picture?: string
     }
 
-    const user = await findOrCreateGoogleUser(
+    const forPlatform = oauthTenant === 'platform'
+    const tenantSlug =
+      !forPlatform && oauthTenant && oauthTenant !== 'default'
+        ? oauthTenant
+        : null
+
+    const result = await findOrCreateGoogleUser(
       profile.sub,
       profile.name,
       profile.email,
       profile.picture ?? null,
+      { forPlatform, tenantSlug },
     )
-    await createSession(c, user._id.toString())
-    return c.redirect(`${frontend}/`)
+    if (result.kind === 'user') {
+      await createSession(c, {
+        userId: result.user._id.toString(),
+        accountId: result.account._id.toString(),
+      })
+      return c.redirect(joinFrontendPath(frontend, result.redirectPath))
+    }
+    await createSession(c, { accountId: result.account._id.toString() })
+    return c.redirect(
+      joinFrontendPath(productBase(), result.redirectPath || '/host'),
+    )
   } catch {
     return c.redirect(`${frontend}/login?error=oauth_failed`)
   }

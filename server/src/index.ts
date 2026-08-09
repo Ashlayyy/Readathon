@@ -9,7 +9,14 @@ import { fileURLToPath } from 'node:url';
 import { downtimeGuard } from './middleware/downtime.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { metricsMiddleware } from './middleware/metrics.js';
+import { tenantMiddleware } from './middleware/tenant.js';
 import { connectDb } from './db/connect.js';
+import { runTenancyMigration } from './tenancy/migrate.js';
+import {
+	getProductApex,
+	getProductName,
+	getTenantContext,
+} from './tenancy/context.js';
 import { User } from './db/models/User.js';
 import { Submission } from './db/models/Submission.js';
 import { withActive } from './db/activeSubmission.js';
@@ -44,6 +51,7 @@ import {
 import { isPostHogEnabled, shutdownPostHog } from './services/posthog.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
+import { platformRoutes } from './routes/platform.js';
 import { profileRoutes } from './routes/profile.js';
 import { questionRoutes } from './routes/questions.js';
 import { submissionRoutes } from './routes/submissions.js';
@@ -59,15 +67,52 @@ loadEnv({ path: join(dirname(fileURLToPath(import.meta.url)), '../.env') });
 
 const app = new Hono();
 const frontendOrigin = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+const productOrigin =
+	process.env.PRODUCT_URL?.trim() ||
+	process.env.PRODUCT_MARKETING_URL?.trim() ||
+	'http://localhost:5174';
+const productApex = (process.env.PRODUCT_APEX ?? 'product.com')
+	.trim()
+	.toLowerCase()
+	.replace(/^\.+/, '');
+const corsOrigins = new Set(
+	[frontendOrigin, productOrigin]
+		.map((o) => o.replace(/\/+$/, ''))
+		.filter(Boolean),
+);
+for (const extra of (process.env.CORS_ORIGINS ?? '').split(',')) {
+	const cleaned = extra.trim().replace(/\/+$/, '');
+	if (cleaned) corsOrigins.add(cleaned);
+}
+
+function isAllowedCorsOrigin(origin: string): boolean {
+	const cleaned = origin.replace(/\/+$/, '');
+	if (corsOrigins.has(cleaned)) return true;
+	try {
+		const { hostname, protocol } = new URL(cleaned);
+		if (protocol !== 'http:' && protocol !== 'https:') return false;
+		const host = hostname.toLowerCase();
+		// Allow player subdomains: {slug}.product.com
+		if (host === productApex || host.endsWith(`.${productApex}`)) return true;
+	} catch {
+		return false;
+	}
+	return false;
+}
 
 app.use(
 	'*',
 	cors({
-		origin: frontendOrigin,
+		origin: (origin) => {
+			if (!origin) return frontendOrigin;
+			const cleaned = origin.replace(/\/+$/, '');
+			return isAllowedCorsOrigin(cleaned) ? cleaned : null;
+		},
 		credentials: true,
 	}),
 );
 
+app.use('*', tenantMiddleware);
 app.use('*', metricsMiddleware);
 
 /** Prometheus scrape target. Optional bearer: METRICS_TOKEN */
@@ -98,8 +143,9 @@ const adminLimiter = rateLimit({
 
 app.use('/api/*', downtimeGuard);
 
-app.get('/api/health', (c) =>
-	c.json({
+app.get('/api/health', (c) => {
+	const tenancy = getTenantContext();
+	return c.json({
 		status: 'ok',
 		version: APP_VERSION,
 		pngFonts: getSvgFontStatus(),
@@ -108,16 +154,43 @@ app.get('/api/health', (c) =>
 			posthog: isPostHogEnabled(),
 			betterstack: betterStackStatus(),
 		},
-	}),
-);
+		product: {
+			name: getProductName(),
+			apex: getProductApex(),
+		},
+		tenant: tenancy
+			? {
+					slug: tenancy.slug,
+					resolution: tenancy.resolution,
+					isMarketingHost: tenancy.isMarketingHost,
+					id: tenancy.tenant?._id?.toString() ?? null,
+				}
+			: null,
+	});
+});
+
+/** Lightweight product/marketing surface (www.product.com). */
+app.route('/api/platform', platformRoutes);
 
 app.get('/api/config', async (c) => {
+	const tenancy = getTenantContext();
 	const config = getConfig();
 	const live = getActiveMonthlyEventSync();
 	if (live && config.site) {
 		config.site.activeMonthlyEvent = await enrichActiveMonthlyEvent(live);
 	}
-	return c.json(config);
+	const tenant = tenancy?.tenant;
+	return c.json({
+		...config,
+		tenant: tenant
+			? {
+					slug: tenant.slug,
+					name: tenant.name,
+					resolution: tenancy?.resolution ?? null,
+					isDefault: Boolean(tenant.isDefault),
+				}
+			: null,
+	});
 });
 
 app.get('/api/roster', async (c) => {
@@ -324,16 +397,33 @@ app.route('/api/admin', adminRoutes);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distPath = join(__dirname, '../../frontend/dist');
+const productDistPath = join(__dirname, '../../product/dist');
 const isProduction = process.env.NODE_ENV === 'production';
 
-if (isProduction && existsSync(distPath)) {
+if (isProduction) {
 	app.use('*', async (c, next) => {
 		if (c.req.path.startsWith('/api')) return next();
-		return serveStatic({ root: distPath })(c, next);
+		const tenancy = getTenantContext();
+		const root =
+			tenancy?.isMarketingHost && existsSync(productDistPath)
+				? productDistPath
+				: existsSync(distPath)
+					? distPath
+					: null;
+		if (!root) return next();
+		return serveStatic({ root })(c, next);
 	});
 	app.get('*', async (c, next) => {
 		if (c.req.path.startsWith('/api')) return next();
-		return serveStatic({ root: distPath, path: 'index.html' })(c, next);
+		const tenancy = getTenantContext();
+		const root =
+			tenancy?.isMarketingHost && existsSync(productDistPath)
+				? productDistPath
+				: existsSync(distPath)
+					? distPath
+					: null;
+		if (!root) return next();
+		return serveStatic({ root, path: 'index.html' })(c, next);
 	});
 }
 
@@ -345,6 +435,11 @@ async function main() {
 			`Warning: frontend/dist not found at ${distPath}. Run "npm run build --prefix frontend" before starting in production.`,
 		);
 	}
+	if (isProduction && !existsSync(productDistPath)) {
+		console.warn(
+			`Warning: product/dist not found at ${productDistPath}. Run "npm run build --prefix product" for the product.com host panel.`,
+		);
+	}
 	if (isProduction && !process.env.MONGODB_URI) {
 		console.error(
 			'FATAL: Set MONGODB_URI in server/.env for production (e.g. MongoDB Atlas).',
@@ -353,7 +448,30 @@ async function main() {
 	}
 
 	await connectDb();
-	await Promise.all([refreshPromptsCache(), refreshSiteSettingsCache()]);
+	// Automatic multi-tenant backfill (no manual Mongo steps).
+	// TENANCY_MIGRATE=auto|force|off — see MULTI_TENANT.md
+	const tenancyReport = await runTenancyMigration();
+	if (tenancyReport.ran) {
+		log.info('Tenancy migration applied', {
+			slug: tenancyReport.defaultTenantSlug,
+			accountsLinked: tenancyReport.accountsLinked,
+			ms: tenancyReport.durationMs,
+		});
+	}
+	const { ensureDefaultTenant } = await import('./tenancy/resolve.js');
+	const { runWithTenantContext } = await import('./tenancy/context.js');
+	const defaultTenant = await ensureDefaultTenant();
+	await runWithTenantContext(
+		{
+			tenant: defaultTenant,
+			isMarketingHost: false,
+			resolution: 'default',
+			slug: defaultTenant.slug,
+		},
+		async () => {
+			await Promise.all([refreshPromptsCache(), refreshSiteSettingsCache()]);
+		},
+	);
 
 	wireDiscordGatewaySettingsHook();
 	await startDiscordGateway();

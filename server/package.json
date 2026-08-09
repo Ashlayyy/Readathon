@@ -8,6 +8,7 @@
 	"scripts": {
 		"dev": "tsx watch src/index.ts",
 		"start": "NODE_ENV=production tsx src/index.ts",
+		"migrate:tenancy": "tsx src/tenancy/runMigrateCli.ts",
 		"test": "node --import tsx --test \"src/**/*.test.ts\"",
 		"test:coverage": "c8 --all --include=src/**/*.ts --exclude=src/**/*.test.ts --exclude=src/types/** --exclude=src/security.integration.manual.ts --reporter=text-summary --reporter=text --reporter=html --check-coverage --lines 0 --functions 0 --branches 0 --statements 0 node --import tsx --test \"src/**/*.test.ts\"",
 		"test:security": "node --import tsx --test src/security.integration.manual.ts"

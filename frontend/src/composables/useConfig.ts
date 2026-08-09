@@ -1,14 +1,30 @@
 import { ref } from 'vue'
-import { api, type RealmathonConfig, type TeamConfig } from '../lib/api'
+import { ApiError, api, type RealmathonConfig, type TeamConfig } from '../lib/api'
+import { currentTenantSlugHeader } from './useTenant'
 import { useTheme } from './useTheme'
 import { useMonthlyThemePreview } from './useMonthlyThemePreview'
+
+export type TenantUnavailable = {
+  slug: string
+  reason: 'not_found' | 'archived' | 'suspended' | string
+  message: string
+}
 
 const config = ref<RealmathonConfig | null>(null)
 const configLoading = ref(false)
 const configError = ref<string | null>(null)
+const tenantUnavailable = ref<TenantUnavailable | null>(null)
 let loadPromise: Promise<RealmathonConfig | null> | null = null
+/** Which tenant cache key the current `config` / unavailable state belongs to. */
+let loadedForKey: string | null = null
+/** Bumps when a newer load starts so stale responses cannot overwrite UI. */
+let loadGeneration = 0
 /** Reloads config while a theme is live so branding auto-reverts after the window ends. */
 let themePollHandle: ReturnType<typeof setInterval> | null = null
+
+function tenantCacheKey(): string {
+  return currentTenantSlugHeader() ?? '__default__'
+}
 
 function syncThemePoll(data: RealmathonConfig | null) {
   if (themePollHandle) {
@@ -41,11 +57,28 @@ function syncEventThemes(data: RealmathonConfig, usingPreview: boolean) {
 }
 
 async function loadConfigInternal(force = false): Promise<RealmathonConfig | null> {
-  if (!force && config.value) return config.value
-  if (!force && loadPromise) return loadPromise
+  const key = tenantCacheKey()
+  const keyChanged = loadedForKey !== null && loadedForKey !== key
 
+  // Same tenant + good config — reuse unless forced.
+  if (!force && !keyChanged && config.value && loadedForKey === key) {
+    return config.value
+  }
+  // Same tenant still loading — join in-flight request.
+  if (!force && !keyChanged && loadPromise && loadedForKey === key) {
+    return loadPromise
+  }
+
+  const generation = ++loadGeneration
   configLoading.value = true
   configError.value = null
+  // Always drop sticky unavailable when switching tenants (e.g. /e/x → /).
+  if (keyChanged || force) {
+    tenantUnavailable.value = null
+  }
+  if (keyChanged) {
+    config.value = null
+  }
 
   loadPromise = (async () => {
     try {
@@ -54,7 +87,7 @@ async function loadConfigInternal(force = false): Promise<RealmathonConfig | nul
       let data: RealmathonConfig
       let usingPreview = false
 
-      if (slot) {
+      if (slot && !currentTenantSlugHeader()) {
         try {
           data = await preview.fetchPreviewConfig(slot)
           usingPreview = true
@@ -69,16 +102,36 @@ async function loadConfigInternal(force = false): Promise<RealmathonConfig | nul
         data = await api<RealmathonConfig>('/config')
       }
 
+      if (generation !== loadGeneration) return config.value
+
       config.value = data
+      tenantUnavailable.value = null
+      loadedForKey = key
       syncEventThemes(data, usingPreview)
       syncThemePoll(data)
     } catch (e) {
+      if (generation !== loadGeneration) return config.value
+
       console.error('Failed to load config:', e)
-      configError.value =
-        e instanceof Error ? e.message : 'Failed to load event configuration'
+      config.value = null
+      loadedForKey = key
+      if (e instanceof ApiError && e.code === 'TENANT_UNAVAILABLE') {
+        tenantUnavailable.value = {
+          slug: e.slug || currentTenantSlugHeader() || 'unknown',
+          reason: e.reason || 'not_found',
+          message: e.message,
+        }
+        configError.value = null
+      } else {
+        tenantUnavailable.value = null
+        configError.value =
+          e instanceof Error ? e.message : 'Failed to load event configuration'
+      }
     } finally {
-      configLoading.value = false
-      loadPromise = null
+      if (generation === loadGeneration) {
+        configLoading.value = false
+        loadPromise = null
+      }
     }
     return config.value
   })()
@@ -104,6 +157,7 @@ export function useConfig() {
     config,
     configLoading,
     configError,
+    tenantUnavailable,
     loadConfig,
     getTeam,
     exitMonthlyThemePreview,

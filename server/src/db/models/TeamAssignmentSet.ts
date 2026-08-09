@@ -1,4 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from 'mongoose'
+import { tenantScopePlugin } from '../../tenancy/plugin.js'
 
 const assignmentEntrySchema = new Schema(
 	{
@@ -11,7 +12,8 @@ const assignmentEntrySchema = new Schema(
 /** Up to 3 saved team-shuffle proposals (slots 1–3). */
 const teamAssignmentSetSchema = new Schema(
 	{
-		slot: { type: Number, required: true, unique: true, min: 1, max: 3 },
+		tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', default: null, index: true },
+		slot: { type: Number, required: true, min: 1, max: 3 },
 		label: { type: String, default: '', trim: true },
 		includeAdmins: { type: Boolean, default: false },
 		assignments: { type: [assignmentEntrySchema], default: [] },
@@ -19,6 +21,10 @@ const teamAssignmentSetSchema = new Schema(
 	},
 	{ timestamps: true },
 )
+
+teamAssignmentSetSchema.index({ tenantId: 1, slot: 1 }, { unique: true })
+
+teamAssignmentSetSchema.plugin(tenantScopePlugin)
 
 export type ITeamAssignmentSet = InferSchemaType<typeof teamAssignmentSetSchema> & {
 	_id: mongoose.Types.ObjectId

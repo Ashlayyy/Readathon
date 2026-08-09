@@ -34,7 +34,14 @@ describe('auth routes', () => {
     const res = await app.request('http://localhost/api/auth/me')
 
     assert.equal(res.status, 200)
-    assert.deepEqual(await res.json(), { user: null })
+    const body = (await res.json()) as {
+      user: null
+      account: null
+      isMarketingHost: boolean
+    }
+    assert.equal(body.user, null)
+    assert.equal(body.account, null)
+    assert.equal(typeof body.isMarketingHost, 'boolean')
   })
 
   it('returns the session user', async () => {
