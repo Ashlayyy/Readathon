@@ -131,7 +131,11 @@ export async function validateSubmission(
 		return 'Page count must be at least 1.';
 	}
 
-	if (input.coverUrl != null && input.coverUrl !== '' && !isAllowedCoverUrl(input.coverUrl)) {
+	const cover = input.coverUrl?.trim() || null;
+	if (!cover) {
+		return 'Cover is required.';
+	}
+	if (!isAllowedCoverUrl(cover)) {
 		return 'Invalid cover URL.';
 	}
 

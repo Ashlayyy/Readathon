@@ -137,7 +137,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 </script>
 
 <template>
-	<div ref="panelRef" class="cover-editor" :class="{ editable }">
+	<div ref="panelRef" class="cover-editor" :class="{ editable, open }">
 		<button
 			v-if="editable"
 			type="button"
@@ -152,9 +152,19 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 				:cover-url="localCover"
 				:zoomable="false"
 			/>
-			<span class="cover-edit-hint">Change</span>
+			<span class="cover-edit-badge" aria-hidden="true">✎</span>
 		</button>
 		<BookCover v-else :title="title" :author="author" :cover-url="localCover" />
+
+		<button
+			v-if="editable"
+			type="button"
+			class="cover-change-btn"
+			:aria-expanded="open"
+			@click.stop="openPicker"
+		>
+			{{ open ? 'Close' : localCover ? 'Change cover' : 'Add cover' }}
+		</button>
 
 		<div v-if="editable && open" class="cover-panel card" @click.stop>
 			<p class="panel-lead">Pick a cover for <strong>{{ title }}</strong></p>
@@ -216,45 +226,85 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 .cover-editor {
 	position: relative;
 	flex-shrink: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0.4rem;
+	/* Size to the cover, not the “Change cover” label (which is wider). */
+	width: min-content;
 }
 
 .cover-hit {
 	appearance: none;
-	border: 0;
+	border: 2px dashed transparent;
 	padding: 0;
+	margin: 0;
 	background: transparent;
 	cursor: pointer;
 	position: relative;
 	display: block;
-	border-radius: 4px;
+	width: fit-content;
+	line-height: 0;
+	border-radius: 6px;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.cover-hit:hover .cover-edit-hint,
-.cover-hit:focus-visible .cover-edit-hint {
-	opacity: 1;
+.cover-editor.editable .cover-hit {
+	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
 }
 
-.cover-edit-hint {
+.cover-editor.editable .cover-hit:hover,
+.cover-editor.editable .cover-hit:focus-visible,
+.cover-editor.open .cover-hit {
+	border-color: var(--realm-accent);
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--realm-accent) 25%, transparent);
+}
+
+.cover-edit-badge {
 	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	padding: 0.25rem;
-	font-size: 0.65rem;
-	font-weight: 700;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	text-align: center;
+	top: 0.3rem;
+	right: 0.3rem;
+	width: 1.35rem;
+	height: 1.35rem;
+	display: grid;
+	place-items: center;
+	border-radius: 999px;
+	font-size: 0.7rem;
+	line-height: 1;
 	color: #fff;
-	background: color-mix(in srgb, #000 65%, transparent);
-	opacity: 0;
-	transition: opacity 0.15s ease;
+	background: color-mix(in srgb, var(--realm-accent) 88%, #000);
+	box-shadow: 0 1px 4px color-mix(in srgb, #000 35%, transparent);
+	pointer-events: none;
+}
+
+.cover-change-btn {
+	appearance: none;
+	border: 1px solid var(--realm-border);
+	background: var(--realm-surface);
+	color: var(--realm-text);
+	font: inherit;
+	font-size: 0.65rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	line-height: 1.2;
+	padding: 0.28rem 0.2rem;
+	border-radius: 4px;
+	cursor: pointer;
+	width: 100%;
+	white-space: normal;
+	text-align: center;
+}
+
+.cover-change-btn:hover,
+.cover-change-btn:focus-visible {
+	border-color: var(--realm-accent);
+	color: var(--realm-accent);
 }
 
 .cover-panel {
 	position: absolute;
 	z-index: 20;
-	top: calc(100% + 0.4rem);
+	top: calc(100% + 0.35rem);
 	left: 0;
 	width: min(18rem, 78vw);
 	padding: 0.75rem;
