@@ -40,3 +40,7 @@ PLATFORM_DISCORD_BOT_TOKEN=
 ```
 
 Frontend: `VITE_PRODUCT_APEX`, `VITE_PRODUCT_NAME`.
+
+Operator runbook: see repo-root [`MULTI_TENANT.md`](../../../MULTI_TENANT.md).
+
+**Product.com app:** separate Vite app in [`product/`](../../../product/) (marketing + host panel on port 5174).

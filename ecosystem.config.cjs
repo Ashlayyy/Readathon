@@ -43,6 +43,24 @@ const apps = isDev
           APP_MODE: 'development',
         },
       },
+      {
+        name: 'readathon-product',
+        cwd: root,
+        script: 'npm',
+        args: 'run dev:product',
+        interpreter: 'none',
+        autorestart: true,
+        max_restarts: 10,
+        restart_delay: 3000,
+        time: true,
+        merge_logs: true,
+        out_file: path.join(root, 'logs', 'product-out.log'),
+        error_file: path.join(root, 'logs', 'product-error.log'),
+        env: {
+          NODE_ENV: 'development',
+          APP_MODE: 'development',
+        },
+      },
     ]
   : [
       {

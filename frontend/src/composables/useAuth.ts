@@ -3,7 +3,15 @@ import { api, googleLoginUrl, type PublicUser } from '../lib/api'
 import { captureEvent, identifyUser } from '../lib/posthog'
 import { useTheme } from './useTheme'
 
+export type PlatformAccountPublic = {
+  id: string
+  email: string
+  displayName: string
+  avatarUrl?: string | null
+}
+
 const user = ref<PublicUser | null>(null)
+const account = ref<PlatformAccountPublic | null>(null)
 const loaded = ref(false)
 let fetchPromise: Promise<PublicUser | null> | null = null
 
@@ -22,13 +30,18 @@ export function useAuth() {
 
     fetchPromise = (async () => {
       try {
-        const data = await api<{ user: PublicUser | null }>('/auth/me')
+        const data = await api<{
+          user: PublicUser | null
+          account?: PlatformAccountPublic | null
+        }>('/auth/me')
         user.value = data.user
+        account.value = data.account ?? null
         syncPreferEventThemes(data.user)
         identifyUser(data.user)
         return data.user
       } catch {
         user.value = null
+        account.value = null
         identifyUser(null)
         return null
       } finally {
@@ -61,6 +74,7 @@ export function useAuth() {
   async function logout() {
     await api('/auth/logout', { method: 'POST' })
     user.value = null
+    account.value = null
     loaded.value = true
     fetchPromise = null
     identifyUser(null)
@@ -73,5 +87,5 @@ export function useAuth() {
     }
   }
 
-  return { user, loaded, fetchUser, register, login, logout, googleLoginUrl }
+  return { user, account, loaded, fetchUser, register, login, logout, googleLoginUrl }
 }

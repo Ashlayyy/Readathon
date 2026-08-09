@@ -59,6 +59,17 @@ async function submitAuth() {
   }
 }
 
+const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    message.value = 'Copied to clipboard.'
+  } catch {
+    error.value = 'Could not copy — select the URL manually.'
+  }
+}
+
 async function copyInvite() {
   try {
     const data = await api<{ ok: true; url: string }>('/platform/discord/bot-invite')
@@ -120,10 +131,21 @@ onMounted(() => {
               <div class="host__links">
                 <a :href="`/e/${m.slug}`">Open</a>
                 <a :href="`/e/${m.slug}/admin`">Admin</a>
+                <a :href="`/e/${m.slug}/login`">Login page</a>
+                <button type="button" class="linkish" @click="copyText(m.pathUrl || `${origin}/e/${m.slug}`)">
+                  Copy path URL
+                </button>
               </div>
             </li>
           </ul>
-          <p v-else class="muted">No events yet.</p>
+          <div v-else class="host__empty">
+            <p class="muted">No events yet.</p>
+            <ol class="host__tips">
+              <li>Create an event with a unique slug.</li>
+              <li>Share the <code>/e/slug</code> link with players (subdomains need DNS).</li>
+              <li>Invite the Discord bot, then configure channels in that event’s Admin → Settings.</li>
+            </ol>
+          </div>
           <RouterLink class="host__btn" to="/host/new">Create event</RouterLink>
         </section>
 
@@ -240,10 +262,33 @@ onMounted(() => {
 }
 .host__links {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: center;
 }
-.host__links a {
+.host__links a,
+.host__links .linkish {
   color: #d4a574;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.host__empty {
+  margin-bottom: 1rem;
+}
+.host__tips {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  color: #9a948a;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.host__tips code {
+  color: #f2ebe3;
 }
 .muted {
   color: #9a948a;

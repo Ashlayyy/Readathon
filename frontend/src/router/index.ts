@@ -70,26 +70,47 @@ function prefixEventRoutes(
   })
 }
 
+function productSiteUrl(path = '/'): string {
+  const base = (
+    import.meta.env.VITE_PRODUCT_URL?.trim() || 'http://localhost:5174'
+  ).replace(/\/+$/, '')
+  const p = path.startsWith('/') ? path : `/${path}`
+  return `${base}${p}`
+}
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    // Host panel lives in the separate `product/` app (product.com).
     {
       path: '/host',
       name: 'host-console',
-      component: () => import('../views/platform/HostConsoleView.vue'),
-      meta: { platform: true },
+      redirect: () => {
+        if (typeof window !== 'undefined') {
+          window.location.href = productSiteUrl('/host')
+        }
+        return { name: 'home' }
+      },
     },
     {
       path: '/host/new',
       name: 'host-create',
-      component: () => import('../views/platform/CreateEventView.vue'),
-      meta: { platform: true },
+      redirect: () => {
+        if (typeof window !== 'undefined') {
+          window.location.href = productSiteUrl('/host/new')
+        }
+        return { name: 'home' }
+      },
     },
     {
       path: '/marketing',
       name: 'marketing',
-      component: () => import('../views/platform/MarketingHomeView.vue'),
-      meta: { platform: true },
+      redirect: () => {
+        if (typeof window !== 'undefined') {
+          window.location.href = productSiteUrl('/')
+        }
+        return { name: 'home' }
+      },
     },
     // Legacy / default-tenant routes (bookbaddies.net, localhost)
     ...prefixEventRoutes(
@@ -132,15 +153,18 @@ function routeBaseName(name: unknown): string {
 }
 
 router.beforeEach(async (to) => {
-  const { syncFromRoutePath, isMarketingHost } = useTenant()
+  const { syncFromRoutePath } = useTenant()
   syncFromRoutePath(to.path)
 
-  // Marketing apex: `/` shows product landing (keep /host always available)
-  if (detectMarketingHost() && (to.path === '/' || to.name === 'home')) {
-    return { name: 'marketing' }
+  // Marketing apex → dedicated product.com app
+  if (detectMarketingHost()) {
+    if (typeof window !== 'undefined') {
+      const path =
+        to.path.startsWith('/host') ? to.fullPath : '/'
+      window.location.href = productSiteUrl(path)
+    }
+    return false
   }
-
-  if (to.meta.platform) return true
 
   const { user, fetchUser } = useAuth()
   const { config, loadConfig } = useConfig()
@@ -200,6 +224,16 @@ router.beforeEach(async (to) => {
     }
   }
   if (to.meta.requiresAdmin && !user.value?.isAdmin) {
+    // Host panel session may need a tenant login when cookies are not shared.
+    if (!user.value) {
+      return to.params.tenantSlug
+        ? {
+            name: 'tenant-login',
+            params: { tenantSlug: to.params.tenantSlug },
+            query: { next: to.fullPath, from: 'host' },
+          }
+        : { name: 'login', query: { next: to.fullPath, from: 'host' } }
+    }
     return to.params.tenantSlug
       ? { name: 'tenant-home', params: { tenantSlug: to.params.tenantSlug } }
       : '/'
@@ -219,8 +253,6 @@ router.beforeEach(async (to) => {
       ? { name: 'tenant-home', params: { tenantSlug: to.params.tenantSlug } }
       : '/'
   }
-
-  void isMarketingHost
 })
 
 router.afterEach((to) => {

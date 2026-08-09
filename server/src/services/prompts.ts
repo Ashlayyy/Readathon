@@ -24,7 +24,7 @@ import type { ITenant } from '../db/models/Tenant.js';
 
 const configPath = join(
 	dirname(fileURLToPath(import.meta.url)),
-	'../../data/realmathon.json',
+	'../../../data/realmathon.json',
 );
 
 let cache: IPrompt[] = [];

@@ -30,9 +30,11 @@ Built with **Vue 3 + Vite** (frontend), **Hono + MongoDB** (API), and a single c
 Readathon/
 ├── data/
 │   └── realmathon.json      # Event content, copy, teams, prompts, FAQ, branding, admin UI
-├── frontend/                # Vue 3 + Vite + TypeScript SPA
+├── frontend/                # Player SPA (Book Baddies + /e/:slug)
+├── product/                 # Marketing + host panel (product.com)
 ├── server/                  # Hono API + Mongoose + MongoDB
-├── ecosystem.config.cjs       # PM2 process config
+├── deploy/                  # nginx examples for multi-tenant prod
+├── ecosystem.config.cjs     # PM2 process config
 ├── package.json             # Root scripts (dev, pm2, test)
 └── .nvmrc                   # Node 22.18+
 ```
@@ -54,22 +56,27 @@ Readathon/
 nvm use
 npm install
 npm install --prefix frontend
+npm install --prefix product
 npm install --prefix server
 
 cp server/.env.example server/.env
-# Edit server/.env - at minimum MONGODB_URI and SESSION_SECRET
+# Edit server/.env - at minimum MONGODB_URI, SESSION_SECRET,
+# FRONTEND_URL=http://localhost:5173, PRODUCT_URL=http://localhost:5174
 
 npm run dev
 ```
 
-| Service  | URL                   |
-| -------- | --------------------- |
-| Frontend | http://localhost:5173 |
-| API      | http://localhost:3001 |
+| Service              | URL                     |
+| -------------------- | ----------------------- |
+| Players (`frontend`) | http://localhost:5173   |
+| Host panel (`product`) | http://localhost:5174 |
+| API                  | http://localhost:3001   |
 
-The Vite dev server proxies `/api` to the backend. Leave `VITE_API_URL` unset locally.
+The Vite apps proxy `/api` to the backend. Leave `VITE_API_URL` unset locally.
 
 Without `RESEND_API_KEY`, sign-in links print to the server console instead of emailing.
+
+Multi-tenant / host panel docs: [`MULTI_TENANT.md`](./MULTI_TENANT.md), [`HOST_PANEL_PLAN.md`](./HOST_PANEL_PLAN.md).
 
 ---
 
@@ -135,69 +142,54 @@ PORT=3001
 ### Frontend production (`frontend/.env.production`)
 
 ```env
-# API subdomain - same value as server API_URL (no trailing slash)
 VITE_API_URL=https://api.your-domain.com
+VITE_PRODUCT_URL=https://product.com
+VITE_PRODUCT_APEX=product.com
+VITE_PRODUCT_NAME=Product
+```
+
+### Product production (`product/.env.production`)
+
+```env
+VITE_PLAYER_ORIGIN=https://product.com
+VITE_PRODUCT_APEX=product.com
+VITE_PRODUCT_NAME=Product
+# VITE_API_URL=https://api.your-domain.com
 ```
 
 ---
 
 ## Production deployment
 
-Frontend and API run on **separate URLs**:
+Recommended hosts:
 
-- `https://your-domain.com` - static Vue app (`frontend/dist`)
-- `https://api.your-domain.com` - Hono on port 3001 behind nginx
+| Host | Serves |
+|------|--------|
+| `product.com` / `www` | Host panel + marketing (`product/dist`) |
+| `bookbaddies.net` | Default Crucible players (`frontend/dist`) |
+| `*.product.com` or `product.com/e/:slug` | Tenant player sites (`frontend/dist`) |
+| `api…` (optional) | Hono API |
 
 ```bash
 cp frontend/.env.production.example frontend/.env.production
-# Set VITE_API_URL and server/.env (FRONTEND_URL, API_URL)
+cp product/.env.production.example product/.env.production
+# Set server/.env: FRONTEND_URL, PRODUCT_URL, PRODUCT_APEX,
+# COOKIE_DOMAIN=.product.com (when sharing sessions on that apex),
+# PLATFORM_DISCORD_BOT_TOKEN, RESEND_*, SESSION_SECRET
 
 npm run pm2:start
 ```
 
-`pm2:start` builds the frontend (baking in `VITE_API_URL`) and starts the API with `NODE_ENV=production`.
+`pm2:start` builds **both** SPAs and starts the API (`NODE_ENV=production`). In production the API can serve the correct `dist` from the `Host` header (see `server/src/index.ts`).
 
-### nginx examples
+Full nginx samples: [`deploy/nginx.product.example.conf`](./deploy/nginx.product.example.conf).
 
-**Frontend** - serve `frontend/dist` with SPA fallback:
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
-    root /path/to/Readathon/frontend/dist;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-```
-
-**API** - proxy to PM2 (nginx adds the internal `/api` prefix; public URLs are `https://api.your-domain.com/auth/...`):
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name api.your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3001/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-`FRONTEND_URL` must match the browser origin for CORS and session cookies.
+`FRONTEND_URL` and `PRODUCT_URL` must match browser origins for CORS. Subdomains of `PRODUCT_APEX` are allowed automatically.
 
 After code or config changes:
 
 ```bash
-npm run build --prefix frontend && npm run pm2:restart
+npm run build && npm run pm2:restart
 ```
 
 Keep PM2 alive across reboots:

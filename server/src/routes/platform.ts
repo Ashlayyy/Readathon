@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import {
   accountToPublic,
   AuthError,
+  clearSession,
   getSessionAccount,
   loginByEmail,
   requestMagicLink,
@@ -9,9 +10,13 @@ import {
 import { rateLimit } from '../middleware/rateLimit.js'
 import {
   createTenantEvent,
+  getEventForHost,
+  inviteCohost,
   listMembershipsForAccount,
+  patchEventOnboarding,
   PlatformError,
   ensurePlatformAccount,
+  updateHostEvent,
 } from '../tenancy/createTenant.js'
 import {
   getProductApex,
@@ -20,6 +25,7 @@ import {
 } from '../tenancy/context.js'
 import { getDiscordBotInviteUrl } from '../services/discordRoleVerify.js'
 import { getPlatformDiscordBotToken } from '../tenancy/platformDiscord.js'
+import type { HostOnboarding } from '../tenancy/hostOnboarding.js'
 
 export const platformRoutes = new Hono()
 
@@ -111,12 +117,93 @@ platformRoutes.post('/events', writeLimiter, async (c) => {
       },
       pathUrl: result.pathUrl,
       subdomainUrl: result.subdomainUrl,
-      adminPath: `/e/${result.tenant.slug}/admin`,
+      adminPath: `/e/${result.tenant.slug}/admin?tab=settings&from=host`,
+      adminUrl: `${result.pathUrl}/admin?tab=settings&from=host`,
+      eventHomePath: `/host/e/${result.tenant.slug}`,
     })
   } catch (e) {
     if (e instanceof PlatformError) return c.json({ error: e.message }, 400)
     throw e
   }
+})
+
+platformRoutes.get('/events/:slug', async (c) => {
+  const account = await getSessionAccount(c)
+  if (!account) return c.json({ error: 'Sign in required' }, 401)
+  const slug = c.req.param('slug')
+  if (!slug) return c.json({ error: 'Slug required' }, 400)
+  try {
+    const event = await getEventForHost(account._id, slug)
+    return c.json({ event })
+  } catch (e) {
+    if (e instanceof PlatformError) {
+      const status = e.message === 'Event not found.' ? 404 : 403
+      return c.json({ error: e.message }, status)
+    }
+    throw e
+  }
+})
+
+platformRoutes.patch('/events/:slug/onboarding', writeLimiter, async (c) => {
+  const account = await getSessionAccount(c)
+  if (!account) return c.json({ error: 'Sign in required' }, 401)
+  const slug = c.req.param('slug')
+  if (!slug) return c.json({ error: 'Slug required' }, 400)
+  try {
+    const body = await c.req.json<Partial<HostOnboarding>>()
+    const membership = await patchEventOnboarding(account._id, slug, body)
+    return c.json({ membership })
+  } catch (e) {
+    if (e instanceof PlatformError) {
+      const status = e.message === 'Event not found.' ? 404 : 403
+      return c.json({ error: e.message }, status)
+    }
+    throw e
+  }
+})
+
+platformRoutes.patch('/events/:slug', writeLimiter, async (c) => {
+  const account = await getSessionAccount(c)
+  if (!account) return c.json({ error: 'Sign in required' }, 401)
+  const slug = c.req.param('slug')
+  if (!slug) return c.json({ error: 'Slug required' }, 400)
+  try {
+    const body = await c.req.json<{ name?: string; status?: 'active' | 'archived' }>()
+    const membership = await updateHostEvent(account._id, slug, body)
+    return c.json({ membership })
+  } catch (e) {
+    if (e instanceof PlatformError) {
+      const status = e.message === 'Event not found.' ? 404 : 400
+      return c.json({ error: e.message }, status)
+    }
+    throw e
+  }
+})
+
+platformRoutes.post('/events/:slug/cohosts', writeLimiter, async (c) => {
+  const account = await getSessionAccount(c)
+  if (!account) return c.json({ error: 'Sign in required' }, 401)
+  const slug = c.req.param('slug')
+  if (!slug) return c.json({ error: 'Slug required' }, 400)
+  try {
+    const body = await c.req.json<{ email?: string; displayName?: string }>()
+    const invitee = await inviteCohost(account._id, slug, {
+      email: body.email ?? '',
+      displayName: body.displayName,
+    })
+    return c.json({ invitee })
+  } catch (e) {
+    if (e instanceof PlatformError) {
+      const status = e.message === 'Event not found.' ? 404 : 400
+      return c.json({ error: e.message }, status)
+    }
+    throw e
+  }
+})
+
+platformRoutes.post('/logout', (c) => {
+  clearSession(c)
+  return c.json({ ok: true })
 })
 
 platformRoutes.get('/discord/bot-invite', async (c) => {

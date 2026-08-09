@@ -67,11 +67,47 @@ loadEnv({ path: join(dirname(fileURLToPath(import.meta.url)), '../.env') });
 
 const app = new Hono();
 const frontendOrigin = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+const productOrigin =
+	process.env.PRODUCT_URL?.trim() ||
+	process.env.PRODUCT_MARKETING_URL?.trim() ||
+	'http://localhost:5174';
+const productApex = (process.env.PRODUCT_APEX ?? 'product.com')
+	.trim()
+	.toLowerCase()
+	.replace(/^\.+/, '');
+const corsOrigins = new Set(
+	[frontendOrigin, productOrigin]
+		.map((o) => o.replace(/\/+$/, ''))
+		.filter(Boolean),
+);
+for (const extra of (process.env.CORS_ORIGINS ?? '').split(',')) {
+	const cleaned = extra.trim().replace(/\/+$/, '');
+	if (cleaned) corsOrigins.add(cleaned);
+}
+
+function isAllowedCorsOrigin(origin: string): boolean {
+	const cleaned = origin.replace(/\/+$/, '');
+	if (corsOrigins.has(cleaned)) return true;
+	try {
+		const { hostname, protocol } = new URL(cleaned);
+		if (protocol !== 'http:' && protocol !== 'https:') return false;
+		const host = hostname.toLowerCase();
+		// Allow player subdomains: {slug}.product.com
+		if (host === productApex || host.endsWith(`.${productApex}`)) return true;
+	} catch {
+		return false;
+	}
+	return false;
+}
 
 app.use(
 	'*',
 	cors({
-		origin: frontendOrigin,
+		origin: (origin) => {
+			if (!origin) return frontendOrigin;
+			const cleaned = origin.replace(/\/+$/, '');
+			return isAllowedCorsOrigin(cleaned) ? cleaned : null;
+		},
 		credentials: true,
 	}),
 );
@@ -142,7 +178,21 @@ app.get('/api/config', async (c) => {
 	if (live && config.site) {
 		config.site.activeMonthlyEvent = await enrichActiveMonthlyEvent(live);
 	}
-	return c.json(config);
+	const tenancy = getTenantContext();
+	const tenant = tenancy?.tenant;
+	return c.json({
+		...config,
+		tenant: tenant
+			? {
+					slug: tenant.slug,
+					name: tenant.name,
+					resolution: tenancy?.resolution ?? null,
+					isDefault: Boolean(tenant.isDefault),
+				}
+			: tenancy?.isMarketingHost
+				? null
+				: null,
+	});
 });
 
 app.get('/api/roster', async (c) => {
@@ -349,16 +399,33 @@ app.route('/api/admin', adminRoutes);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distPath = join(__dirname, '../../frontend/dist');
+const productDistPath = join(__dirname, '../../product/dist');
 const isProduction = process.env.NODE_ENV === 'production';
 
-if (isProduction && existsSync(distPath)) {
+if (isProduction) {
 	app.use('*', async (c, next) => {
 		if (c.req.path.startsWith('/api')) return next();
-		return serveStatic({ root: distPath })(c, next);
+		const tenancy = getTenantContext();
+		const root =
+			tenancy?.isMarketingHost && existsSync(productDistPath)
+				? productDistPath
+				: existsSync(distPath)
+					? distPath
+					: null;
+		if (!root) return next();
+		return serveStatic({ root })(c, next);
 	});
 	app.get('*', async (c, next) => {
 		if (c.req.path.startsWith('/api')) return next();
-		return serveStatic({ root: distPath, path: 'index.html' })(c, next);
+		const tenancy = getTenantContext();
+		const root =
+			tenancy?.isMarketingHost && existsSync(productDistPath)
+				? productDistPath
+				: existsSync(distPath)
+					? distPath
+					: null;
+		if (!root) return next();
+		return serveStatic({ root, path: 'index.html' })(c, next);
 	});
 }
 
@@ -370,6 +437,11 @@ async function main() {
 			`Warning: frontend/dist not found at ${distPath}. Run "npm run build --prefix frontend" before starting in production.`,
 		);
 	}
+	if (isProduction && !existsSync(productDistPath)) {
+		console.warn(
+			`Warning: product/dist not found at ${productDistPath}. Run "npm run build --prefix product" for the product.com host panel.`,
+		);
+	}
 	if (isProduction && !process.env.MONGODB_URI) {
 		console.error(
 			'FATAL: Set MONGODB_URI in server/.env for production (e.g. MongoDB Atlas).',
@@ -378,7 +450,16 @@ async function main() {
 	}
 
 	await connectDb();
-	await runTenancyMigration();
+	// Automatic multi-tenant backfill (no manual Mongo steps).
+	// TENANCY_MIGRATE=auto|force|off — see MULTI_TENANT.md
+	const tenancyReport = await runTenancyMigration();
+	if (tenancyReport.ran) {
+		log.info('Tenancy migration applied', {
+			slug: tenancyReport.defaultTenantSlug,
+			accountsLinked: tenancyReport.accountsLinked,
+			ms: tenancyReport.durationMs,
+		});
+	}
 	const { ensureDefaultTenant } = await import('./tenancy/resolve.js');
 	const { runWithTenantContext } = await import('./tenancy/context.js');
 	const defaultTenant = await ensureDefaultTenant();

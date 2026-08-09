@@ -9,6 +9,13 @@ const authTokenSchema = new Schema(
     tokenHash: { type: String, required: true, unique: true },
     expiresAt: { type: Date, required: true, index: true },
     usedAt: { type: Date, default: null },
+    /**
+     * Tenant slug at request time so /auth/verify (API host) can redirect
+     * back to /e/{slug}/… after the magic link is clicked.
+     */
+    tenantSlug: { type: String, default: null, lowercase: true, trim: true },
+    /** true when the link was requested from the marketing / host console. */
+    forPlatform: { type: Boolean, default: false },
   },
   { timestamps: true },
 )

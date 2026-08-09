@@ -28,6 +28,14 @@ const membershipSchema = new Schema(
     currentlyReadingUpdatedAt: { type: Date, default: null },
     avatarUrl: { type: String, default: null, trim: true },
     googleAvatarUrl: { type: String, default: null, trim: true },
+    /** Host-console checklist progress (owners/admins). */
+    hostOnboarding: {
+      sharedPlayerLink: { type: Boolean, default: false },
+      discordBotInvited: { type: Boolean, default: false },
+      openedAdmin: { type: Boolean, default: false },
+      previewOpened: { type: Boolean, default: false },
+      dismissed: { type: Boolean, default: false },
+    },
   },
   { timestamps: true },
 )

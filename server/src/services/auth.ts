@@ -8,10 +8,17 @@ import { PlatformAccount, type IPlatformAccount } from '../db/models/PlatformAcc
 import { Membership } from '../db/models/Membership.js'
 import { type IUser, User } from '../db/models/User.js'
 import { apiPublicUrl } from '../lib/urls.js'
-import { getTenantContext, getTenantIdString } from '../tenancy/context.js'
+import {
+	getTenantContext,
+	getTenantIdString,
+	runWithTenantContext,
+} from '../tenancy/context.js'
 import { ensureUserTenancy } from '../tenancy/ensureUserTenancy.js'
 import { ensurePlatformAccount } from '../tenancy/createTenant.js'
-import { ensureDefaultTenant } from '../tenancy/resolve.js'
+import {
+	ensureDefaultTenant,
+	findTenantBySlug,
+} from '../tenancy/resolve.js'
 import { getTeamById } from './prompts.js'
 import { generateToken, hashToken, sendMagicLink } from './email.js'
 
@@ -95,6 +102,18 @@ export function accountToPublic(account: IPlatformAccount) {
 	}
 }
 
+function sessionCookieOptions() {
+	const domain = process.env.COOKIE_DOMAIN?.trim() || undefined
+	return {
+		httpOnly: true as const,
+		secure: process.env.NODE_ENV === 'production',
+		sameSite: 'Lax' as const,
+		path: '/',
+		maxAge: SESSION_MAX_AGE,
+		...(domain ? { domain } : {}),
+	}
+}
+
 export async function createSession(
 	c: Context,
 	opts: { userId?: string | null; accountId: string },
@@ -108,13 +127,7 @@ export async function createSession(
 		getSessionSecret(),
 		'HS256',
 	)
-	setCookie(c, SESSION_COOKIE, token, {
-		httpOnly: true,
-		secure: process.env.NODE_ENV === 'production',
-		sameSite: 'Lax',
-		path: '/',
-		maxAge: SESSION_MAX_AGE,
-	})
+	setCookie(c, SESSION_COOKIE, token, sessionCookieOptions())
 }
 
 /** @deprecated Prefer createSession with accountId */
@@ -126,7 +139,11 @@ export async function createSessionForUser(c: Context, user: UserDoc) {
 }
 
 export function clearSession(c: Context) {
-	deleteCookie(c, SESSION_COOKIE, { path: '/' })
+	const domain = process.env.COOKIE_DOMAIN?.trim() || undefined
+	deleteCookie(c, SESSION_COOKIE, {
+		path: '/',
+		...(domain ? { domain } : {}),
+	})
 }
 
 async function resolveUserForAccountInTenant(
@@ -139,9 +156,22 @@ async function resolveUserForAccountInTenant(
 		tenantId,
 		accountId,
 	})
+	const hostAdmin = Boolean(
+		membership &&
+			(membership.isAdmin ||
+				membership.role === 'owner' ||
+				membership.role === 'admin'),
+	)
+
 	if (membership?.legacyUserId) {
 		const user = await User.findById(membership.legacyUserId)
-		if (user) return user
+		if (user) {
+			if (hostAdmin && !user.isAdmin) {
+				user.isAdmin = true
+				await user.save()
+			}
+			return user
+		}
 	}
 
 	const account = await PlatformAccount.findById(accountId)
@@ -157,9 +187,17 @@ async function resolveUserForAccountInTenant(
 			avatarUrl: account.avatarUrl,
 			tenantId,
 			accountId: account._id,
-			isAdmin: false,
+			isAdmin: hostAdmin,
 			status: 'pending',
 		})
+	} else if (hostAdmin && !user.isAdmin) {
+		user.isAdmin = true
+		user.accountId = account._id
+		await user.save()
+	}
+	if (membership && !membership.legacyUserId) {
+		membership.legacyUserId = user._id
+		await membership.save()
 	}
 	await ensureUserTenancy(user)
 	return user
@@ -338,20 +376,58 @@ export async function requestMagicLink(email: string): Promise<void> {
 	const normalizedEmail = email.trim().toLowerCase()
 	const token = generateToken()
 	const expiresAt = new Date(Date.now() + 15 * 60 * 1000)
+	const ctx = getTenantContext()
+	const forPlatform = Boolean(ctx?.isMarketingHost || !ctx?.tenant)
+	const tenantSlug = forPlatform ? null : (ctx?.slug ?? null)
 
-	await AuthToken.deleteMany({ email: normalizedEmail, usedAt: null })
+	await AuthToken.deleteMany({ email: normalizedEmail, usedAt: null }).setOptions({
+		skipTenant: true,
+	})
 	await AuthToken.create({
 		email: normalizedEmail,
 		tokenHash: hashToken(token),
 		expiresAt,
+		tenantSlug,
+		forPlatform,
 	})
 
-	await sendMagicLink(normalizedEmail, token)
+	await sendMagicLink(normalizedEmail, token, {
+		forPlatform,
+		tenantSlug,
+	})
 }
 
 export type MagicLinkResult =
-	| { kind: 'user'; user: UserDoc; account: AccountDoc }
-	| { kind: 'account'; account: AccountDoc }
+	| {
+			kind: 'user'
+			user: UserDoc
+			account: AccountDoc
+			/** Frontend path to land on after verify (e.g. /e/slug/ or /). */
+			redirectPath: string
+	  }
+	| { kind: 'account'; account: AccountDoc; redirectPath: string }
+
+function redirectPathForTenant(isDefault: boolean, slug: string): string {
+	return isDefault || slug === 'crucible' ? '/' : `/e/${slug}/`
+}
+
+async function resolveUserInTenantContext(
+	account: AccountDoc,
+	email: string,
+): Promise<UserDoc> {
+	let user = await User.findOne({ email })
+	if (!user) {
+		user = await User.create({
+			displayName: account.displayName,
+			email: account.email,
+			accountId: account._id,
+			isAdmin: false,
+			status: 'pending',
+		})
+	}
+	await ensureUserTenancy(user)
+	return user
+}
 
 export async function verifyMagicLink(token: string): Promise<MagicLinkResult> {
 	const tokenHash = hashToken(token)
@@ -371,23 +447,40 @@ export async function verifyMagicLink(token: string): Promise<MagicLinkResult> {
 		displayName: record.email.split('@')[0]!,
 	})
 
-	const ctx = getTenantContext()
-	if (ctx?.isMarketingHost || !ctx?.tenant) {
-		return { kind: 'account', account }
+	const forPlatform = Boolean(
+		(record as { forPlatform?: boolean }).forPlatform,
+	)
+	const storedSlug = String(
+		(record as { tenantSlug?: string | null }).tenantSlug ?? '',
+	)
+		.trim()
+		.toLowerCase()
+
+	if (forPlatform) {
+		return { kind: 'account', account, redirectPath: '/host' }
 	}
 
-	let user = await User.findOne({ email: record.email })
-	if (!user) {
-		user = await User.create({
-			displayName: account.displayName,
-			email: account.email,
-			accountId: account._id,
-			isAdmin: false,
-			status: 'pending',
-		})
+	let tenant = storedSlug ? await findTenantBySlug(storedSlug) : null
+	if (!tenant) {
+		tenant = await ensureDefaultTenant()
 	}
-	await ensureUserTenancy(user)
-	return { kind: 'user', user, account }
+
+	const redirectPath = redirectPathForTenant(
+		Boolean(tenant.isDefault),
+		tenant.slug,
+	)
+
+	const user = await runWithTenantContext(
+		{
+			tenant,
+			isMarketingHost: false,
+			resolution: storedSlug ? 'header' : 'default',
+			slug: tenant.slug,
+		},
+		() => resolveUserInTenantContext(account, record.email),
+	)
+
+	return { kind: 'user', user, account, redirectPath }
 }
 
 export async function findOrCreateGoogleUser(
@@ -395,6 +488,7 @@ export async function findOrCreateGoogleUser(
 	displayName: string,
 	email: string,
 	pictureUrl?: string | null,
+	opts?: { tenantSlug?: string | null; forPlatform?: boolean },
 ): Promise<MagicLinkResult> {
 	const normalizedEmail = email.trim().toLowerCase()
 	const picture = pictureUrl?.trim() || null
@@ -407,40 +501,65 @@ export async function findOrCreateGoogleUser(
 	})
 
 	const ctx = getTenantContext()
-	if (ctx?.isMarketingHost || !ctx?.tenant) {
-		return { kind: 'account', account }
+	const forPlatform =
+		opts?.forPlatform ?? Boolean(ctx?.isMarketingHost || !ctx?.tenant)
+	if (forPlatform) {
+		return { kind: 'account', account, redirectPath: '/host' }
 	}
 
-	const byGoogle = await User.findOne({ googleId })
-	if (byGoogle) {
-		if (picture && byGoogle.googleAvatarUrl !== picture) {
-			byGoogle.googleAvatarUrl = picture
-			await byGoogle.save()
-		}
-		await ensureUserTenancy(byGoogle)
-		return { kind: 'user', user: byGoogle, account }
-	}
+	const slugHint = (opts?.tenantSlug ?? ctx?.slug ?? '').trim().toLowerCase()
+	let tenant = slugHint ? await findTenantBySlug(slugHint) : ctx?.tenant
+	if (!tenant) tenant = await ensureDefaultTenant()
 
-	const byEmail = await User.findOne({ email: normalizedEmail })
-	if (byEmail) {
-		byEmail.googleId = googleId
-		if (!byEmail.displayName && displayName) byEmail.displayName = displayName
-		if (picture) byEmail.googleAvatarUrl = picture
-		await byEmail.save()
-		await ensureUserTenancy(byEmail)
-		return { kind: 'user', user: byEmail, account }
-	}
+	const redirectPath = redirectPathForTenant(
+		Boolean(tenant.isDefault),
+		tenant.slug,
+	)
 
-	const user = await User.create({
-		displayName: displayName.trim() || normalizedEmail.split('@')[0],
-		email: normalizedEmail,
-		googleId,
-		googleAvatarUrl: picture,
-		isAdmin: false,
-		status: 'pending',
-	})
-	await ensureUserTenancy(user)
-	return { kind: 'user', user, account }
+	const user = await runWithTenantContext(
+		{
+			tenant,
+			isMarketingHost: false,
+			resolution: slugHint ? 'header' : 'default',
+			slug: tenant.slug,
+		},
+		async () => {
+			const byGoogle = await User.findOne({ googleId })
+			if (byGoogle) {
+				if (picture && byGoogle.googleAvatarUrl !== picture) {
+					byGoogle.googleAvatarUrl = picture
+					await byGoogle.save()
+				}
+				await ensureUserTenancy(byGoogle)
+				return byGoogle
+			}
+
+			const byEmail = await User.findOne({ email: normalizedEmail })
+			if (byEmail) {
+				byEmail.googleId = googleId
+				if (!byEmail.displayName && displayName) {
+					byEmail.displayName = displayName
+				}
+				if (picture) byEmail.googleAvatarUrl = picture
+				await byEmail.save()
+				await ensureUserTenancy(byEmail)
+				return byEmail
+			}
+
+			const created = await User.create({
+				displayName: displayName.trim() || normalizedEmail.split('@')[0],
+				email: normalizedEmail,
+				googleId,
+				googleAvatarUrl: picture,
+				isAdmin: false,
+				status: 'pending',
+			})
+			await ensureUserTenancy(created)
+			return created
+		},
+	)
+
+	return { kind: 'user', user, account, redirectPath }
 }
 
 /** Ensure default tenant exists when resolving legacy sessions outside request ALS. */

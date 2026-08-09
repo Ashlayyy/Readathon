@@ -311,6 +311,13 @@ export type RealmathonConfig = {
     seasonArchive?: SeasonArchive
     activeMonthlyEvent?: ActiveMonthlyEvent | null
   }
+  /** Active hosted event (null on marketing host). */
+  tenant?: {
+    slug: string
+    name: string
+    resolution: string | null
+    isDefault: boolean
+  } | null
 }
 
 export type TeamStanding = {

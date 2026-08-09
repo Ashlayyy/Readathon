@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useConfig } from '../composables/useConfig'
+import { useTenant } from '../composables/useTenant'
 
 const { register, login, googleLoginUrl } = useAuth()
 const { config, loadConfig, configLoading } = useConfig()
+const { showTenantCue, accessModeLabel, tenantSlug, productApex } = useTenant()
 const route = useRoute()
 
 const mode = ref<'register' | 'login'>('login')
@@ -14,6 +16,18 @@ const email = ref('')
 const error = ref('')
 const success = ref('')
 const loading = ref(false)
+
+const eventName = computed(
+  () => config.value?.tenant?.name || config.value?.event.name || 'this event',
+)
+const eventSlug = computed(
+  () => config.value?.tenant?.slug || tenantSlug.value || null,
+)
+const fromHost = computed(() => String(route.query.from || '') === 'host')
+const productUrl = (
+  (import.meta.env.VITE_PRODUCT_URL as string | undefined)?.trim() ||
+  'http://localhost:5174'
+).replace(/\/+$/, '')
 
 loadConfig()
 
@@ -59,6 +73,32 @@ async function submit() {
           {{ mode === 'register' ? config.copy.loginRegisterLead : config.copy.loginMagicLinkLead }}
         </p>
       </div>
+
+      <aside
+        class="tenant-banner"
+        :class="{ 'tenant-banner--cue': showTenantCue }"
+        aria-label="Event you are signing into"
+      >
+        <p class="tenant-banner__label">Signing into</p>
+        <p class="tenant-banner__name">{{ eventName }}</p>
+        <p v-if="eventSlug" class="tenant-banner__meta">
+          <span class="tenant-banner__slug">{{ eventSlug }}</span>
+          <span aria-hidden="true"> · </span>
+          <span>{{ accessModeLabel }}</span>
+        </p>
+        <p v-else class="tenant-banner__meta">{{ accessModeLabel }}</p>
+        <p v-if="showTenantCue" class="tenant-banner__hint">
+          Your account here is only for this event
+          <template v-if="eventSlug">
+            (<code>/e/{{ eventSlug }}</code> or
+            <code>{{ eventSlug }}.{{ productApex }}</code>).
+          </template>
+        </p>
+        <p v-if="fromHost" class="tenant-banner__hint">
+          Coming from the host panel — sign in with the same email you used there.
+          <a :href="`${productUrl}/host`">Return to host panel</a>
+        </p>
+      </aside>
 
       <div v-if="error" class="alert alert-error">{{ error }}</div>
       <div v-if="success" class="alert alert-success">{{ success }}</div>
@@ -133,6 +173,51 @@ async function submit() {
   font-size: 2rem;
   display: block;
   margin-bottom: 0.5rem;
+}
+
+.tenant-banner {
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius, 10px);
+  border: 1px solid var(--realm-border, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--realm-surface-alt, #1c1928) 85%, transparent);
+  text-align: center;
+}
+.tenant-banner--cue {
+  border-color: color-mix(in srgb, var(--realm-accent, #d4634a) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--realm-accent, #d4634a) 20%, transparent);
+}
+.tenant-banner__label {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--realm-text-muted, #9a9188);
+}
+.tenant-banner__name {
+  margin: 0.35rem 0 0.2rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--realm-text, #f4efe8);
+}
+.tenant-banner__meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--realm-text-muted, #9a9188);
+}
+.tenant-banner__slug {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--realm-accent-glow, #ff8a6a);
+}
+.tenant-banner__hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--realm-text-muted, #9a9188);
+}
+.tenant-banner__hint code {
+  font-size: 0.78em;
+  color: var(--realm-text, #f4efe8);
 }
 
 .login-header h1 {

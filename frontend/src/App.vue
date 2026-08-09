@@ -10,6 +10,7 @@ import SiteNavDropdown from './components/SiteNavDropdown.vue';
 import ThemeSwitcher from './components/ThemeSwitcher.vue';
 import UserAvatar from './components/UserAvatar.vue';
 import ImageLightbox from './components/ImageLightbox.vue';
+import EventSwitcher from './components/EventSwitcher.vue';
 import { useBodyScrollLock } from './composables/useBodyScrollLock';
 import { useMonthlyThemePreview } from './composables/useMonthlyThemePreview';
 import { useTenant } from './composables/useTenant';
@@ -24,7 +25,10 @@ const { config, configLoading, configError, loadConfig, exitMonthlyThemePreview 
 	useConfig();
 const { previewActive, previewTitle } = useMonthlyThemePreview();
 const { admin } = useAdminCopy();
-const { tenantHref } = useTenant();
+const { tenantHref, showTenantCue, accessModeLabel } = useTenant();
+const eventCueName = computed(
+	() => config.value?.tenant?.name || config.value?.event.name || null,
+);
 const route = useRoute();
 const router = useRouter();
 const unreadQuestions = ref(0);
@@ -170,6 +174,13 @@ function closeMenu() {
 						}}</span>
 						<span v-else class="brand-text">Readathon 2026</span>
 					</RouterLink>
+					<span
+						v-if="showTenantCue && eventCueName"
+						class="tenant-chip"
+						:title="accessModeLabel"
+					>
+						{{ eventCueName }}
+					</span>
 
 					<button
 						type="button"
@@ -208,6 +219,7 @@ function closeMenu() {
 
 				<div class="header-actions">
 					<ThemeSwitcher compact class="nav-theme-switcher" />
+					<EventSwitcher />
 
 					<div v-if="user?.isAdmin" class="action-buttons">
 						<RouterLink
@@ -542,6 +554,31 @@ function closeMenu() {
 	font-style: normal;
 	color: var(--realm-accent-glow);
 	font-size: 0.85em;
+}
+
+.tenant-chip {
+	display: none;
+	max-width: 12rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	padding: 0.2rem 0.55rem;
+	border-radius: 999px;
+	border: 1px solid color-mix(in srgb, var(--realm-accent) 45%, transparent);
+	background: color-mix(in srgb, var(--realm-accent) 14%, transparent);
+	color: var(--realm-accent-glow, var(--realm-accent));
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+}
+
+@media (min-width: 900px) {
+	.tenant-chip {
+		display: inline-flex;
+		align-items: center;
+		grid-column: 1;
+		margin-left: 0.35rem;
+	}
 }
 
 .menu-toggle {

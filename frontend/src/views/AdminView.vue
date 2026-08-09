@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import {
 	api,
 	apiUrl,
@@ -38,8 +39,24 @@ import { useImageLightbox } from '../composables/useImageLightbox';
 const { config, loadConfig } = useConfig();
 const { t } = useCopy();
 const { admin, section, msg, confirmMsg } = useAdminCopy();
-const { user: me } = useAuth();
+const { user: me, account } = useAuth();
+const route = useRoute();
+const fromHost = computed(() => String(route.query.from || '') === 'host');
+const productUrl = (
+	(import.meta.env.VITE_PRODUCT_URL as string | undefined)?.trim() ||
+	'http://localhost:5174'
+).replace(/\/+$/, '');
 const { show: showLightbox } = useImageLightbox();
+
+function scrollToDiscordSection() {
+	if (route.hash !== '#discord') return;
+	void nextTick(() => {
+		document.getElementById('discord')?.scrollIntoView({
+			behavior: 'smooth',
+			block: 'start',
+		});
+	});
+}
 const users = ref<AdminUser[]>([]);
 const pending = ref(0);
 const stats = ref({
@@ -365,7 +382,9 @@ onMounted(async () => {
 			'settings',
 		]);
 		await loadStats();
-		if (tabParam && allowed.has(tabParam)) {
+		if (route.hash === '#discord') {
+			activeTab.value = 'settings';
+		} else if (tabParam && allowed.has(tabParam)) {
 			activeTab.value = tabParam as typeof activeTab.value;
 		} else if (stats.value.unreadQuestions > 0) {
 			activeTab.value = 'inbox';
@@ -373,10 +392,22 @@ onMounted(async () => {
 		if (activeTab.value === 'settings') settingsMounted.value = true;
 		if (activeTab.value === 'themes') themesMounted.value = true;
 		await ensureTabData(activeTab.value);
+		scrollToDiscordSection();
 	} catch (e) {
 		showMessage(e instanceof Error ? e.message : msg('loadFailed'), true);
 	}
 });
+
+watch(
+	() => route.hash,
+	() => {
+		if (route.hash === '#discord') {
+			activeTab.value = 'settings';
+			settingsMounted.value = true;
+			scrollToDiscordSection();
+		}
+	},
+);
 
 async function loadStats() {
 	const data = await api<{
@@ -1202,6 +1233,18 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 				{{ navOpen ? 'Close menu' : 'Sections' }}
 			</button>
 		</header>
+
+		<div v-if="fromHost" class="admin-host-banner" role="status">
+			<p>
+				Editing
+				<strong>{{ config.tenant?.name || config.event.name }}</strong>
+				<template v-if="account"> as {{ account.displayName }}</template>.
+				Deep work stays here; links and onboarding live in the host panel.
+			</p>
+			<a class="btn btn-secondary btn-sm" :href="`${productUrl}/host`">
+				Back to host panel
+			</a>
+		</div>
 
 		<Teleport to="body">
 			<div
@@ -2862,6 +2905,30 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 	justify-content: space-between;
 	gap: 1rem;
 	margin-bottom: 1.25rem;
+}
+
+.admin-host-banner {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem 1rem;
+	margin: -0.35rem 0 1.25rem;
+	padding: 0.85rem 1rem;
+	border: 1px solid color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--realm-accent) 12%, var(--realm-surface));
+}
+
+.admin-host-banner p {
+	margin: 0;
+	color: var(--realm-text-muted);
+	line-height: 1.45;
+	max-width: 46rem;
+}
+
+.admin-host-banner strong {
+	color: var(--realm-text);
 }
 
 .admin-nav-toggle {

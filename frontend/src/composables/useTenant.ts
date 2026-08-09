@@ -34,12 +34,39 @@ export function parsePathTenantSlug(path: string): string | null {
   return m?.[1]?.toLowerCase() ?? null
 }
 
+export type TenantAccessMode = 'legacy' | 'path' | 'subdomain' | 'marketing'
+
 export function useTenant() {
   const isMarketingHost = computed(() => detectMarketingHost())
   const subdomainSlug = computed(() => detectSubdomainTenant())
 
   const tenantSlug = computed(() => {
     return pathTenantSlug.value || subdomainSlug.value || null
+  })
+
+  const accessMode = computed<TenantAccessMode>(() => {
+    if (isMarketingHost.value) return 'marketing'
+    if (pathTenantSlug.value) return 'path'
+    if (subdomainSlug.value) return 'subdomain'
+    return 'legacy'
+  })
+
+  const accessModeLabel = computed(() => {
+    switch (accessMode.value) {
+      case 'path':
+        return `Path URL (/e/${pathTenantSlug.value})`
+      case 'subdomain':
+        return `Subdomain (${subdomainSlug.value}.${PRODUCT_APEX})`
+      case 'marketing':
+        return 'Product / host console'
+      default:
+        return 'This site'
+    }
+  })
+
+  /** True when we should show an explicit “you’re signing into X” cue. */
+  const showTenantCue = computed(() => {
+    return accessMode.value === 'path' || accessMode.value === 'subdomain'
   })
 
   /** Prefix for in-app links when using path tenancy. */
@@ -60,6 +87,9 @@ export function useTenant() {
     tenantSlug,
     pathTenantSlug,
     subdomainSlug,
+    accessMode,
+    accessModeLabel,
+    showTenantCue,
     tenantHref,
     syncFromRoutePath,
     productApex: PRODUCT_APEX,

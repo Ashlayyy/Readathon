@@ -99,8 +99,8 @@ readerRoutes.get('/:id', async (c) => {
 	const user = await User.findById(id)
 	if (!user) return c.json({ error: 'Reader not found' }, 404)
 
-	// Public: assigned readers only. Admins can open pending accounts too.
-	if (user.status !== 'assigned' && !isAdmin) {
+	// Public: assigned readers only. Own profile + admins can open pending too.
+	if (user.status !== 'assigned' && !isAdmin && !isOwn) {
 		return c.json({ error: 'Reader not found' }, 404)
 	}
 
