@@ -11,6 +11,7 @@ import ThemeSwitcher from './components/ThemeSwitcher.vue';
 import UserAvatar from './components/UserAvatar.vue';
 import ImageLightbox from './components/ImageLightbox.vue';
 import EventSwitcher from './components/EventSwitcher.vue';
+import EventUnavailableView from './views/EventUnavailableView.vue';
 import { useBodyScrollLock } from './composables/useBodyScrollLock';
 import { useMonthlyThemePreview } from './composables/useMonthlyThemePreview';
 import { useTenant } from './composables/useTenant';
@@ -21,14 +22,25 @@ function prefetchProfile() {
 }
 
 const { user, logout } = useAuth();
-const { config, configLoading, configError, loadConfig, exitMonthlyThemePreview } =
-	useConfig();
+const {
+	config,
+	configLoading,
+	configError,
+	tenantUnavailable,
+	loadConfig,
+	exitMonthlyThemePreview,
+} = useConfig();
 const { previewActive, previewTitle } = useMonthlyThemePreview();
 const { admin } = useAdminCopy();
-const { tenantHref, showTenantCue, accessModeLabel } = useTenant();
-const eventCueName = computed(
-	() => config.value?.tenant?.name || config.value?.event.name || null,
-);
+const { tenantHref, showTenantCue, accessModeLabel, tenantSlug, accessMode, productApex } =
+	useTenant();
+/** Path/subdomain URL hint under the brand — never repeat the event title. */
+const tenantUrlCue = computed(() => {
+	if (!showTenantCue.value || !tenantSlug.value) return null;
+	if (accessMode.value === 'path') return `/e/${tenantSlug.value}`;
+	if (accessMode.value === 'subdomain') return `${tenantSlug.value}.${productApex}`;
+	return null;
+});
 const route = useRoute();
 const router = useRouter();
 const unreadQuestions = ref(0);
@@ -167,20 +179,24 @@ function closeMenu() {
 		>
 			<div class="header-inner">
 				<div class="header-top">
-					<RouterLink :to="tenantHref('/')" class="brand" @click="closeMenu">
-						<span class="brand-icon">⚔</span>
-						<span v-if="config" class="brand-text">{{
-							config.event.name
-						}}</span>
-						<span v-else class="brand-text">Readathon 2026</span>
-					</RouterLink>
-					<span
-						v-if="showTenantCue && eventCueName"
-						class="tenant-chip"
+					<RouterLink
+						:to="tenantHref('/')"
+						class="brand"
+						:class="{ 'brand--tenant': Boolean(tenantUrlCue) }"
 						:title="accessModeLabel"
+						@click="closeMenu"
 					>
-						{{ eventCueName }}
-					</span>
+						<span class="brand-icon">⚔</span>
+						<span class="brand-stack">
+							<span v-if="config" class="brand-text">{{
+								config.event.name
+							}}</span>
+							<span v-else class="brand-text">Readathon 2026</span>
+							<span v-if="tenantUrlCue" class="brand-slug">{{
+								tenantUrlCue
+							}}</span>
+						</span>
+					</RouterLink>
 
 					<button
 						type="button"
@@ -196,7 +212,7 @@ function closeMenu() {
 					</button>
 				</div>
 
-				<nav class="main-nav" aria-label="Main">
+				<nav v-if="!tenantUnavailable" class="main-nav" aria-label="Main">
 					<RouterLink :to="tenantHref('/')" class="nav-home" @click="closeMenu">{{
 						nav.home ?? 'Home'
 					}}</RouterLink>
@@ -219,9 +235,9 @@ function closeMenu() {
 
 				<div class="header-actions">
 					<ThemeSwitcher compact class="nav-theme-switcher" />
-					<EventSwitcher />
+					<EventSwitcher v-if="!tenantUnavailable" />
 
-					<div v-if="user?.isAdmin" class="action-buttons">
+					<div v-if="user?.isAdmin && !tenantUnavailable" class="action-buttons">
 						<RouterLink
 							:to="tenantHref('/admin')"
 							class="btn btn-secondary btn-sm action-btn"
@@ -412,10 +428,15 @@ function closeMenu() {
 				<strong>Awaiting assignment.</strong> {{ config.copy.pendingBanner }}
 			</div>
 
-			<div v-if="configLoading && !config" class="page-state">
+			<div v-if="configLoading && !config && !tenantUnavailable" class="page-state">
 				<div class="page-spinner" role="status" aria-label="Loading" />
 				<p>Loading event…</p>
 			</div>
+
+			<EventUnavailableView
+				v-else-if="tenantUnavailable"
+				:unavailable="tenantUnavailable"
+			/>
 
 			<div v-else-if="configError && !config" class="page-state">
 				<div class="alert alert-error">
@@ -533,14 +554,28 @@ function closeMenu() {
 	justify-self: start;
 	display: flex;
 	align-items: center;
-	gap: 0.6rem;
+	gap: 0.65rem;
 	color: var(--realm-text);
-	white-space: nowrap;
+	text-decoration: none;
+	min-width: 0;
+}
+
+.brand--tenant {
+	align-items: flex-start;
 }
 
 .brand-icon {
 	font-size: 1.5rem;
 	color: var(--realm-accent);
+	line-height: 1;
+	flex-shrink: 0;
+	margin-top: 0.1rem;
+}
+
+.brand-stack {
+	display: grid;
+	gap: 0.12rem;
+	min-width: 0;
 }
 
 .brand-text {
@@ -548,6 +583,9 @@ function closeMenu() {
 	font-size: clamp(0.95rem, 3.5vw, 1.15rem);
 	font-weight: 700;
 	letter-spacing: 0.08em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .brand-text em {
@@ -556,29 +594,17 @@ function closeMenu() {
 	font-size: 0.85em;
 }
 
-.tenant-chip {
-	display: none;
-	max-width: 12rem;
+.brand-slug {
+	font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', Menlo, monospace;
+	font-size: 0.72rem;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+	color: var(--realm-text-muted);
+	opacity: 0.9;
+	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	white-space: nowrap;
-	padding: 0.2rem 0.55rem;
-	border-radius: 999px;
-	border: 1px solid color-mix(in srgb, var(--realm-accent) 45%, transparent);
-	background: color-mix(in srgb, var(--realm-accent) 14%, transparent);
-	color: var(--realm-accent-glow, var(--realm-accent));
-	font-size: 0.72rem;
-	font-weight: 600;
-	letter-spacing: 0.02em;
-}
-
-@media (min-width: 900px) {
-	.tenant-chip {
-		display: inline-flex;
-		align-items: center;
-		grid-column: 1;
-		margin-left: 0.35rem;
-	}
+	max-width: min(18rem, 42vw);
 }
 
 .menu-toggle {

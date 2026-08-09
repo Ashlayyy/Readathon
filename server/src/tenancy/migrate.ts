@@ -60,6 +60,32 @@ async function countUntenanted(model: AnyModel): Promise<number> {
   return model.countDocuments(UNTENANTED as never).setOptions(SKIP)
 }
 
+async function collectionHasIndex(
+  model: AnyModel,
+  indexName: string,
+): Promise<boolean> {
+  try {
+    const indexes = await model.collection.indexes()
+    return indexes.some((idx) => idx.name === indexName)
+  } catch {
+    return false
+  }
+}
+
+/** Legacy global uniques that block multi-tenant emails / prompts. */
+async function legacyIndexesStillPresent(): Promise<boolean> {
+  if (await collectionHasIndex(User as unknown as AnyModel, 'email_1')) return true
+  if (await collectionHasIndex(Prompt as unknown as AnyModel, 'promptId_1')) {
+    return true
+  }
+  if (
+    await collectionHasIndex(TeamAssignmentSet as unknown as AnyModel, 'slot_1')
+  ) {
+    return true
+  }
+  return false
+}
+
 /** True when the DB still needs the multi-tenant backfill. */
 export async function tenancyMigrationNeeded(): Promise<boolean> {
   const defaultTenant = await Tenant.findOne({ isDefault: true })
@@ -83,6 +109,9 @@ export async function tenancyMigrationNeeded(): Promise<boolean> {
     if ((await countUntenanted(model)) > 0) return true
   }
 
+  // Index-only leftovers: stamped DB can still block create-event via email_1.
+  if (await legacyIndexesStillPresent()) return true
+
   return false
 }
 
@@ -100,20 +129,51 @@ async function stampCollection(
 }
 
 async function dropLegacyUniqueIndexes(): Promise<string[]> {
-  const drops: Array<[AnyModel, string]> = [
+  const named: Array<[AnyModel, string]> = [
     [User as unknown as AnyModel, 'email_1'],
     [Prompt as unknown as AnyModel, 'promptId_1'],
     [TeamAssignmentSet as unknown as AnyModel, 'slot_1'],
   ]
   const dropped: string[] = []
-  for (const [model, indexName] of drops) {
+  for (const [model, indexName] of named) {
     try {
       await model.collection.dropIndex(indexName)
       const key = `${model.modelName}.${indexName}`
       dropped.push(key)
       console.log(`[tenancy] Dropped legacy index ${key}`)
     } catch {
-      /* index may not exist */
+      /* index may not exist under that name */
+    }
+  }
+
+  // Also drop by key shape (Atlas / older mongoose may use different names).
+  const byKey: Array<[AnyModel, string]> = [
+    [User as unknown as AnyModel, 'email'],
+    [Prompt as unknown as AnyModel, 'promptId'],
+    [TeamAssignmentSet as unknown as AnyModel, 'slot'],
+  ]
+  for (const [model, field] of byKey) {
+    try {
+      const indexes = await model.collection.indexes()
+      for (const idx of indexes) {
+        const key = idx.key as Record<string, number>
+        if (
+          idx.unique &&
+          idx.name &&
+          idx.name !== '_id_' &&
+          Object.keys(key).length === 1 &&
+          key[field] === 1
+        ) {
+          await model.collection.dropIndex(idx.name)
+          const label = `${model.modelName}.${idx.name}`
+          if (!dropped.includes(label)) {
+            dropped.push(label)
+            console.log(`[tenancy] Dropped legacy index ${label}`)
+          }
+        }
+      }
+    } catch {
+      /* ignore */
     }
   }
   return dropped
@@ -200,14 +260,26 @@ export async function runTenancyMigration(
 
   if (mode === 'auto' && !needed && !opts.force) {
     const tenant = await ensureDefaultTenant()
-    console.log(
-      `[tenancy] Migration not needed (default tenant "${tenant.slug}" ready)`,
-    )
+    // Still scrub legacy indexes — cheap, idempotent, and required so the same
+    // host email can own multiple events (compound tenantId+email uniqueness).
+    const indexesDropped = await dropLegacyUniqueIndexes()
+    if (indexesDropped.length) {
+      await syncTenantIndexes()
+      console.log(
+        `[tenancy] Dropped leftover legacy indexes: ${indexesDropped.join(', ')}`,
+      )
+    } else {
+      console.log(
+        `[tenancy] Migration not needed (default tenant "${tenant.slug}" ready)`,
+      )
+    }
     return {
       ...empty,
-      skippedReason: 'already_migrated',
+      ran: indexesDropped.length > 0,
+      skippedReason: indexesDropped.length ? undefined : 'already_migrated',
       defaultTenantId: tenant._id.toString(),
       defaultTenantSlug: tenant.slug,
+      indexesDropped,
       durationMs: Date.now() - started,
     }
   }

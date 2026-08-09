@@ -173,12 +173,12 @@ app.get('/api/health', (c) => {
 app.route('/api/platform', platformRoutes);
 
 app.get('/api/config', async (c) => {
+	const tenancy = getTenantContext();
 	const config = getConfig();
 	const live = getActiveMonthlyEventSync();
 	if (live && config.site) {
 		config.site.activeMonthlyEvent = await enrichActiveMonthlyEvent(live);
 	}
-	const tenancy = getTenantContext();
 	const tenant = tenancy?.tenant;
 	return c.json({
 		...config,
@@ -189,9 +189,7 @@ app.get('/api/config', async (c) => {
 					resolution: tenancy?.resolution ?? null,
 					isDefault: Boolean(tenant.isDefault),
 				}
-			: tenancy?.isMarketingHost
-				? null
-				: null,
+			: null,
 	});
 });
 

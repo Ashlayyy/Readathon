@@ -334,10 +334,12 @@ h1 {
   line-height: 1.5;
 }
 .block {
-  padding: 1.25rem 1.35rem;
+  padding: 1.35rem 1.4rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  background:
+    linear-gradient(165deg, color-mix(in srgb, var(--panel) 92%, #fff 2%), color-mix(in srgb, var(--ink-2) 88%, transparent));
+  box-shadow: var(--shadow-soft);
   display: grid;
   gap: 0.85rem;
 }

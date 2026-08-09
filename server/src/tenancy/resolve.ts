@@ -5,6 +5,7 @@ import {
   getLegacyPlayerHosts,
   getProductApex,
   type TenantRequestContext,
+  type TenantUnavailableReason,
 } from './context.js'
 
 let defaultTenantCache: ITenant | null = null
@@ -47,11 +48,44 @@ export async function findTenantBySlug(slug: string): Promise<ITenant | null> {
   return Tenant.findOne({ slug: s, status: 'active' })
 }
 
+async function lookupSlug(slug: string): Promise<{
+  tenant: ITenant | null
+  unavailableReason: TenantUnavailableReason | null
+}> {
+  const s = slug.trim().toLowerCase()
+  if (!s || s === 'www' || s === 'app' || s === 'api') {
+    return { tenant: null, unavailableReason: 'not_found' }
+  }
+  const row = await Tenant.findOne({ slug: s })
+  if (!row) return { tenant: null, unavailableReason: 'not_found' }
+  if (row.status === 'active') {
+    return { tenant: row, unavailableReason: null }
+  }
+  if (row.status === 'archived' || row.status === 'suspended') {
+    return { tenant: null, unavailableReason: row.status }
+  }
+  return { tenant: null, unavailableReason: 'not_found' }
+}
+
 function normalizeHost(hostHeader: string | undefined): string {
   return (hostHeader ?? '')
     .split(':')[0]!
     .trim()
     .toLowerCase()
+}
+
+function slugContext(
+  slug: string,
+  lookup: { tenant: ITenant | null; unavailableReason: TenantUnavailableReason | null },
+  resolution: TenantRequestContext['resolution'],
+): TenantRequestContext {
+  return {
+    tenant: lookup.tenant,
+    isMarketingHost: false,
+    resolution,
+    slug,
+    unavailableReason: lookup.unavailableReason,
+  }
 }
 
 /**
@@ -60,6 +94,7 @@ function normalizeHost(hostHeader: string | undefined): string {
  * - www.product.com / product.com (apex) → marketing (no tenant)
  * - {slug}.product.com → tenant by subdomain
  * - /e/{slug}/... or X-Tenant-Slug → tenant by path/header
+ * - Unknown / inactive slug → tenant null + unavailableReason (never silent Crucible fallback)
  */
 export async function resolveTenantFromRequest(opts: {
   host: string | undefined
@@ -73,25 +108,13 @@ export async function resolveTenantFromRequest(opts: {
 
   const headerSlug = (opts.tenantSlugHeader ?? '').trim().toLowerCase()
   if (headerSlug) {
-    const tenant = await findTenantBySlug(headerSlug)
-    return {
-      tenant,
-      isMarketingHost: false,
-      resolution: 'header',
-      slug: headerSlug,
-    }
+    return slugContext(headerSlug, await lookupSlug(headerSlug), 'header')
   }
 
   const pathMatch = path.match(/^\/e\/([a-z0-9-]+)(?:\/|$)/i)
   if (pathMatch?.[1]) {
     const slug = pathMatch[1].toLowerCase()
-    const tenant = await findTenantBySlug(slug)
-    return {
-      tenant,
-      isMarketingHost: false,
-      resolution: 'path',
-      slug,
-    }
+    return slugContext(slug, await lookupSlug(slug), 'path')
   }
 
   const legacy = getLegacyPlayerHosts()
@@ -102,6 +125,7 @@ export async function resolveTenantFromRequest(opts: {
       isMarketingHost: false,
       resolution: 'default',
       slug: tenant.slug,
+      unavailableReason: null,
     }
   }
 
@@ -111,19 +135,14 @@ export async function resolveTenantFromRequest(opts: {
       isMarketingHost: true,
       resolution: 'marketing',
       slug: null,
+      unavailableReason: null,
     }
   }
 
   if (host.endsWith(`.${apex}`)) {
     const sub = host.slice(0, -(apex.length + 1))
     if (sub && !sub.includes('.')) {
-      const tenant = await findTenantBySlug(sub)
-      return {
-        tenant,
-        isMarketingHost: false,
-        resolution: 'subdomain',
-        slug: sub,
-      }
+      return slugContext(sub, await lookupSlug(sub), 'subdomain')
     }
   }
 
@@ -133,5 +152,29 @@ export async function resolveTenantFromRequest(opts: {
     isMarketingHost: false,
     resolution: 'unknown',
     slug: tenant.slug,
+    unavailableReason: null,
   }
+}
+
+export function tenantUnavailableMessage(reason: TenantUnavailableReason | null | undefined): string {
+  switch (reason) {
+    case 'archived':
+      return 'This event is no longer active.'
+    case 'suspended':
+      return 'This event is temporarily unavailable.'
+    default:
+      return 'This event was not found.'
+  }
+}
+
+/** True when a specific slug was requested but cannot be served. */
+export function isTenantUnavailable(ctx: TenantRequestContext | undefined): boolean {
+  if (!ctx) return false
+  if (ctx.tenant || ctx.isMarketingHost) return false
+  if (!ctx.slug) return false
+  return (
+    ctx.resolution === 'header' ||
+    ctx.resolution === 'path' ||
+    ctx.resolution === 'subdomain'
+  )
 }

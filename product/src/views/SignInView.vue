@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { productName } from '../lib/api'
 import { useHostAuth } from '../composables/useHostAuth'
 
@@ -44,7 +44,8 @@ async function submit() {
       <p class="eyebrow">Host access</p>
       <h1>Sign in to {{ productName() }}</h1>
       <p class="lede">
-        We’ll email you a one-time link. You’re signing into the <strong>host panel</strong>, not a player event.
+        We’ll email you a one-time link. You’re signing into the <strong>host panel</strong>,
+        not a player event.
       </p>
 
       <div class="tabs">
@@ -72,6 +73,11 @@ async function submit() {
 
       <p v-if="message" class="alert alert-ok">{{ message }}</p>
       <p v-if="error" class="alert alert-err">{{ error }}</p>
+
+      <p class="foot-note">
+        Want the player experience instead?
+        <RouterLink to="/">Learn what hosts get</RouterLink>
+      </p>
     </div>
   </main>
 </template>
@@ -83,27 +89,23 @@ async function submit() {
   padding: 2rem 0 4rem;
 }
 .panel {
-  padding: 1.75rem;
+  padding: 1.9rem 1.75rem;
   border: 1px solid var(--line);
-  border-radius: calc(var(--radius) + 4px);
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border-radius: calc(var(--radius) + 6px);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(212, 240, 106, 0.08), transparent 40%),
+    color-mix(in srgb, var(--panel) 90%, transparent);
   box-shadow: var(--shadow);
-}
-.eyebrow {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.72rem;
-  color: var(--accent);
 }
 h1 {
   margin: 0.5rem 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.8rem, 4vw, 2.4rem);
-  line-height: 1.1;
+  font-size: clamp(1.9rem, 4vw, 2.5rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
 }
 .lede {
-  margin: 0.75rem 0 0;
+  margin: 0.8rem 0 0;
   color: var(--muted);
   line-height: 1.5;
 }
@@ -111,19 +113,22 @@ h1 {
   display: flex;
   gap: 0.5rem;
   margin: 1.5rem 0 1rem;
+  padding: 0.3rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--line);
 }
 .tabs button {
   flex: 1;
-  min-height: 2.5rem;
+  min-height: 2.45rem;
   border-radius: 999px;
-  border: 1px solid var(--line);
+  border: none;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 .tabs button.on {
   background: var(--accent);
-  border-color: var(--accent);
   color: var(--accent-ink);
   font-weight: 600;
 }
@@ -133,5 +138,13 @@ h1 {
 }
 .alert {
   margin-top: 1rem;
+}
+.foot-note {
+  margin: 1.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.foot-note a {
+  color: var(--accent);
 }
 </style>

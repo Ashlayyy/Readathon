@@ -96,10 +96,12 @@ export function useTenant() {
   }
 }
 
-/** Header value for API calls (path or subdomain tenant). */
+/**
+ * Header value for API calls (path or subdomain tenant).
+ * Prefer the router-synced path slug so beforeEach sees the *destination*
+ * tenant before `window.location` updates (fixes sticky “event not found”).
+ */
 export function currentTenantSlugHeader(): string | null {
-  if (typeof window === 'undefined') return null
-  const fromPath = parsePathTenantSlug(window.location.pathname)
-  if (fromPath) return fromPath
+  if (pathTenantSlug.value) return pathTenantSlug.value
   return detectSubdomainTenant()
 }

@@ -1,8 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { ITenant } from '../db/models/Tenant.js'
 
+export type TenantUnavailableReason = 'not_found' | 'archived' | 'suspended'
+
 export type TenantRequestContext = {
-  /** Resolved tenant document (always set for player API after middleware). */
+  /** Resolved tenant document (set for player API when the event exists & is active). */
   tenant: ITenant | null
   /** True when host is the product marketing surface (www.product.com). */
   isMarketingHost: boolean
@@ -14,8 +16,13 @@ export type TenantRequestContext = {
     | 'header'
     | 'marketing'
     | 'unknown'
-  /** Raw slug if present in host/path */
+  /** Raw slug if present in host/path/header */
   slug: string | null
+  /**
+   * Set when a slug was requested (path/header/subdomain) but no active tenant
+   * is available — callers must not fall back to the default Crucible event.
+   */
+  unavailableReason?: TenantUnavailableReason | null
 }
 
 const storage = new AsyncLocalStorage<TenantRequestContext>()

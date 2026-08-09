@@ -169,7 +169,8 @@ router.beforeEach(async (to) => {
   const { user, fetchUser } = useAuth()
   const { config, loadConfig } = useConfig()
 
-  await Promise.all([fetchUser(), loadConfig()])
+  // Reload when /e/:slug changes so we never keep another event's cached config.
+  await Promise.all([fetchUser(), loadConfig(false)])
 
   const downtime = config.value?.site?.downtimeMode === true
   const isAdmin = user.value?.isAdmin === true

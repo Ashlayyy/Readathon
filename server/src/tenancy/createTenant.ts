@@ -110,55 +110,84 @@ export async function createTenantEvent(
     discordGuildIds: [],
   })
 
-  await SiteSettings.create({
-    tenantId: tenant._id,
-    showTeamRosters: false,
-    downtimeMode: false,
-  })
+  try {
+    await SiteSettings.create({
+      tenantId: tenant._id,
+      showTeamRosters: false,
+      downtimeMode: false,
+    })
 
-  let user = await User.findOne({
-    tenantId: tenant._id,
-    email: input.ownerEmail,
-  }).setOptions({ skipTenant: true })
-
-  if (!user) {
-    user = await User.create({
-      displayName: input.ownerDisplayName,
+    let user = await User.findOne({
+      tenantId: tenant._id,
       email: input.ownerEmail,
-      tenantId: tenant._id,
-      accountId: input.ownerAccountId,
-      isAdmin: true,
-      status: 'pending',
-    })
-  } else {
-    user.isAdmin = true
-    user.accountId = input.ownerAccountId
-    await user.save()
-  }
+    }).setOptions({ skipTenant: true })
 
-  const membership = await Membership.findOne({
-    tenantId: tenant._id,
-    accountId: input.ownerAccountId,
-  })
-  if (!membership) {
-    await Membership.create({
+    if (!user) {
+      try {
+        user = await User.create({
+          displayName: input.ownerDisplayName,
+          email: input.ownerEmail,
+          tenantId: tenant._id,
+          accountId: input.ownerAccountId,
+          isAdmin: true,
+          status: 'pending',
+        })
+      } catch (e) {
+        const code = (e as { code?: number })?.code
+        const keyPattern = (e as { keyPattern?: Record<string, number> })?.keyPattern
+        if (code === 11000 && keyPattern && 'email' in keyPattern && !('tenantId' in keyPattern)) {
+          throw new PlatformError(
+            'Could not create your host account for this event. Restart the API so tenancy migration can drop the legacy global email index, then try again.',
+          )
+        }
+        if (code === 11000) {
+          throw new PlatformError(
+            'Could not create your host account for this event (duplicate key). Try a different email or contact support.',
+          )
+        }
+        throw e
+      }
+    } else {
+      user.isAdmin = true
+      user.accountId = input.ownerAccountId
+      await user.save()
+    }
+
+    const membership = await Membership.findOne({
       tenantId: tenant._id,
       accountId: input.ownerAccountId,
-      legacyUserId: user._id,
-      displayName: input.ownerDisplayName,
-      isAdmin: true,
-      role: 'owner',
-      status: 'pending',
-      hostOnboarding: { ...DEFAULT_HOST_ONBOARDING },
-    })
-  } else {
-    membership.role = 'owner'
-    membership.isAdmin = true
-    membership.legacyUserId = user._id
-    if (!membership.hostOnboarding) {
-      membership.hostOnboarding = { ...DEFAULT_HOST_ONBOARDING }
+    }).setOptions({ skipTenant: true })
+    if (!membership) {
+      await Membership.create({
+        tenantId: tenant._id,
+        accountId: input.ownerAccountId,
+        legacyUserId: user._id,
+        displayName: input.ownerDisplayName,
+        isAdmin: true,
+        role: 'owner',
+        status: 'pending',
+        hostOnboarding: { ...DEFAULT_HOST_ONBOARDING },
+      })
+    } else {
+      membership.role = 'owner'
+      membership.isAdmin = true
+      membership.legacyUserId = user._id
+      if (!membership.hostOnboarding) {
+        membership.hostOnboarding = { ...DEFAULT_HOST_ONBOARDING }
+      }
+      await membership.save()
     }
-    await membership.save()
+  } catch (e) {
+    // Roll back partial tenant so the slug can be reused.
+    await Membership.deleteMany({ tenantId: tenant._id }).setOptions({
+      skipTenant: true,
+    })
+    await User.deleteMany({ tenantId: tenant._id }).setOptions({ skipTenant: true })
+    await SiteSettings.deleteMany({ tenantId: tenant._id }).setOptions({
+      skipTenant: true,
+    })
+    await Tenant.deleteOne({ _id: tenant._id })
+    throw e
   }
 
   clearDefaultTenantCache()
