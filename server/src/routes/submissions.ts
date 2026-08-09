@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Submission } from '../db/models/Submission.js';
 import { withActive } from '../db/activeSubmission.js';
-import { getSessionUser, requireAuth } from '../services/auth.js';
+import { getSessionUser, requireAuth, userIsAdmin } from '../services/auth.js';
 import {
 	calculateScore,
 	findDuplicateSubmission,
@@ -155,12 +155,13 @@ submissionRoutes.post('/', async (c) => {
 	});
 });
 
-/** Owner-only: change cover art on an existing log (upload URL or Open Library). */
+/** Owner or admin: change cover art on an existing log (upload URL or Open Library). */
 submissionRoutes.patch('/:id/cover', async (c) => {
 	const user = requireAuth(await getSessionUser(c));
-	const submission = await Submission.findOne(
-		withActive({ _id: c.req.param('id'), userId: user._id }),
-	);
+	const id = c.req.param('id');
+	const submission = userIsAdmin(user)
+		? await Submission.findOne(withActive({ _id: id }))
+		: await Submission.findOne(withActive({ _id: id, userId: user._id }));
 	if (!submission) return c.json({ error: 'Submission not found' }, 404);
 
 	const body = await c.req.json<{ coverUrl?: string | null }>();

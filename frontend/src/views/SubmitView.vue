@@ -20,12 +20,13 @@ const steps = computed(() => {
   if (!c) return []
   const all = [
     { n: 1, label: String(c.submitStepBook) },
-    { n: 2, label: String(c.submitStepType) },
-    { n: 3, label: String(c.submitStepPrompts) },
-    { n: 4, label: String(c.submitStepBonuses) },
-    { n: 5, label: String(c.submitStepReview) },
+    { n: 2, label: String(c.submitStepCover ?? 'Cover') },
+    { n: 3, label: String(c.submitStepType) },
+    { n: 4, label: String(c.submitStepPrompts) },
+    { n: 5, label: String(c.submitStepBonuses) },
+    { n: 6, label: String(c.submitStepReview) },
   ]
-  return hasBonusOptions.value ? all : all.filter((s) => s.n !== 4)
+  return hasBonusOptions.value ? all : all.filter((s) => s.n !== 5)
 })
 
 const hasBonusOptions = computed(() => {
@@ -441,7 +442,7 @@ async function submit() {
       }),
     })
     success.value = true
-    step.value = 6
+    step.value = 7
     void import('../lib/posthog').then(({ captureEvent }) => {
       captureEvent('submission_created', {
         submission_type: submissionType.value,
@@ -483,17 +484,28 @@ function nextStep() {
       error.value = 'Finish date cannot be before the start date.'
       return
     }
+    step.value = 2
+    if (autoLookupCover.value && !coverLocked.value && !coverUrl.value) {
+      void lookupCover()
+    }
+    return
   }
-  if (step.value === 2 && !submissionType.value) {
+  if (step.value === 2) {
+    if (!coverUrl.value) {
+      error.value = String(config.value?.copy.submitCoverRequired ?? 'Add or choose a cover to continue.')
+      return
+    }
+  }
+  if (step.value === 3 && !submissionType.value) {
     error.value = 'Choose add or sabotage.'
     return
   }
-  if (step.value === 2 && submissionType.value === 'sabotage' && !targetTeamId.value) {
+  if (step.value === 3 && submissionType.value === 'sabotage' && !targetTeamId.value) {
     error.value = 'Select a team to attack.'
     return
   }
-  if (step.value === 3 && !hasBonusOptions.value) {
-    step.value = 5
+  if (step.value === 4 && !hasBonusOptions.value) {
+    step.value = 6
     return
   }
   step.value++
@@ -501,8 +513,8 @@ function nextStep() {
 
 function prevStep() {
   error.value = ''
-  if (step.value === 5 && !hasBonusOptions.value) {
-    step.value = 3
+  if (step.value === 6 && !hasBonusOptions.value) {
+    step.value = 4
     return
   }
   step.value--
@@ -547,7 +559,7 @@ function reset() {
       </strong>
     </p>
 
-    <div class="submit-layout" :class="{ 'with-cover-rail': step === 1 }">
+    <div class="submit-layout">
     <div class="wizard card">
       <div class="progress" aria-label="Submission progress">
         <div
@@ -637,8 +649,90 @@ function reset() {
         />
       </section>
 
-      <!-- Step 2: Add or Sabotage -->
+      <!-- Step 2: Cover -->
       <section v-show="step === 2" class="wizard-step">
+        <h2>{{ config.copy.submitCoverTitle ?? 'Book cover' }}</h2>
+        <p class="step-hint">{{ config.copy.submitCoverHint ?? 'Pick a cover from Open Library or upload your own — a cover is required.' }}</p>
+
+        <div class="cover-step" aria-live="polite" :aria-busy="coverLooking || coverUploading">
+          <div class="cover-step-preview" :class="{ loading: (coverLooking || coverUploading) && !coverUrl }">
+            <BookCover
+              :title="bookTitle || 'Book'"
+              :author="bookAuthor"
+              :cover-url="coverUrl"
+              size="lg"
+            />
+          </div>
+
+          <div class="cover-step-controls">
+            <p class="cover-step-book">
+              <strong>{{ bookTitle }}</strong>
+              <span v-if="bookAuthor"> by {{ bookAuthor }}</span>
+            </p>
+
+            <div v-if="coverCandidates.length > 1" class="cover-candidates" role="list">
+              <button
+                v-for="(c, i) in coverCandidates"
+                :key="`${c.coverUrl}-${i}`"
+                type="button"
+                class="cover-candidate"
+                :class="{ selected: c.coverUrl === coverUrl }"
+                role="listitem"
+                :title="c.title || 'Cover option'"
+                @click="pickCandidate(c.coverUrl)"
+              >
+                <img v-if="c.coverUrl" :src="c.coverUrl" alt="" />
+              </button>
+            </div>
+
+            <label class="cover-auto">
+              <input v-model="autoLookupCover" type="checkbox" />
+              {{ config.copy.submitCoverAutoLookup ?? 'Look up cover online' }}
+            </label>
+
+            <div class="cover-actions">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                :disabled="coverLooking || bookTitle.trim().length < 2"
+                @click="lookupCover()"
+              >
+                {{ coverLooking
+                  ? (config.copy.submitCoverSearching ?? 'Searching…')
+                  : (config.copy.submitCoverFind ?? 'Find cover') }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                :disabled="coverUploading"
+                @click="openCoverPicker"
+              >
+                {{ coverUploading
+                  ? (config.copy.submitCoverUploading ?? 'Uploading…')
+                  : (config.copy.submitCoverUpload ?? 'Upload') }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                :disabled="!coverUrl"
+                @click="clearCover"
+              >
+                {{ config.copy.submitCoverRemove ?? 'Remove' }}
+              </button>
+            </div>
+            <input
+              ref="coverFileInput"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              class="sr-only"
+              @change="onCoverFileChange"
+            />
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 3: Add or Sabotage -->
+      <section v-show="step === 3" class="wizard-step">
         <h2>{{ config.copy.submitTypeTitle }}</h2>
         <p class="step-hint">{{ config.copy.submitTypeHint }}</p>
 
@@ -709,8 +803,8 @@ function reset() {
         />
       </section>
 
-      <!-- Step 3: Prompts -->
-      <section v-show="step === 3" class="wizard-step">
+      <!-- Step 4: Prompts -->
+      <section v-show="step === 4" class="wizard-step">
         <div class="step-header-row">
           <div>
             <h2>{{ config.copy.submitPromptsTitle }}</h2>
@@ -775,8 +869,8 @@ function reset() {
         />
       </section>
 
-      <!-- Step 4: Bonuses -->
-      <section v-show="step === 4" class="wizard-step">
+      <!-- Step 5: Bonuses -->
+      <section v-show="step === 5" class="wizard-step">
         <div class="step-header-row">
           <div>
             <h2>{{ config.copy.submitBonusesTitle }}</h2>
@@ -846,14 +940,21 @@ function reset() {
         />
       </section>
 
-      <!-- Step 5: Review -->
-      <section v-show="step === 5" class="wizard-step">
+      <!-- Step 6: Review -->
+      <section v-show="step === 6" class="wizard-step">
         <h2>{{ config.copy.submitReviewTitle }}</h2>
         <p class="step-hint">{{ config.copy.submitReviewHint }}</p>
 
         <div class="review-layout">
           <div class="review card">
-            <dl class="review-grid">
+            <div class="review-cover-row">
+              <BookCover
+                :title="bookTitle || 'Book'"
+                :author="bookAuthor"
+                :cover-url="coverUrl"
+                size="md"
+              />
+              <dl class="review-grid">
               <div>
                 <dt>{{ config.copy.submitReviewBook }}</dt>
                 <dd><strong>{{ bookTitle }}</strong> by {{ bookAuthor }}</dd>
@@ -878,6 +979,7 @@ function reset() {
                 </dd>
               </div>
             </dl>
+            </div>
 
             <div v-if="selectedPromptDetails.length" class="review-breakdown">
               <h3 class="review-breakdown-title">{{ config.copy.submitReviewPrompts }}</h3>
@@ -941,8 +1043,8 @@ function reset() {
         </button>
       </section>
 
-      <!-- Step 6: Success -->
-      <section v-show="step === 6 && success" class="wizard-step">
+      <!-- Step 7: Success -->
+      <section v-show="step === 7 && success" class="wizard-step">
         <div class="success-box">
           <div class="success-icon" aria-hidden="true">✓</div>
           <h2>{{ config.copy.submitSuccessTitle }}</h2>
@@ -967,11 +1069,11 @@ function reset() {
         </div>
       </section>
 
-      <div v-if="step < 6" class="wizard-nav">
+      <div v-if="step < 7" class="wizard-nav">
         <button v-if="step > 1" type="button" class="btn btn-ghost" @click="prevStep">{{ config.copy.submitBack }}</button>
-        <button v-if="step < 5" type="button" class="btn btn-primary" @click="nextStep">{{ config.copy.submitContinue }}</button>
+        <button v-if="step < 6" type="button" class="btn btn-primary" @click="nextStep">{{ config.copy.submitContinue }}</button>
         <button
-          v-if="step === 5"
+          v-if="step === 6"
           type="button"
           class="btn btn-primary"
           :disabled="!confirmed || submitting"
@@ -981,71 +1083,6 @@ function reset() {
         </button>
       </div>
     </div>
-
-    <aside v-show="step === 1" class="cover-rail" aria-live="polite" :aria-busy="coverLooking || coverUploading">
-      <div class="cover-rail-frame" :class="{ loading: (coverLooking || coverUploading) && !coverUrl }">
-        <BookCover
-          :title="bookTitle || 'Book'"
-          :author="bookAuthor"
-          :cover-url="coverUrl"
-          size="lg"
-        />
-      </div>
-
-      <div v-if="coverCandidates.length > 1" class="cover-candidates" role="list">
-        <button
-          v-for="(c, i) in coverCandidates"
-          :key="`${c.coverUrl}-${i}`"
-          type="button"
-          class="cover-candidate"
-          :class="{ selected: c.coverUrl === coverUrl }"
-          role="listitem"
-          :title="c.title || 'Cover option'"
-          @click="pickCandidate(c.coverUrl)"
-        >
-          <img v-if="c.coverUrl" :src="c.coverUrl" alt="" />
-        </button>
-      </div>
-
-      <label class="cover-auto">
-        <input v-model="autoLookupCover" type="checkbox" />
-        Look up cover online
-      </label>
-
-      <div class="cover-actions">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          :disabled="coverLooking || bookTitle.trim().length < 2"
-          @click="lookupCover()"
-        >
-          {{ coverLooking ? 'Searching…' : 'Find cover' }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          :disabled="coverUploading"
-          @click="openCoverPicker"
-        >
-          {{ coverUploading ? 'Uploading…' : 'Upload' }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm"
-          :disabled="!coverUrl"
-          @click="clearCover"
-        >
-          Remove
-        </button>
-      </div>
-      <input
-        ref="coverFileInput"
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        class="sr-only"
-        @change="onCoverFileChange"
-      />
-    </aside>
     </div>
   </main>
 </template>
@@ -1063,24 +1100,20 @@ function reset() {
   width: 100%;
 }
 
-.cover-rail {
+.cover-step {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.65rem;
-  padding: 0;
-  border: none;
-  background: transparent;
-  text-align: center;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1.25rem 1.75rem;
 }
 
-.cover-rail-frame {
+.cover-step-preview {
   position: relative;
   border-radius: 6px;
+  flex-shrink: 0;
 }
 
-.cover-rail-frame.loading::after {
+.cover-step-preview.loading::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -1099,6 +1132,25 @@ function reset() {
   }
 }
 
+.cover-step-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.cover-step-book {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--realm-text-muted);
+}
+
+.cover-step-book strong {
+  color: var(--realm-text);
+}
+
 .cover-auto {
   display: flex;
   align-items: center;
@@ -1112,16 +1164,13 @@ function reset() {
 .cover-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 0.35rem;
 }
 
 .cover-candidates {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 0.35rem;
-  max-width: 10rem;
 }
 
 .cover-candidate {
@@ -1146,6 +1195,18 @@ function reset() {
   display: block;
 }
 
+.review-cover-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.review-cover-row .review-grid {
+  flex: 1;
+  min-width: 0;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1156,46 +1217,6 @@ function reset() {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-/* Mobile: cover sits above the form card */
-@media (max-width: 899px) {
-  .submit-layout.with-cover-rail {
-    flex-direction: column;
-  }
-
-  .cover-rail {
-    order: -1;
-    align-items: flex-start;
-  }
-
-  .cover-candidates {
-    max-width: none;
-  }
-}
-
-/* Desktop: cover floats outside the card on the right */
-@media (min-width: 900px) {
-  .submit-layout.with-cover-rail {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 1.5rem;
-    max-width: calc(52rem + 10rem + 1.5rem);
-  }
-
-  .wizard {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .cover-rail {
-    position: sticky;
-    top: calc(5rem + var(--safe-top));
-    width: 10rem;
-    flex-shrink: 0;
-    order: 2;
-    padding-top: 3.25rem;
-  }
 }
 
 /* Progress */

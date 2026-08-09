@@ -101,6 +101,7 @@ describe('security manual checks', () => {
 			bookAuthor: 'Tester',
 			pageCount: 200,
 			format: 'ebook',
+			coverUrl: 'https://covers.openlibrary.org/b/id/12345-L.jpg',
 			submissionType: 'add',
 			promptIds: [DRAFT_PROMPT_ID],
 			bonusCompetition: false,

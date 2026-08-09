@@ -15,12 +15,15 @@ function mockUser(teamId: string): HydratedDocument<IUser> {
   } as HydratedDocument<IUser>
 }
 
+const TEST_COVER = 'https://covers.openlibrary.org/b/id/12345-L.jpg'
+
 function baseInput(extra: Partial<SubmissionInput> = {}): SubmissionInput {
   return {
     bookTitle: 'Test Book',
     bookAuthor: 'Author',
     pageCount: 250,
     format: 'ebook',
+    coverUrl: TEST_COVER,
     submissionType: 'add',
     promptIds: [],
     bonusCompetition: false,
@@ -98,5 +101,17 @@ describe('validateSubmission dates', () => {
   it('accepts valid start/finish range', async () => {
     const user = mockUser('clerics')
     assert.equal(await validateSubmission(user, baseInput()), null)
+  })
+
+  it('requires a cover URL', async () => {
+    const user = mockUser('clerics')
+    assert.equal(
+      await validateSubmission(user, baseInput({ coverUrl: null })),
+      'Cover is required.',
+    )
+    assert.equal(
+      await validateSubmission(user, baseInput({ coverUrl: '' })),
+      'Cover is required.',
+    )
   })
 })

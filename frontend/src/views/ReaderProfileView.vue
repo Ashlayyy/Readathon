@@ -81,6 +81,7 @@ const settingsOpen = ref(false)
 const activeTab = ref<'books' | 'questions'>('books')
 
 const isOwn = computed(() => Boolean(user.value && reader.value && user.value.id === reader.value.id))
+const canEditCover = computed(() => isOwn.value || user.value?.isAdmin === true)
 
 const finishedBooks = computed(
 	() => reader.value?.books.filter((b) => b.status === 'finished') ?? [],
@@ -360,6 +361,9 @@ function onAvatarUpdated(avatarUrl: string | null) {
 			</nav>
 
 			<template v-if="!isOwn || activeTab === 'books'">
+				<p v-if="canEditCover" class="cover-edit-lead muted">
+					{{ config.copy.profileCoverHint ?? 'Use Change cover under each book to update its cover art.' }}
+				</p>
 				<section v-if="reader.currentlyReading" class="currently-reading card">
 					<h2>{{ config.copy.readerCurrentlyReadingTitle ?? 'Currently reading' }}</h2>
 					<div class="cr-row">
@@ -394,7 +398,7 @@ function onAvatarUpdated(avatarUrl: string | null) {
 					<ul class="book-list">
 						<li v-for="b in inProgressBooks" :key="b.id" class="book card">
 							<BookCoverEditor
-								v-if="isOwn"
+								v-if="canEditCover"
 								:submission-id="b.id"
 								:title="b.bookTitle"
 								:author="b.bookAuthor"
@@ -432,7 +436,7 @@ function onAvatarUpdated(avatarUrl: string | null) {
 					<ul v-else class="book-list">
 						<li v-for="b in finishedBooks" :key="b.id" class="book card scored-book">
 							<BookCoverEditor
-								v-if="isOwn"
+								v-if="canEditCover"
 								:submission-id="b.id"
 								:title="b.bookTitle"
 								:author="b.bookAuthor"
@@ -765,6 +769,11 @@ function onAvatarUpdated(avatarUrl: string | null) {
 .pace,
 .books-section {
 	margin-bottom: 1.25rem;
+}
+
+.cover-edit-lead {
+	margin: 0 0 1rem;
+	font-size: 0.9rem;
 }
 
 .currently-reading h2,

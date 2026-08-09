@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import OptionalDatePicker from './OptionalDatePicker.vue';
+import BookCover from './BookCover.vue';
 import {
 	api,
 	type AdminSubmission,
@@ -116,6 +117,11 @@ const pageCount = ref(300);
 const format = ref('physical');
 const startedAt = ref('');
 const finishedAt = ref('');
+const coverUrl = ref<string | null>(null);
+const coverLooking = ref(false);
+const coverUploading = ref(false);
+const coverCandidates = ref<{ coverUrl: string | null; title?: string }[]>([]);
+const coverFileInput = ref<HTMLInputElement | null>(null);
 const submissionType = ref<'add' | 'sabotage'>('add');
 const targetTeamId = ref('');
 const promptIds = ref<string[]>([]);
@@ -235,6 +241,8 @@ function hydrateFromEditing(s: AdminSubmission) {
 	format.value = s.format;
 	startedAt.value = s.startedAt ?? '';
 	finishedAt.value = s.finishedAt ?? '';
+	coverUrl.value = s.coverUrl ?? null;
+	coverCandidates.value = [];
 	submissionType.value = s.submissionType;
 	targetTeamId.value = s.targetTeamId ?? '';
 	promptIds.value = [...s.promptIds];
@@ -310,12 +318,88 @@ function isGlobalBonusSelected(id: string) {
 	return bonusGlobalPromptId.value === id;
 }
 
+async function lookupCover() {
+	const title = bookTitle.value.trim();
+	const author = bookAuthor.value.trim();
+	if (title.length < 2) {
+		emit('error', 'Enter a title before looking up a cover.');
+		return;
+	}
+	coverLooking.value = true;
+	try {
+		const params = new URLSearchParams({ title });
+		if (author) params.set('author', author);
+		const data = await api<{
+			cover: { coverUrl: string | null } | null;
+			candidates?: { coverUrl: string | null; title?: string }[];
+		}>(`/covers/lookup?${params}`);
+		coverCandidates.value = (data.candidates ?? []).filter((c) => c.coverUrl);
+		coverUrl.value =
+			data.cover?.coverUrl ?? coverCandidates.value[0]?.coverUrl ?? coverUrl.value;
+	} catch (e) {
+		emit('error', e instanceof Error ? e.message : 'Cover lookup failed');
+		coverCandidates.value = [];
+	} finally {
+		coverLooking.value = false;
+	}
+}
+
+function pickCoverCandidate(url: string | null) {
+	if (!url || isView.value) return;
+	coverUrl.value = url;
+}
+
+function clearCover() {
+	if (isView.value) return;
+	coverUrl.value = null;
+	coverCandidates.value = [];
+}
+
+function openCoverFilePicker() {
+	coverFileInput.value?.click();
+}
+
+async function onCoverFileChange(ev: Event) {
+	const input = ev.target as HTMLInputElement;
+	const file = input.files?.[0];
+	input.value = '';
+	if (!file || isView.value) return;
+	if (!/^image\/(jpeg|jpg|png|webp)$/i.test(file.type)) {
+		emit('error', 'Cover must be a JPEG, PNG, or WebP image.');
+		return;
+	}
+	if (file.size > 2 * 1024 * 1024) {
+		emit('error', 'Cover must be 2 MB or smaller.');
+		return;
+	}
+	coverUploading.value = true;
+	try {
+		const dataUrl = await new Promise<string>((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(String(reader.result ?? ''));
+			reader.onerror = () => reject(new Error('Could not read image'));
+			reader.readAsDataURL(file);
+		});
+		const data = await api<{ coverUrl: string }>('/covers/upload', {
+			method: 'POST',
+			body: JSON.stringify({ dataUrl }),
+		});
+		coverUrl.value = data.coverUrl;
+		coverCandidates.value = [];
+	} catch (e) {
+		emit('error', e instanceof Error ? e.message : 'Cover upload failed');
+	} finally {
+		coverUploading.value = false;
+	}
+}
+
 function payload() {
 	return {
 		bookTitle: bookTitle.value,
 		bookAuthor: bookAuthor.value,
 		pageCount: pageCount.value,
 		format: format.value,
+		coverUrl: coverUrl.value || null,
 		startedAt: startedAt.value || null,
 		finishedAt: finishedAt.value || null,
 		submissionType: submissionType.value,
@@ -331,6 +415,10 @@ function payload() {
 async function submit() {
 	if (submissionType.value === 'sabotage' && !targetTeamId.value) {
 		emit('error', 'Select a team to attack.');
+		return;
+	}
+	if (!coverUrl.value) {
+		emit('error', 'A book cover is required.');
 		return;
 	}
 
@@ -585,6 +673,71 @@ async function submit() {
 						label="Finished"
 						:disabled="isView"
 					/>
+				</div>
+
+				<div class="cover-block" :aria-busy="coverLooking || coverUploading">
+					<div class="cover-preview">
+						<BookCover
+							:title="bookTitle || 'Book'"
+							:author="bookAuthor"
+							:cover-url="coverUrl"
+							size="md"
+						/>
+					</div>
+					<div class="cover-controls">
+						<p class="cover-label">Book cover <span class="req">*</span></p>
+						<div
+							v-if="coverCandidates.length > 1"
+							class="cover-candidates"
+							role="list"
+						>
+							<button
+								v-for="(c, i) in coverCandidates"
+								:key="`${c.coverUrl}-${i}`"
+								type="button"
+								class="cover-candidate"
+								:class="{ selected: c.coverUrl === coverUrl }"
+								:disabled="isView"
+								:title="c.title || 'Cover option'"
+								@click="pickCoverCandidate(c.coverUrl)"
+							>
+								<img v-if="c.coverUrl" :src="c.coverUrl" alt="" />
+							</button>
+						</div>
+						<div class="cover-actions">
+							<input
+								ref="coverFileInput"
+								type="file"
+								accept="image/jpeg,image/png,image/webp"
+								class="sr-only"
+								@change="onCoverFileChange"
+							/>
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								:disabled="isView || coverLooking || bookTitle.trim().length < 2"
+								@click="lookupCover"
+							>
+								{{ coverLooking ? 'Searching…' : 'Find cover' }}
+							</button>
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								:disabled="isView || coverUploading"
+								@click="openCoverFilePicker"
+							>
+								{{ coverUploading ? 'Uploading…' : 'Upload' }}
+							</button>
+							<button
+								type="button"
+								class="btn btn-ghost btn-sm"
+								:disabled="isView || !coverUrl"
+								@click="clearCover"
+							>
+								Remove
+							</button>
+						</div>
+					</div>
 				</div>
 
 				<fieldset class="type-fieldset" :disabled="isView">
@@ -1226,6 +1379,85 @@ async function submit() {
 	border-top: 1px solid var(--realm-border);
 }
 
+.cover-block {
+	display: flex;
+	align-items: flex-start;
+	gap: 1rem;
+	padding: 0.75rem;
+	border: 1px solid var(--realm-border);
+	border-radius: 10px;
+	background: var(--realm-bg);
+}
+
+.cover-preview {
+	flex-shrink: 0;
+}
+
+.cover-controls {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	min-width: 0;
+	flex: 1;
+}
+
+.cover-label {
+	margin: 0;
+	font-size: 0.85rem;
+	font-weight: 700;
+	color: var(--realm-text);
+}
+
+.cover-label .req {
+	color: var(--realm-accent);
+}
+
+.cover-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+}
+
+.cover-candidates {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+}
+
+.cover-candidate {
+	width: 2.25rem;
+	height: 3.35rem;
+	padding: 0;
+	border: 2px solid transparent;
+	border-radius: 3px;
+	overflow: hidden;
+	background: var(--realm-surface);
+	cursor: pointer;
+}
+
+.cover-candidate.selected {
+	border-color: var(--realm-accent);
+}
+
+.cover-candidate img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
 @media (max-width: 640px) {
 	.field-grid {
 		grid-template-columns: 1fr;
@@ -1237,6 +1469,10 @@ async function submit() {
 	}
 
 	.type-row {
+		flex-direction: column;
+	}
+
+	.cover-block {
 		flex-direction: column;
 	}
 }
