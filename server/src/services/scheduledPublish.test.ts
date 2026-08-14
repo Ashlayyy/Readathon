@@ -4,7 +4,9 @@ import {
 	getZonedParts,
 	isWithinScheduledPublishWindow,
 	PUBLISH_WINDOW_MINUTES,
+	scheduledPublishWeekKey,
 } from './scheduledPublish.js'
+import { getDefaultPublishRange, getWeekInfo } from '../utils/week.js'
 
 describe('scheduled publish window', () => {
 	it('exposes a short publish window so a 60s poll cannot double-fire forever', () => {
@@ -85,5 +87,16 @@ describe('scheduled publish window', () => {
 			}),
 			false,
 		)
+	})
+})
+
+describe('scheduledPublishWeekKey', () => {
+	it('matches the weekKey publishStandings stores for lastMonToThisMon (not getWeekInfo(now))', () => {
+		// Monday 2026-08-10 — current week is W33, but the publish range starts previous Mon (W32).
+		const monday = new Date(Date.UTC(2026, 7, 10, 8, 0, 0))
+		const stored = getDefaultPublishRange(monday, 'UTC').weekKey
+		const nowKey = getWeekInfo(monday).weekKey
+		assert.equal(scheduledPublishWeekKey(monday, 'UTC'), stored)
+		assert.notEqual(scheduledPublishWeekKey(monday, 'UTC'), nowKey)
 	})
 })

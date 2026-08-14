@@ -247,7 +247,8 @@ export async function publishStandings(
       if (newPromptCount > 0) {
         const promptsMsg = await sendDiscordChannelMessage({
           channel: 'production',
-          withPing: true,
+          // Standings image already pings — don't @everyone twice in one publish.
+          withPing: false,
           kind: 'announce',
           message:
             'New prompts have also been added to the website this week!',
