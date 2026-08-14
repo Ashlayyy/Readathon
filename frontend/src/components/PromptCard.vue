@@ -43,7 +43,6 @@ const pointLabel = computed(() => xpTier.value?.label ?? 'points')
     :style="cardStyle"
   >
     <div class="prompt-accent" aria-hidden="true" />
-    <div v-if="prompt.featured" class="featured-shine" aria-hidden="true" />
 
     <div class="prompt-top">
       <div class="point-badge" :title="`${isPositive ? '+' : ''}${prompt.points} points`">
@@ -99,60 +98,11 @@ const pointLabel = computed(() => xpTier.value?.label ?? 'points')
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
 }
 
-.prompt-card.is-featured {
-  border-color: color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--realm-accent) 12%, transparent),
-      transparent 50%
-    ),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.03), transparent 55%),
-    var(--realm-surface);
-  box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.22),
-    0 0 0 1px color-mix(in srgb, var(--realm-accent) 22%, transparent),
-    0 0 24px color-mix(in srgb, var(--realm-accent) 16%, transparent);
-}
-
-.prompt-card.is-featured:hover {
-  border-color: color-mix(in srgb, var(--realm-accent) 70%, var(--realm-border));
-  box-shadow:
-    0 14px 34px rgba(0, 0, 0, 0.28),
-    0 0 0 1px color-mix(in srgb, var(--realm-accent) 30%, transparent),
-    0 0 28px color-mix(in srgb, var(--realm-accent) 22%, transparent);
-}
-
-.featured-shine {
-  pointer-events: none;
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--realm-accent) 85%, white),
-    var(--realm-accent-glow),
-    transparent
-  );
-  opacity: 0.9;
-}
-
 .prompt-accent {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: linear-gradient(180deg, var(--tier-color), color-mix(in srgb, var(--tier-color) 20%, transparent));
-}
-
-.prompt-card.is-featured .prompt-accent {
-  width: 5px;
-  background: linear-gradient(
-    180deg,
-    var(--realm-accent-glow),
-    var(--realm-accent),
-    color-mix(in srgb, var(--realm-accent) 25%, transparent)
-  );
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 4px;
+	background: linear-gradient(180deg, var(--tier-color), color-mix(in srgb, var(--tier-color) 20%, transparent));
 }
 
 .prompt-top {
@@ -171,16 +121,15 @@ const pointLabel = computed(() => xpTier.value?.label ?? 'points')
 }
 
 .featured-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.15rem 0.45rem;
-  border-radius: 999px;
-  color: color-mix(in srgb, var(--realm-accent-glow) 40%, var(--realm-text));
-  border: 1px solid color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
-  background: color-mix(in srgb, var(--realm-accent) 22%, transparent);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--realm-accent) 25%, transparent);
+	font-size: 0.65rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	padding: 0.15rem 0.45rem;
+	border-radius: 999px;
+	color: color-mix(in srgb, var(--realm-accent-glow) 40%, var(--realm-text));
+	border: 1px solid color-mix(in srgb, var(--realm-accent) 55%, var(--realm-border));
+	background: color-mix(in srgb, var(--realm-accent) 22%, transparent);
 }
 
 .point-badge {

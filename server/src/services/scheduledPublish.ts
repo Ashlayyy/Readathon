@@ -1,7 +1,7 @@
 import { PublishedStandings } from '../db/models/PublishedStandings.js'
 import { getSiteSettingsAdminSync } from './siteSettings.js'
 import { publishStandings } from './standingsPublish.js'
-import { getWeekInfo } from '../utils/week.js'
+import { getDefaultPublishRange } from '../utils/week.js'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 /** Publish only within this many minutes past the top of the configured hour, so a 60s poll can't double-publish. */
@@ -61,25 +61,37 @@ export function isWithinScheduledPublishWindow(
   return true
 }
 
+/**
+ * Must match the weekKey `publishStandings({ preset: 'lastMonToThisMon' })` stores
+ * (ISO week of the range *start* Monday), not getWeekInfo(now).
+ */
+export function scheduledPublishWeekKey(
+  now = new Date(),
+  timeZone = 'Europe/Amsterdam',
+): string {
+  return getDefaultPublishRange(now, timeZone).weekKey
+}
+
 async function alreadyPublishedThisWeek(weekKey: string): Promise<boolean> {
-  const last = await PublishedStandings.findOne().sort({ createdAt: -1 }).select('weekKey')
-  return last?.weekKey === weekKey
+  const existing = await PublishedStandings.findOne({ weekKey }).select('_id').lean()
+  return Boolean(existing)
 }
 
 async function maybePublish(now = new Date()): Promise<void> {
   const settings = getSiteSettingsAdminSync()
+  const timezone = settings.scheduledPublishTimezone || 'Europe/Amsterdam'
   if (
     !isWithinScheduledPublishWindow(now, {
       enabled: settings.scheduledPublishEnabled,
       day: settings.scheduledPublishDay,
       hour: settings.scheduledPublishHour,
-      timezone: settings.scheduledPublishTimezone || 'Europe/Amsterdam',
+      timezone,
     })
   ) {
     return
   }
 
-  const { weekKey } = getWeekInfo(now)
+  const weekKey = scheduledPublishWeekKey(now, timezone)
   if (await alreadyPublishedThisWeek(weekKey)) return
 
   console.log(`[scheduler] Publishing standings for ${weekKey}`)
