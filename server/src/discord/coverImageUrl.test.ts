@@ -6,19 +6,15 @@ import {
 } from './coverImageUrl.js'
 
 describe('resolveDiscordCoverImageUrl', () => {
-	const prevFrontend = process.env.FRONTEND_URL
-	const prevPublic = process.env.PUBLIC_BASE_URL
+	const prevApi = process.env.API_URL
 
 	before(() => {
-		process.env.FRONTEND_URL = 'https://bookbaddies.net/'
-		delete process.env.PUBLIC_BASE_URL
+		process.env.API_URL = 'https://api.bookbaddies.net'
 	})
 
 	after(() => {
-		if (prevFrontend === undefined) delete process.env.FRONTEND_URL
-		else process.env.FRONTEND_URL = prevFrontend
-		if (prevPublic === undefined) delete process.env.PUBLIC_BASE_URL
-		else process.env.PUBLIC_BASE_URL = prevPublic
+		if (prevApi === undefined) delete process.env.API_URL
+		else process.env.API_URL = prevApi
 	})
 
 	it('passes through Open Library https URLs', () => {
@@ -30,17 +26,17 @@ describe('resolveDiscordCoverImageUrl', () => {
 		)
 	})
 
-	it('absolutizes uploaded /covers/files paths via FRONTEND_URL', () => {
+	it('absolutizes uploaded /covers/files via API_URL (public API host)', () => {
 		assert.equal(
 			resolveDiscordCoverImageUrl('/covers/files/abc123.jpg'),
-			'https://bookbaddies.net/api/covers/files/abc123.jpg',
+			'https://api.bookbaddies.net/covers/files/abc123.jpg',
 		)
 	})
 
-	it('absolutizes /api/covers/files paths', () => {
+	it('absolutizes /api/covers/files paths to the same public path', () => {
 		assert.equal(
 			resolveDiscordCoverImageUrl('/api/covers/files/abc123.webp'),
-			'https://bookbaddies.net/api/covers/files/abc123.webp',
+			'https://api.bookbaddies.net/covers/files/abc123.webp',
 		)
 	})
 
@@ -51,13 +47,13 @@ describe('resolveDiscordCoverImageUrl', () => {
 		assert.equal(resolveDiscordCoverImageUrl(null), undefined)
 	})
 
-	it('prefers PUBLIC_BASE_URL when set', () => {
-		process.env.PUBLIC_BASE_URL = 'https://cdn.example.com'
+	it('uses localhost API default when API_URL is unset', () => {
+		delete process.env.API_URL
 		assert.equal(
 			resolveDiscordCoverImageUrl('/covers/files/x.png'),
-			'https://cdn.example.com/api/covers/files/x.png',
+			'http://localhost:3001/api/covers/files/x.png',
 		)
-		delete process.env.PUBLIC_BASE_URL
+		process.env.API_URL = 'https://api.bookbaddies.net'
 	})
 })
 
