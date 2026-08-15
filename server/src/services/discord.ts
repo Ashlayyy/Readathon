@@ -23,6 +23,7 @@ import {
 } from '../discord/delivery.js';
 import {
 	resolveDiscordCoverImageUrl,
+	shouldProbeDiscordCoverUrl,
 	verifyDiscordCoverImageUrl,
 } from '../discord/coverImageUrl.js';
 
@@ -716,7 +717,7 @@ export async function sendTeamChatSubmission(
 		);
 	}
 
-	if (imageUrl) {
+	if (imageUrl && shouldProbeDiscordCoverUrl(imageUrl)) {
 		const probe = await verifyDiscordCoverImageUrl(imageUrl);
 		if (!probe.ok) {
 			console.warn('[discord] cover URL not fetchable; sending text-only', {
@@ -733,6 +734,11 @@ export async function sendTeamChatSubmission(
 				status: probe.status,
 			});
 		}
+	} else if (imageUrl) {
+		console.log('[discord] cover URL trusted without probe (external host)', {
+			teamId,
+			url: imageUrl,
+		});
 	}
 
 	try {

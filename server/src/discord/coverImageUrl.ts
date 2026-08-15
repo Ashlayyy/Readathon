@@ -7,7 +7,7 @@
  * FRONTEND_URL + `/api/...` — that path is usually wrong and Discord shows a blank embed.
  */
 
-import { apiPublicUrl } from '../lib/urls.js'
+import { apiPublicUrl, getApiPublicBase } from '../lib/urls.js'
 
 /**
  * Turn a stored coverUrl into a Discord-safe embed image URL, or undefined
@@ -36,6 +36,20 @@ export function resolveDiscordCoverImageUrl(
 	return apiPublicUrl(`/covers/files/${local[1]}`)
 }
 
+/**
+ * Only probe covers we host ourselves. Open Library (and similar CDNs) often
+ * time out / block HEAD from the VPS even though Discord can fetch them fine.
+ */
+export function shouldProbeDiscordCoverUrl(imageUrl: string): boolean {
+	try {
+		const target = new URL(imageUrl)
+		const apiBase = new URL(getApiPublicBase())
+		return target.host === apiBase.host
+	} catch {
+		return false
+	}
+}
+
 /** True when Discord rejected an embed because of a bad image URL. */
 export function isDiscordInvalidImageUrlError(error: string | undefined): boolean {
 	if (!error) return false
@@ -46,7 +60,7 @@ export function isDiscordInvalidImageUrlError(error: string | undefined): boolea
 }
 
 /**
- * Quick reachability check so we don't hand Discord a 404/HTML URL.
+ * Quick reachability check so we don't hand Discord a 404/HTML URL for *our* uploads.
  * Returns the URL if it looks fetchable; otherwise undefined.
  */
 export async function verifyDiscordCoverImageUrl(

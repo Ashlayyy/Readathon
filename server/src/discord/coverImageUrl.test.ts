@@ -3,6 +3,7 @@ import { after, before, describe, it } from 'node:test'
 import {
 	isDiscordInvalidImageUrlError,
 	resolveDiscordCoverImageUrl,
+	shouldProbeDiscordCoverUrl,
 } from './coverImageUrl.js'
 
 describe('resolveDiscordCoverImageUrl', () => {
@@ -54,6 +55,34 @@ describe('resolveDiscordCoverImageUrl', () => {
 			'http://localhost:3001/api/covers/files/x.png',
 		)
 		process.env.API_URL = 'https://api.bookbaddies.net'
+	})
+})
+
+describe('shouldProbeDiscordCoverUrl', () => {
+	const prevApi = process.env.API_URL
+
+	before(() => {
+		process.env.API_URL = 'https://api.bookbaddies.net'
+	})
+
+	after(() => {
+		if (prevApi === undefined) delete process.env.API_URL
+		else process.env.API_URL = prevApi
+	})
+
+	it('probes only our API-hosted uploads', () => {
+		assert.equal(
+			shouldProbeDiscordCoverUrl(
+				'https://api.bookbaddies.net/covers/files/abc.jpg',
+			),
+			true,
+		)
+		assert.equal(
+			shouldProbeDiscordCoverUrl(
+				'https://covers.openlibrary.org/b/id/8793300-L.jpg',
+			),
+			false,
+		)
 	})
 })
 
