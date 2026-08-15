@@ -21,6 +21,7 @@ import {
 	isDiscordChannelConfigured,
 	resolveStandingsTransport,
 } from '../discord/delivery.js';
+import { resolveDiscordCoverImageUrl } from '../discord/coverImageUrl.js';
 
 async function persistMonthlyWrapForSite(svg: string, label: string) {
 	try {
@@ -685,6 +686,7 @@ export async function sendDiscordMonthlyWrap(opts: {
  * Fire-and-forget: failures are logged and ignored so a bad destination
  * never breaks submission.
  * When coverUrl is present, Discord embed shows the cover; otherwise text only.
+ * Relative uploaded covers are resolved to an absolute public URL when possible.
  */
 export function notifyTeamChatSubmission(
 	teamId: string | null | undefined,
@@ -695,7 +697,12 @@ export function notifyTeamChatSubmission(
 	const settings = getSiteSettingsAdminSync();
 	if (!settings.teamChatHooksEnabled) return;
 
-	const imageUrl = coverUrl?.trim() || undefined;
+	const imageUrl = resolveDiscordCoverImageUrl(coverUrl);
+	if (coverUrl?.trim() && !imageUrl) {
+		console.warn(
+			`[discord] skipping cover embed for team ${teamId}: not a Discord-safe URL (${coverUrl.trim().slice(0, 80)})`,
+		);
+	}
 
 	void deliverySendTeamChat(teamId, message, imageUrl)
 		.then((result) => {
