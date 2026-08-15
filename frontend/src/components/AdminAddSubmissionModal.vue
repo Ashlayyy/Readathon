@@ -32,6 +32,7 @@ const emit = defineEmits<{
 	updated: [];
 	edit: [];
 	error: [message: string];
+	message: [message: string];
 }>();
 
 const isEdit = computed(() => !!props.editing && !props.readonly);
@@ -130,6 +131,7 @@ const bonusTeamPromptIds = ref<string[]>([]);
 const promptSearch = ref('');
 const submitting = ref(false);
 const hydrating = ref(false);
+const sendingTeamChat = ref(false);
 
 const sortedGlobalBonuses = computed(() => {
 	const list = props.globalBonuses?.length
@@ -454,6 +456,28 @@ async function submit() {
 		);
 	} finally {
 		submitting.value = false;
+	}
+}
+
+async function sendToTeamChat() {
+	if (!props.editing?.id || sendingTeamChat.value) return;
+	sendingTeamChat.value = true;
+	try {
+		await api(`/admin/submissions/${props.editing.id}/team-chat`, {
+			method: 'POST',
+			body: JSON.stringify({}),
+		});
+		emit(
+			'message',
+			`Realm chat sent for “${props.editing.bookTitle}”.`,
+		);
+	} catch (e) {
+		emit(
+			'error',
+			e instanceof Error ? e.message : 'Failed to send realm chat',
+		);
+	} finally {
+		sendingTeamChat.value = false;
 	}
 }
 </script>
@@ -910,6 +934,20 @@ async function submit() {
 				</section>
 
 				<div class="modal-actions">
+					<button
+						v-if="editing"
+						type="button"
+						class="btn btn-ghost"
+						:disabled="sendingTeamChat || !!editing.deletedAt"
+						:title="
+							editing.deletedAt
+								? 'Restore the submission before sending realm chat'
+								: 'Post this book to the reader’s realm Discord channel'
+						"
+						@click="sendToTeamChat"
+					>
+						{{ sendingTeamChat ? 'Sending…' : 'Send to realm chat' }}
+					</button>
 					<button type="button" class="btn btn-ghost" @click="emit('close')">
 						{{ isView ? 'Close' : 'Cancel' }}
 					</button>
@@ -1374,9 +1412,14 @@ async function submit() {
 .modal-actions {
 	display: flex;
 	justify-content: flex-end;
+	flex-wrap: wrap;
 	gap: 0.65rem;
 	padding-top: 0.35rem;
 	border-top: 1px solid var(--realm-border);
+}
+
+.modal-actions .btn-ghost:first-child {
+	margin-right: auto;
 }
 
 .cover-block {
