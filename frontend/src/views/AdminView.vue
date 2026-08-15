@@ -2730,6 +2730,7 @@ async function downloadHistorySvg(entry: StandingsHistoryEntry) {
 			@updated="onSubmissionUpdated"
 			@edit="switchViewToEdit"
 			@error="(m) => showMessage(m, true)"
+			@message="(m) => showMessage(m, false)"
 		/>
 
 		<AdminCoverSearchModal

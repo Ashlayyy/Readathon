@@ -21,6 +21,7 @@ import {
 	isDiscordChannelConfigured,
 	resolveStandingsTransport,
 } from '../discord/delivery.js';
+import { resolveDiscordCoverImageUrl } from '../discord/coverImageUrl.js';
 
 async function persistMonthlyWrapForSite(svg: string, label: string) {
 	try {
@@ -681,36 +682,56 @@ export async function sendDiscordMonthlyWrap(opts: {
 }
 
 /**
+ * Awaitable realm-chat send (cover resolved to Discord-safe URL).
+ * Returns outcome so admin resends can surface success/failure.
+ */
+export async function sendTeamChatSubmission(
+	teamId: string | null | undefined,
+	message: string,
+	coverUrl?: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+	if (!teamId) return { ok: false, error: 'Reader has no team' };
+	const settings = getSiteSettingsAdminSync();
+	if (!settings.teamChatHooksEnabled) {
+		return { ok: false, error: 'Realm chat is disabled in settings' };
+	}
+
+	const imageUrl = resolveDiscordCoverImageUrl(coverUrl);
+	if (coverUrl?.trim() && !imageUrl) {
+		console.warn(
+			`[discord] skipping cover embed for team ${teamId}: not a Discord-safe URL (${coverUrl.trim().slice(0, 80)})`,
+		);
+	}
+
+	try {
+		const result = await deliverySendTeamChat(teamId, message, imageUrl);
+		discordWebhookTotal.labels('team_chat', result.ok ? 'ok' : 'fail').inc();
+		if (!result.ok) {
+			console.error(
+				`[discord] team chat failed for team ${teamId}: ${result.error}`,
+			);
+			return { ok: false, error: result.error };
+		}
+		return { ok: true };
+	} catch (e) {
+		discordWebhookTotal.labels('team_chat', 'fail').inc();
+		const error = e instanceof Error ? e.message : 'Team chat send failed';
+		console.error(`[discord] team chat failed for team ${teamId} (ignored):`, e);
+		return { ok: false, error };
+	}
+}
+
+/**
  * Optional per-realm chat via webhook (legacy) or bot channel ID.
  * Fire-and-forget: failures are logged and ignored so a bad destination
  * never breaks submission.
  * When coverUrl is present, Discord embed shows the cover; otherwise text only.
+ * Relative uploaded covers are resolved to an absolute public URL when possible.
  */
 export function notifyTeamChatSubmission(
 	teamId: string | null | undefined,
 	message: string,
 	coverUrl?: string | null,
 ): void {
-	if (!teamId) return;
-	const settings = getSiteSettingsAdminSync();
-	if (!settings.teamChatHooksEnabled) return;
-
-	const imageUrl = coverUrl?.trim() || undefined;
-
-	void deliverySendTeamChat(teamId, message, imageUrl)
-		.then((result) => {
-			discordWebhookTotal.labels('team_chat', result.ok ? 'ok' : 'fail').inc();
-			if (!result.ok) {
-				console.error(
-					`[discord] team chat failed for team ${teamId}: ${result.error}`,
-				);
-			}
-		})
-		.catch((e) => {
-			discordWebhookTotal.labels('team_chat', 'fail').inc();
-			console.error(
-				`[discord] team chat failed for team ${teamId} (ignored):`,
-				e,
-			);
-		});
+	void sendTeamChatSubmission(teamId, message, coverUrl);
 }

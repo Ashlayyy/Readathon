@@ -43,6 +43,7 @@ import { svgToPng } from '../services/svgToPng.js'
 import {
   getDiscordRoleId,
   getSiteSettingsAdminSync,
+  getActiveMonthlyEventSync,
   updateSiteSettings,
   type SiteSettingsAdminPatch,
 } from '../services/siteSettings.js'
@@ -52,6 +53,7 @@ import { buildStandingsDigestDraft } from '../services/standingsDigest.js'
 import {
   sendDiscordChannelMessage,
   sendDiscordMonthlyWrap,
+  sendTeamChatSubmission,
 } from '../services/discord.js'
 import {
   listGuildRoles,
@@ -59,6 +61,7 @@ import {
 } from '../services/discordRoleVerify.js'
 import { sendLiveStandingsToDiscord } from '../services/standingsDiscordPreview.js'
 import { buildMonthlyWrapSvg } from '../services/monthlyWrap.js'
+import { buildTeamChatMessage } from '../services/teamChatMessage.js'
 import { submissionsCreatedTotal } from '../services/metrics.js'
 import {
   createPrompt,
@@ -984,6 +987,79 @@ adminRoutes.post('/submissions/:id/restore', async (c) => {
   })
 
   return c.json({ submission: submissionToPublic(submission) })
+})
+
+/** Re-send this submission's realm-chat Discord message (for missed/failed posts). */
+adminRoutes.post('/submissions/:id/team-chat', async (c) => {
+  const admin = requireAdmin(await getSessionUser(c))
+  const submission = await Submission.findOne(withActive({ _id: c.req.param('id') }))
+  if (!submission) return c.json({ error: 'Submission not found' }, 404)
+
+  const owner = await User.findById(submission.userId)
+  if (!owner) return c.json({ error: 'Submission owner not found' }, 404)
+  if (!owner.teamId) {
+    return c.json({ error: 'Reader is not assigned to a realm' }, 400)
+  }
+
+  const teamName = getTeamById(owner.teamId)?.name
+  if (!teamName) {
+    return c.json({ error: 'Reader realm not found in config' }, 400)
+  }
+
+  const targetTeamName = submission.targetTeamId
+    ? getTeamById(submission.targetTeamId)?.name ?? null
+    : null
+
+  const settings = getSiteSettingsAdminSync()
+  const liveSlot = getActiveMonthlyEventSync()
+  const themeTemplates =
+    submission.submissionType === 'sabotage'
+      ? liveSlot?.discordTemplates?.sabotage
+      : liveSlot?.discordTemplates?.add
+  const globalTemplates =
+    submission.submissionType === 'sabotage'
+      ? settings.teamChatSabotageTemplates
+      : settings.teamChatAddTemplates
+
+  const message = buildTeamChatMessage(
+    {
+      displayName: owner.displayName,
+      bookTitle: submission.bookTitle,
+      teamName,
+      submissionType: submission.submissionType,
+      targetTeamName,
+    },
+    {
+      templates:
+        themeTemplates && themeTemplates.length > 0
+          ? themeTemplates
+          : globalTemplates,
+    },
+  )
+
+  const result = await sendTeamChatSubmission(
+    owner.teamId,
+    message,
+    submission.coverUrl?.trim() || null,
+  )
+
+  if (!result.ok) {
+    return c.json({ error: result.error || 'Failed to send realm chat' }, 502)
+  }
+
+  await logAudit({
+    actor: admin,
+    action: 'submission.team_chat_resent',
+    entityType: 'Submission',
+    entityId: submission._id.toString(),
+    detail: {
+      bookTitle: submission.bookTitle,
+      teamId: owner.teamId,
+      coverUrl: submission.coverUrl ?? null,
+    },
+  })
+
+  return c.json({ ok: true })
 })
 
 function svgAttachment(c: Context, filename: string, svg: string) {
