@@ -21,7 +21,10 @@ import {
 	isDiscordChannelConfigured,
 	resolveStandingsTransport,
 } from '../discord/delivery.js';
-import { resolveDiscordCoverImageUrl } from '../discord/coverImageUrl.js';
+import {
+	resolveDiscordCoverImageUrl,
+	verifyDiscordCoverImageUrl,
+} from '../discord/coverImageUrl.js';
 
 async function persistMonthlyWrapForSite(svg: string, label: string) {
 	try {
@@ -696,11 +699,40 @@ export async function sendTeamChatSubmission(
 		return { ok: false, error: 'Realm chat is disabled in settings' };
 	}
 
-	const imageUrl = resolveDiscordCoverImageUrl(coverUrl);
-	if (coverUrl?.trim() && !imageUrl) {
+	const stored = coverUrl?.trim() || null;
+	let imageUrl = resolveDiscordCoverImageUrl(stored);
+
+	console.log('[discord] team chat cover resolve', {
+		teamId,
+		storedCoverUrl: stored,
+		resolvedImageUrl: imageUrl ?? null,
+		apiUrl: process.env.API_URL ?? null,
+		frontendUrl: process.env.FRONTEND_URL ?? null,
+	});
+
+	if (stored && !imageUrl) {
 		console.warn(
-			`[discord] skipping cover embed for team ${teamId}: not a Discord-safe URL (${coverUrl.trim().slice(0, 80)})`,
+			`[discord] skipping cover embed for team ${teamId}: not a Discord-safe URL (${stored.slice(0, 80)})`,
 		);
+	}
+
+	if (imageUrl) {
+		const probe = await verifyDiscordCoverImageUrl(imageUrl);
+		if (!probe.ok) {
+			console.warn('[discord] cover URL not fetchable; sending text-only', {
+				teamId,
+				url: probe.url,
+				status: probe.status ?? null,
+				error: probe.error,
+			});
+			imageUrl = undefined;
+		} else {
+			console.log('[discord] cover URL verified', {
+				teamId,
+				url: probe.url,
+				status: probe.status,
+			});
+		}
 	}
 
 	try {
