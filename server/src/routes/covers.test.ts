@@ -24,8 +24,23 @@ describe('cover routes', () => {
 		return hono
 	}
 
+	async function authCookie() {
+		const user = await User.create({
+			displayName: 'Cover Lookup',
+			email: `cover-lookup-${Date.now()}@example.test`,
+		})
+		const token = await sign(
+			{ userId: user._id.toString(), exp: Math.floor(Date.now() / 1000) + 3600 },
+			'dev-secret-change-in-production',
+			'HS256',
+		)
+		return `realm_session=${token}`
+	}
+
 	it('GET /lookup requires a title of at least 2 characters', async () => {
-		const res = await app().request('http://localhost/api/covers/lookup?title=x')
+		const res = await app().request('http://localhost/api/covers/lookup?title=x', {
+			headers: { Cookie: await authCookie() },
+		})
 		assert.equal(res.status, 400)
 		const body = (await res.json()) as { error: string }
 		assert.match(body.error, /Title is required/)
@@ -77,6 +92,7 @@ describe('cover routes', () => {
 		try {
 			const res = await app().request(
 				'http://localhost/api/covers/lookup?title=The%20Name%20of%20the%20Wind&author=Patrick%20Rothfuss',
+				{ headers: { Cookie: await authCookie() } },
 			)
 			assert.equal(res.status, 200)
 			const body = (await res.json()) as {

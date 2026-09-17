@@ -57,14 +57,14 @@ describe('rateLimit', () => {
 		assert.equal(bobFirst.status, 200)
 	})
 
-	it('uses the first address in a comma-separated x-forwarded-for chain', async () => {
+	it('uses the last address in a comma-separated x-forwarded-for chain', async () => {
 		const app = buildApp({ max: 1, keyPrefix: 'xff-chain' })
 
 		const first = await get(app, 'http://localhost/test/ok', {
 			'x-forwarded-for': '198.51.100.10, 10.0.0.1',
 		})
 		const second = await get(app, 'http://localhost/test/ok', {
-			'x-forwarded-for': '198.51.100.10, 10.0.0.2',
+			'x-forwarded-for': '203.0.113.9, 10.0.0.1',
 		})
 
 		assert.equal(first.status, 200)

@@ -20,23 +20,38 @@ export type SessionPayload = {
 };
 
 function getSessionSecret(): string {
-	const secret =
-		process.env.SESSION_SECRET ?? 'dev-secret-change-in-production';
-	if (
-		process.env.NODE_ENV === 'production' &&
-		(!process.env.SESSION_SECRET ||
-			secret === 'dev-secret-change-in-production')
-	) {
-		console.error(
-			'FATAL: Set a strong SESSION_SECRET in server/.env before running in production.',
-		);
-		process.exit(1);
+	const secret = process.env.SESSION_SECRET?.trim();
+	if (process.env.NODE_ENV === 'production') {
+		if (!secret || secret === 'dev-secret-change-in-production') {
+			throw new Error(
+				'FATAL: Set a strong SESSION_SECRET in server/.env before running in production.',
+			);
+		}
+		return secret;
 	}
-	return secret;
+	return secret || 'dev-secret-change-in-production';
+}
+
+function adminEmails(): Set<string> {
+	return new Set(
+		(process.env.ADMIN_EMAILS ?? '')
+			.split(',')
+			.map((email) => email.trim().toLowerCase())
+			.filter(Boolean),
+	);
 }
 
 export function userIsAdmin(user: IUser): boolean {
-	return Boolean(user.isAdmin);
+	if (user.isAdmin) return true;
+	return adminEmails().has(user.email.trim().toLowerCase());
+}
+
+async function persistEnvAdmin(user: UserDoc): Promise<UserDoc> {
+	if (!user.isAdmin && adminEmails().has(user.email.trim().toLowerCase())) {
+		user.isAdmin = true;
+		await user.save();
+	}
+	return user;
 }
 
 export function getGoogleClient() {
@@ -157,11 +172,11 @@ export async function registerWithEmail(
 	const user = await User.create({
 		displayName: trimmedName,
 		email: normalizedEmail,
-		isAdmin: false,
+		isAdmin: adminEmails().has(normalizedEmail),
 		status: 'pending',
 	});
 
-	return user;
+	return persistEnvAdmin(user);
 }
 
 /** Admin-created user - no magic-link email is sent. */
@@ -224,7 +239,7 @@ export async function verifyMagicLink(token: string): Promise<UserDoc> {
 	record.usedAt = new Date();
 	await record.save();
 
-	return user;
+	return persistEnvAdmin(user);
 }
 
 export async function findOrCreateGoogleUser(
@@ -242,7 +257,7 @@ export async function findOrCreateGoogleUser(
 			byGoogle.googleAvatarUrl = picture;
 			await byGoogle.save();
 		}
-		return byGoogle;
+		return persistEnvAdmin(byGoogle);
 	}
 
 	const byEmail = await User.findOne({ email: normalizedEmail });
@@ -251,7 +266,7 @@ export async function findOrCreateGoogleUser(
 		if (!byEmail.displayName && displayName) byEmail.displayName = displayName;
 		if (picture) byEmail.googleAvatarUrl = picture;
 		await byEmail.save();
-		return byEmail;
+		return persistEnvAdmin(byEmail);
 	}
 
 	const user = await User.create({
@@ -259,10 +274,10 @@ export async function findOrCreateGoogleUser(
 		email: normalizedEmail,
 		googleId,
 		googleAvatarUrl: picture,
-		isAdmin: false,
+		isAdmin: adminEmails().has(normalizedEmail),
 		status: 'pending',
 	});
 
-	return user;
+	return persistEnvAdmin(user);
 }
 

@@ -5,9 +5,14 @@ type Bucket = { count: number; resetAt: number }
 const buckets = new Map<string, Bucket>()
 
 function clientKey(c: Context): string {
+  const realIp = c.req.header('x-real-ip')?.trim()
+  if (realIp) return realIp
   const forwarded = c.req.header('x-forwarded-for')
-  if (forwarded) return forwarded.split(',')[0]!.trim()
-  return c.req.header('x-real-ip') ?? 'unknown'
+  if (forwarded) {
+    const parts = forwarded.split(',').map((part) => part.trim()).filter(Boolean)
+    return parts[parts.length - 1] ?? 'unknown'
+  }
+  return 'unknown'
 }
 
 export function rateLimit(opts: { windowMs: number; max: number; keyPrefix?: string }) {

@@ -24,13 +24,15 @@ export default defineConfig(({ mode }) => ({
     },
   },
   server: {
+    port: process.env.FRONTEND_PORT ? Number(process.env.FRONTEND_PORT) : 5173,
+    strictPort: Boolean(process.env.FRONTEND_PORT),
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': process.env.READATHON_API_ORIGIN || 'http://localhost:3001',
     },
   },
   preview: {
     proxy: {
-      '/api': 'http://localhost:3001',
+      '/api': process.env.READATHON_API_ORIGIN || 'http://localhost:3001',
     },
   },
 }))

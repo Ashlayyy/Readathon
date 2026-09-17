@@ -12,6 +12,7 @@
 #   - Grafana → Dashboards → Import → upload grafana/dashboards/readathon.json
 #
 # Optional: set METRICS_TOKEN in server/.env and matching bearer in prometheus.yml
+# Grafana: set GRAFANA_ADMIN_PASSWORD (required) before `docker compose up`.
 #
 # ---------------------------------------------------------------------------
 # PostHog (product analytics) — optional, env-only

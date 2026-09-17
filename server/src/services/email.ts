@@ -19,32 +19,44 @@ export async function sendEmail(opts: {
   text: string
 }): Promise<boolean> {
   const apiKey = process.env.RESEND_API_KEY
-  const from = process.env.EMAIL_FROM ?? 'Readathon <onboarding@resend.dev>'
-
-  if (apiKey) {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from,
-        to: [opts.to],
-        subject: opts.subject,
-        html: opts.html,
-        text: opts.text,
-      }),
-    })
-    if (!res.ok) {
-      const body = await res.text()
-      throw new Error(`Failed to send email: ${body}`)
+  const from = process.env.EMAIL_FROM?.trim()
+  if (!from) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('EMAIL_FROM is required in production')
     }
-    return true
+  }
+  const sender = from || 'Readathon <onboarding@resend.dev>'
+  if (process.env.NODE_ENV === 'production' && sender.includes('onboarding@resend.dev')) {
+    throw new Error('EMAIL_FROM must not use the Resend onboarding sender in production')
   }
 
-  console.log(`\n[email] To: ${opts.to}\nSubject: ${opts.subject}\n${opts.text}\n`)
-  return false
+  if (!apiKey) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('RESEND_API_KEY is required in production; refusing to log magic links')
+    }
+    console.log(`\n[email] To: ${opts.to}\nSubject: ${opts.subject}\n${opts.text}\n`)
+    return false
+  }
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: sender,
+      to: [opts.to],
+      subject: opts.subject,
+      html: opts.html,
+      text: opts.text,
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`Failed to send email: ${body}`)
+  }
+  return true
 }
 
 export async function sendMagicLink(email: string, token: string): Promise<void> {

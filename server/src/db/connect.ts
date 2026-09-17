@@ -15,6 +15,17 @@ export async function connectDb(): Promise<void> {
   }
 }
 
+export async function pingDb(): Promise<boolean> {
+  try {
+    const db = mongoose.connection.db
+    if (!db) return false
+    await db.admin().ping()
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function disconnectDb(): Promise<void> {
   await mongoose.disconnect()
 }

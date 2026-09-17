@@ -8,6 +8,7 @@ import { coverFilePath, saveCoverDataUrl } from '../services/coverUpload.js'
 export const coverRoutes = new Hono()
 
 coverRoutes.get('/lookup', async (c) => {
+	requireAuth(await getSessionUser(c))
 	const title = c.req.query('title')?.trim() ?? ''
 	const author = c.req.query('author')?.trim() ?? ''
 	if (title.length < 2) {

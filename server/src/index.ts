@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { downtimeGuard } from './middleware/downtime.js';
 import { rateLimit } from './middleware/rateLimit.js';
 import { metricsMiddleware } from './middleware/metrics.js';
-import { connectDb } from './db/connect.js';
+import { connectDb, pingDb } from './db/connect.js';
+import { AuthError } from './services/auth.js';
 import { User } from './db/models/User.js';
 import { Submission } from './db/models/Submission.js';
 import { withActive } from './db/activeSubmission.js';
@@ -59,6 +60,32 @@ loadEnv({ path: join(dirname(fileURLToPath(import.meta.url)), '../.env') });
 
 const app = new Hono();
 const frontendOrigin = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+const isProduction = process.env.NODE_ENV === 'production';
+
+app.use('*', async (c, next) => {
+	c.header('X-Content-Type-Options', 'nosniff');
+	c.header('X-Frame-Options', 'DENY');
+	c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+	c.header('X-DNS-Prefetch-Control', 'off');
+	if (isProduction) {
+		c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+	}
+	await next();
+});
+
+app.onError((err, c) => {
+	if (err instanceof AuthError) {
+		const status =
+			err.message === 'Not authenticated'
+				? 401
+				: err.message === 'Admin access required'
+					? 403
+					: 400;
+		return c.json({ error: err.message }, status);
+	}
+	console.error(err);
+	return c.json({ error: 'Internal server error' }, 500);
+});
 
 app.use(
 	'*',
@@ -70,10 +97,14 @@ app.use(
 
 app.use('*', metricsMiddleware);
 
-/** Prometheus scrape target. Optional bearer: METRICS_TOKEN */
+/** Prometheus scrape target. Requires METRICS_TOKEN in production. */
 app.get('/metrics', async (c) => {
 	const token = process.env.METRICS_TOKEN?.trim();
-	if (token) {
+	if (!token) {
+		if (isProduction) {
+			return c.text('METRICS_TOKEN is not configured', 503);
+		}
+	} else {
 		const auth = c.req.header('authorization') ?? '';
 		if (auth !== `Bearer ${token}`) {
 			return c.text('Unauthorized', 401);
@@ -98,18 +129,23 @@ const adminLimiter = rateLimit({
 
 app.use('/api/*', downtimeGuard);
 
-app.get('/api/health', (c) =>
-	c.json({
-		status: 'ok',
-		version: APP_VERSION,
-		pngFonts: getSvgFontStatus(),
-		pngText: getSvgTextPathStatus(),
-		integrations: {
-			posthog: isPostHogEnabled(),
-			betterstack: betterStackStatus(),
+app.get('/api/health', async (c) => {
+	const databaseOk = await pingDb();
+	return c.json(
+		{
+			status: databaseOk ? 'ok' : 'degraded',
+			version: APP_VERSION,
+			database: databaseOk ? 'connected' : 'unavailable',
+			pngFonts: getSvgFontStatus(),
+			pngText: getSvgTextPathStatus(),
+			integrations: {
+				posthog: isPostHogEnabled(),
+				betterstack: betterStackStatus(),
+			},
 		},
-	}),
-);
+		databaseOk ? 200 : 503,
+	);
+});
 
 app.get('/api/config', async (c) => {
 	const config = getConfig();
@@ -154,7 +190,16 @@ const SHELF_SIZE = 20;
  */
 app.get('/api/shelf', async (c) => {
 	const config = getConfig();
-	const subs = await Submission.find(withActive());
+	const subs = await Submission.aggregate([
+		{ $match: withActive() },
+		{
+			$addFields: {
+				effectiveDate: { $ifNull: ['$finishedAt', '$createdAt'] },
+			},
+		},
+		{ $sort: { effectiveDate: -1 } },
+		{ $limit: SHELF_SIZE },
+	]);
 
 	const userIds = [...new Set(subs.map((s) => s.userId.toString()))];
 	const users = await User.find({ _id: { $in: userIds } });
@@ -164,14 +209,12 @@ app.get('/api/shelf', async (c) => {
 
 	const withEffectiveDate = subs.map((sub) => ({
 		sub,
-		effectiveDate: sub.finishedAt
-			? new Date(sub.finishedAt)
-			: (sub.createdAt ?? new Date(0)),
+		effectiveDate: sub.effectiveDate
+			? new Date(sub.effectiveDate)
+			: (sub.finishedAt
+				? new Date(sub.finishedAt)
+				: new Date(sub.createdAt ?? 0)),
 	}));
-
-	withEffectiveDate.sort(
-		(a, b) => b.effectiveDate.getTime() - a.effectiveDate.getTime(),
-	);
 
 	const shelf = withEffectiveDate.slice(0, SHELF_SIZE).map(({ sub, effectiveDate }) => {
 		const teamId = teamByUserId.get(sub.userId.toString());
@@ -316,6 +359,7 @@ app.route('/api/questions', questionRoutes);
 app.use('/api/profile/avatar', writeLimiter);
 app.route('/api/profile', profileRoutes);
 app.route('/api/readers', readerRoutes);
+app.use('/api/covers/lookup', writeLimiter);
 app.use('/api/covers/upload', writeLimiter);
 app.route('/api/covers', coverRoutes);
 app.route('/api/avatars', avatarRoutes);
@@ -324,7 +368,6 @@ app.route('/api/admin', adminRoutes);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distPath = join(__dirname, '../../frontend/dist');
-const isProduction = process.env.NODE_ENV === 'production';
 
 if (isProduction && existsSync(distPath)) {
 	app.use('*', async (c, next) => {
@@ -340,6 +383,30 @@ if (isProduction && existsSync(distPath)) {
 const port = Number(process.env.PORT ?? 3001);
 
 async function main() {
+	if (isProduction) {
+		const missing: string[] = [];
+		if (!process.env.SESSION_SECRET?.trim() || process.env.SESSION_SECRET === 'dev-secret-change-in-production') {
+			missing.push('SESSION_SECRET');
+		}
+		const frontend = process.env.FRONTEND_URL?.trim() ?? '';
+		if (!frontend || /localhost|127\.0\.0\.1/i.test(frontend)) {
+			missing.push('FRONTEND_URL');
+		}
+		const apiUrl = process.env.API_URL?.trim() ?? '';
+		if (!apiUrl || /localhost|127\.0\.0\.1/i.test(apiUrl)) {
+			missing.push('API_URL');
+		}
+		const emailFrom = process.env.EMAIL_FROM?.trim() ?? '';
+		if (!emailFrom || emailFrom.includes('onboarding@resend.dev')) {
+			missing.push('EMAIL_FROM');
+		}
+		if (missing.length) {
+			console.error(
+				`FATAL: Set ${missing.join(', ')} in server/.env before running in production.`,
+			);
+			process.exit(1);
+		}
+	}
 	if (isProduction && !existsSync(distPath)) {
 		console.warn(
 			`Warning: frontend/dist not found at ${distPath}. Run "npm run build --prefix frontend" before starting in production.`,
@@ -348,6 +415,18 @@ async function main() {
 	if (isProduction && !process.env.MONGODB_URI) {
 		console.error(
 			'FATAL: Set MONGODB_URI in server/.env for production (e.g. MongoDB Atlas).',
+		);
+		process.exit(1);
+	}
+	if (isProduction && !process.env.RESEND_API_KEY) {
+		console.error(
+			'FATAL: Set RESEND_API_KEY in server/.env for production email.',
+		);
+		process.exit(1);
+	}
+	if (isProduction && !process.env.METRICS_TOKEN) {
+		console.error(
+			'FATAL: Set METRICS_TOKEN in server/.env so /metrics is not public.',
 		);
 		process.exit(1);
 	}
