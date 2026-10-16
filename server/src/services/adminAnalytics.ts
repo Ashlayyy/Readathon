@@ -3,6 +3,7 @@ import { Submission } from '../db/models/Submission.js'
 import { withActive } from '../db/activeSubmission.js'
 import { User } from '../db/models/User.js'
 import { getConfig } from './prompts.js'
+import { buildTeamRace, type TeamRace } from './teamRace.js'
 import {
 	endOfIsoWeek,
 	getWeekBoundsFromKey,
@@ -136,6 +137,7 @@ export type AdminAnalytics = {
 	authors: AnalyticsAuthorRow[]
 	rivalry: AnalyticsRivalryRow[]
 	byDay: AnalyticsDayRow[]
+	teamRace: TeamRace
 }
 
 export type AnalyticsQuery = {
@@ -274,14 +276,11 @@ export async function buildAdminAnalytics(
 	}
 
 	const subFilter: Record<string, unknown> = {}
-	if (range.from || range.to) {
-		const createdAt: Record<string, Date> = {}
-		if (range.from) createdAt.$gte = range.from
-		if (range.to) createdAt.$lt = range.to
-		subFilter.createdAt = createdAt
-	}
+	// Upper bound only. Earlier books stay available so the season-total
+	// race can show the standings entering the selected dates.
+	if (range.to) subFilter.createdAt = { $lt: range.to }
 
-	const [users, submissions, questionGroups] = await Promise.all([
+	const [users, submissionsThrough, questionGroups] = await Promise.all([
 		User.find().select('displayName teamId status').lean(),
 		Submission.find(withActive(subFilter)).sort({ createdAt: -1 }).lean(),
 		Question.aggregate<{ _id: string; count: number }>([
@@ -290,6 +289,16 @@ export async function buildAdminAnalytics(
 	])
 
 	const userById = new Map(users.map((u) => [u._id.toString(), u]))
+
+	const submissions = range.from
+		? submissionsThrough.filter((sub) => {
+				const created =
+					sub.createdAt instanceof Date
+						? sub.createdAt
+						: new Date(String(sub.createdAt ?? ''))
+				return !Number.isNaN(created.getTime()) && created >= range.from!
+			})
+		: submissionsThrough
 
 	const filtered = submissions.filter((sub) => {
 		if (!teamFilter) return true
@@ -629,6 +638,45 @@ export async function buildAdminAnalytics(
 
 	const byDayRows = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date))
 
+	const memberCounts = new Map<string, number>()
+	for (const user of users) {
+		if (user.status === 'assigned' && user.teamId) {
+			memberCounts.set(user.teamId, (memberCounts.get(user.teamId) ?? 0) + 1)
+		}
+	}
+	const startingXp = Number(
+		(config.scoringRules as { startingTeamXp?: number }).startingTeamXp ?? 0,
+	)
+	const teamRace = buildTeamRace({
+		teams: config.teams.map((team) => ({
+			id: team.id,
+			name: team.name,
+			color: team.color,
+			icon: team.icon,
+			memberCount: memberCounts.get(team.id) ?? 0,
+		})),
+		events: submissionsThrough.map((sub) => {
+			const created =
+				sub.createdAt instanceof Date
+					? sub.createdAt
+					: new Date(String(sub.createdAt ?? ''))
+			const user = userById.get(sub.userId.toString())
+			return {
+				createdAt: created,
+				userTeamId: user?.teamId ?? null,
+				submissionType: sub.submissionType,
+				targetTeamId: sub.targetTeamId ?? null,
+				promptPoints: sub.promptPoints ?? 0,
+				bonusPoints: sub.bonusPoints ?? 0,
+				pageBonus: sub.pageBonus ?? 0,
+				pageCount: sub.pageCount ?? 0,
+			}
+		}),
+		rangeFrom: range.from,
+		rangeTo: range.to,
+		startingXp,
+	})
+
 	return {
 		range: {
 			from: range.from ? toDateInputValue(range.from) : null,
@@ -653,6 +701,7 @@ export async function buildAdminAnalytics(
 		authors,
 		rivalry: rivalryRows,
 		byDay: byDayRows,
+		teamRace,
 	}
 }
 

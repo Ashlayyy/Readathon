@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useAdminCopy } from '../composables/useAdminCopy';
 import { useConfig } from '../composables/useConfig';
 import ReaderLink from './ReaderLink.vue';
+import TeamPointsPanel, { type TeamRace } from './TeamPointsPanel.vue';
 
 type NamedCount = { id: string; label: string; count: number; extra?: number };
 
@@ -106,6 +107,7 @@ type AdminAnalytics = {
 	authors: AuthorRow[];
 	rivalry: RivalryRow[];
 	byDay: DayRow[];
+	teamRace: TeamRace;
 };
 
 type Preset = 'all' | 'thisWeek' | 'lastWeek' | 'last7' | 'last30' | 'custom';
@@ -115,7 +117,7 @@ type StatsView = 'overview' | 'people' | 'teams' | 'books' | 'prompts' | 'site'
 const STATS_VIEWS: { id: StatsView; label: string; hint: string }[] = [
 	{ id: 'overview', label: 'Overview', hint: 'Headline numbers & charts' },
 	{ id: 'people', label: 'People', hint: 'Readers & saboteurs' },
-	{ id: 'teams', label: 'Realms', hint: 'Teams, dogpiles & rivalries' },
+	{ id: 'teams', label: 'Realms', hint: 'Points race & rivalries' },
 	{ id: 'books', label: 'Books', hint: 'Titles, authors & pace' },
 	{ id: 'prompts', label: 'Prompts', hint: 'What people claim' },
 	{ id: 'site', label: 'Site', hint: 'Ops & Discord health' },
@@ -762,6 +764,8 @@ const dayTable = useSortable<DayRow>(() => analytics.value?.byDay ?? [], 'date',
 			</div>
 
 			<div v-show="activeView === 'teams'" class="stats-view-panel">
+			<TeamPointsPanel v-if="analytics.teamRace" :race="analytics.teamRace" />
+
 			<!-- Team overview -->
 			<article class="card table-card">
 				<h3>Team overview</h3>

@@ -571,11 +571,15 @@ function toDocFromCache(doc: {
 
   const primary = primaryId ? guildConfigs[primaryId] ?? null : null
   const flat = flatFieldsFromGuild(primary)
+  const docWebhookUrls = normalizeSnowflakeMap(doc.teamChatWebhookUrls)
+  const docChannelIds = normalizeSnowflakeMap(doc.teamChatChannelIds)
 
   return {
     showTeamRosters: doc.showTeamRosters,
     downtimeMode: doc.downtimeMode ?? false,
     ...flat,
+    teamChatWebhookUrls: { ...flat.teamChatWebhookUrls, ...docWebhookUrls },
+    teamChatChannelIds: { ...flat.teamChatChannelIds, ...docChannelIds },
     discordPrimaryGuildId: primaryId,
     discordSendTargetGuildId: (
       (doc as { discordSendTargetGuildId?: string | null }).discordSendTargetGuildId ??

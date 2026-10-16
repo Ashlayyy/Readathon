@@ -950,31 +950,31 @@
 			"gainColor": "#7ec89a",
 			"gainGlow": "rgba(110, 207, 138, 0.14)",
 			"attackColor": "#e88a72",
-			"attackGlow": "rgba(232, 138, 114, 0.14)"
+			"attackGlow": "rgba(232, 138, 114, 0.18)"
 		},
 		{
 			"points": 10,
 			"label": "Major",
 			"gainColor": "#8fd4ff",
 			"gainGlow": "rgba(143, 212, 255, 0.14)",
-			"attackColor": "#ff9a6a",
-			"attackGlow": "rgba(255, 154, 106, 0.14)"
+			"attackColor": "#ffc233",
+			"attackGlow": "rgba(255, 194, 51, 0.18)"
 		},
 		{
 			"points": 15,
 			"label": "Critical",
 			"gainColor": "#e8c547",
 			"gainGlow": "rgba(232, 197, 71, 0.16)",
-			"attackColor": "#ff6b4a",
-			"attackGlow": "rgba(255, 107, 74, 0.16)"
+			"attackColor": "#ff4fa3",
+			"attackGlow": "rgba(255, 79, 163, 0.18)"
 		},
 		{
 			"points": 20,
 			"label": "Legendary",
 			"gainColor": "#d4a5ff",
 			"gainGlow": "rgba(212, 165, 255, 0.14)",
-			"attackColor": "#ff4d6d",
-			"attackGlow": "rgba(255, 77, 109, 0.14)"
+			"attackColor": "#ff2d4a",
+			"attackGlow": "rgba(255, 45, 74, 0.2)"
 		}
 	],
 	"faq": [

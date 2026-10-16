@@ -84,12 +84,22 @@ const pointLabel = computed(() => xpTier.value?.label ?? 'points')
   min-height: 100%;
   padding: 1.15rem 1.2rem 1.2rem;
   border-radius: 14px;
-  border: 1px solid var(--realm-border);
+  border: 1px solid color-mix(in srgb, var(--tier-color) 22%, var(--realm-border));
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.03), transparent 55%),
     var(--realm-surface);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.kind-attack {
+  border-color: color-mix(in srgb, var(--tier-color) 42%, var(--realm-border));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--tier-color) 14%, transparent), transparent 62%),
+    var(--realm-surface);
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.22),
+    inset 0 0 0 1px color-mix(in srgb, var(--tier-color) 12%, transparent);
 }
 
 .prompt-card:hover {
@@ -98,11 +108,23 @@ const pointLabel = computed(() => xpTier.value?.label ?? 'points')
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
 }
 
+.kind-attack:hover {
+  border-color: color-mix(in srgb, var(--tier-color) 62%, var(--realm-border));
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px color-mix(in srgb, var(--tier-color) 20%, transparent);
+}
+
 .prompt-accent {
 	position: absolute;
 	inset: 0 auto 0 0;
 	width: 4px;
 	background: linear-gradient(180deg, var(--tier-color), color-mix(in srgb, var(--tier-color) 20%, transparent));
+}
+
+.kind-attack .prompt-accent {
+	width: 5px;
+	background: linear-gradient(180deg, var(--tier-color), color-mix(in srgb, var(--tier-color) 35%, transparent));
 }
 
 .prompt-top {
@@ -181,9 +203,9 @@ h3 {
   margin: 0;
   padding: 0.2rem 0.55rem;
   border-radius: 999px;
-  background: rgba(212, 99, 74, 0.1);
-  border: 1px solid rgba(212, 99, 74, 0.22);
-  color: var(--realm-accent-glow);
+  background: color-mix(in srgb, var(--tier-color) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tier-color) 32%, transparent);
+  color: var(--tier-color);
   font-size: 0.74rem;
   font-style: italic;
   font-weight: 600;
@@ -191,7 +213,8 @@ h3 {
 }
 
 .kind-attack .game-name {
-  background: rgba(212, 99, 74, 0.14);
+  background: color-mix(in srgb, var(--tier-color) 20%, transparent);
+  border-color: color-mix(in srgb, var(--tier-color) 45%, transparent);
 }
 
 .desc {

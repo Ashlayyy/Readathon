@@ -23,11 +23,14 @@ const prompts = computed(() => {
           p.description.toLowerCase().includes(q),
       )
     : list
-  // Featured theme prompts float to the top; then highest points first.
+  // Featured theme prompts float to the top; then highest magnitude first
+  // so sabotage majors (-10) appear before minors (-5).
   return [...filtered].sort((a, b) => {
     const featured = Number(Boolean(b.featured)) - Number(Boolean(a.featured))
     if (featured !== 0) return featured
-    return b.points - a.points
+    const byPoints = Math.abs(b.points) - Math.abs(a.points)
+    if (byPoints !== 0) return byPoints
+    return a.label.localeCompare(b.label)
   })
 })
 

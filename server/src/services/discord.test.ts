@@ -94,7 +94,7 @@ describe('Discord webhook test sender', () => {
         withPing: true,
       })
       assert.equal(result.sent, true, result.error ?? 'send failed')
-      const webhookCall = calls.find((c) => c.url.includes('/webhooks/'))
+      const webhookCall = calls.find((c) => c.url.includes('/webhooks/') && c.init?.body)
       assert.ok(webhookCall)
       const body = JSON.parse(String(webhookCall!.init!.body)) as {
         content: string

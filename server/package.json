@@ -6,9 +6,9 @@
 		"node": "^22.18.0 || >=24.12.0"
 	},
 	"scripts": {
-		"dev": "tsx watch src/index.ts",
+		"dev": "node --watch-path ./src --import tsx src/index.ts",
 		"build": "tsc --noEmit",
-		"start": "NODE_ENV=production tsx src/index.ts",
+		"start": "node ./scripts/start.cjs",
 		"test": "node --import tsx --test \"src/**/*.test.ts\"",
 		"test:coverage": "c8 --all --include=src/**/*.ts --exclude=src/**/*.test.ts --exclude=src/types/** --exclude=src/security.integration.manual.ts --reporter=text-summary --reporter=text --reporter=html --check-coverage --lines 40 --functions 35 --branches 25 --statements 40 node --import tsx --test \"src/**/*.test.ts\"",
 		"test:security": "node --import tsx --test src/security.integration.manual.ts"
