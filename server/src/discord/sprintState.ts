@@ -1,4 +1,4 @@
-export type ParticipantStatus = 'reading' | 'paused'
+export type ParticipantStatus = 'reading' | 'paused' | 'left'
 
 export type Participant = {
 	userId: string
@@ -11,6 +11,7 @@ export type Participant = {
 	bankedPages: number
 	pausedMs: number
 	pausedAt: number | null
+	confirmed: boolean
 }
 
 export type SprintView = {
@@ -20,6 +21,7 @@ export type SprintView = {
 	startsAt: number
 	endsAt: number | null
 	goal: string | null
+	title: string | null
 	participants: Participant[]
 }
 
@@ -33,11 +35,55 @@ export function pagesRead(participant: Participant): number {
 	return participant.bankedPages + session
 }
 
+const MAX_SPRINT_MINUTES = 24 * 60
+
 export function formatMinutes(minutes: number): string {
-	if (minutes < 60) return `${minutes} min`
-	const hours = Math.floor(minutes / 60)
-	const rest = minutes % 60
-	return rest ? `${hours} hr ${rest} min` : `${hours} hr`
+	const whole = Math.max(0, Math.round(minutes))
+	const hours = Math.floor(whole / 60)
+	const rest = whole % 60
+	const hourLabel = hours === 1 ? '1 hour' : `${hours} hours`
+	const minuteLabel = rest === 1 ? '1 minute' : `${rest} minutes`
+	if (hours > 0 && rest > 0) return `${hourLabel} ${minuteLabel}`
+	if (hours > 0) return hourLabel
+	return minuteLabel
+}
+
+export function parseSprintDuration(
+	raw: string,
+): { ok: true; minutes: number } | { ok: false; error: string } {
+	const match = raw
+		.trim()
+		.toLowerCase()
+		.match(/^(\d+)\s*(minutes?|mins?|m|hours?|hrs?|h)?$/)
+	const hint = 'A number under 12 is hours. 12 or more is minutes. You can also write 5m or 2h.'
+	const invalid = `${raw.trim().slice(0, 40) || 'That'} is not a valid duration.\n${hint}`
+	if (!match) return { ok: false, error: invalid }
+	const value = Number(match[1])
+	if (!Number.isSafeInteger(value) || value <= 0) return { ok: false, error: invalid }
+	const suffix = match[2] ?? ''
+	const asHours = suffix.startsWith('h') || (suffix === '' && value < 12)
+	const minutes = asHours ? value * 60 : value
+	if (minutes > MAX_SPRINT_MINUTES) return { ok: false, error: 'A sprint can last up to 24 hours.' }
+	return { ok: true, minutes }
+}
+
+const MAX_JOIN_WAIT_SECONDS = 5 * 60
+
+export function parseJoinWait(
+	raw: string,
+): { ok: true; seconds: number } | { ok: false; error: string } {
+	const match = raw
+		.trim()
+		.toLowerCase()
+		.match(/^(\d+)\s*(seconds?|secs?|s|minutes?|mins?|m)?$/)
+	const hint = 'Use a wait up to 5 minutes, like 60s, 90s, or 2m. A plain number is seconds.'
+	if (!match) return { ok: false, error: hint }
+	const value = Number(match[1])
+	if (!Number.isSafeInteger(value) || value < 0) return { ok: false, error: hint }
+	const suffix = match[2] ?? ''
+	const seconds = suffix.startsWith('m') ? value * 60 : value
+	if (seconds > MAX_JOIN_WAIT_SECONDS) return { ok: false, error: 'Joining wait can be at most 5 minutes.' }
+	return { ok: true, seconds }
 }
 
 export function activeMinutes(
@@ -48,7 +94,10 @@ export function activeMinutes(
 	const start = Math.max(participant.joinedAt, runningFrom)
 	if (runningUntil <= start) return 0
 	let paused = participant.pausedMs
-	if (participant.status === 'paused' && participant.pausedAt != null) {
+	if (
+		(participant.status === 'paused' || participant.status === 'left') &&
+		participant.pausedAt != null
+	) {
 		const pauseStart = Math.max(participant.pausedAt, start)
 		if (runningUntil > pauseStart) paused += runningUntil - pauseStart
 	}
@@ -60,6 +109,9 @@ export function pauseParticipant(
 	participant: Participant,
 	now: number,
 ): StepOk<Participant> | StepFail {
+	if (participant.status === 'left') {
+		return { ok: false, error: 'You left this sprint. Press Join to pick up where you left off.' }
+	}
 	if (participant.status === 'paused') {
 		return { ok: false, error: 'You are already paused. Use resume when you are reading again.' }
 	}
@@ -90,11 +142,15 @@ export function resumeParticipant(
 export function setParticipantPage(
 	participant: Participant,
 	page: number,
+	options?: { allowPaused?: boolean },
 ): StepOk<Participant> | StepFail {
 	if (!Number.isInteger(page) || page < 0 || page > MAX_PAGE) {
 		return { ok: false, error: 'Enter a page number from 0 to 1000000.' }
 	}
-	if (participant.status === 'paused') {
+	if (participant.status === 'left') {
+		return { ok: false, error: 'You left this sprint. Press Join to pick up where you left off.' }
+	}
+	if (participant.status === 'paused' && !options?.allowPaused) {
 		return { ok: false, error: 'Resume the sprint before you update your page.' }
 	}
 	if (page < participant.startPage) {
@@ -115,6 +171,9 @@ export function switchParticipantBook(
 	if (!bookTitle) return { ok: false, error: 'Tell me the book you switched to.' }
 	if (bookTitle.length > 200) {
 		return { ok: false, error: 'That title is too long. Keep it under 200 characters.' }
+	}
+	if (participant.status === 'left') {
+		return { ok: false, error: 'You left this sprint. Press Join to pick up where you left off.' }
 	}
 	if (!Number.isInteger(startPage) || startPage < 0 || startPage > MAX_PAGE) {
 		return { ok: false, error: 'Enter a starting page from 0 to 1000000.' }
@@ -138,9 +197,26 @@ export function joinParticipant(input: {
 	startPage: number
 	now: number
 	existing: Participant[]
-}): StepOk<Participant[]> | StepFail {
-	if (input.existing.some((person) => person.userId === input.userId)) {
+}): StepOk<Participant[]> & { rejoined?: boolean } | StepFail {
+	const prior = input.existing.find((person) => person.userId === input.userId)
+	if (prior && prior.status !== 'left') {
 		return { ok: false, error: 'You are already in this sprint.' }
+	}
+	if (prior) {
+		if (prior.pausedAt == null) return { ok: false, error: 'You are already in this sprint.' }
+		const next = input.existing.map((person) =>
+			person.userId === input.userId
+				? {
+						...person,
+						username: input.username,
+						status: 'reading' as const,
+						pausedMs: person.pausedMs + Math.max(0, input.now - (person.pausedAt ?? input.now)),
+						pausedAt: null,
+						confirmed: false,
+					}
+				: person,
+		)
+		return { ok: true, value: next, rejoined: true }
 	}
 	const bookTitle = input.bookTitle.trim()
 	if (bookTitle.length > 200) {
@@ -160,20 +236,46 @@ export function joinParticipant(input: {
 		bankedPages: 0,
 		pausedMs: 0,
 		pausedAt: null,
+		confirmed: false,
 	}
 	return { ok: true, value: [...input.existing, next] }
+}
+
+export function leaveParticipant(
+	participant: Participant,
+	page: number,
+	now: number,
+): StepOk<Participant> | StepFail {
+	if (participant.status === 'left') {
+		return { ok: false, error: 'You already left this sprint.' }
+	}
+	const paged = setParticipantPage(participant, page, { allowPaused: true })
+	if (!paged.ok) return paged
+	return {
+		ok: true,
+		value: {
+			...paged.value,
+			status: 'left',
+			pausedAt: participant.status === 'paused' && participant.pausedAt != null ? participant.pausedAt : now,
+			confirmed: true,
+		},
+	}
+}
+
+export function stillWaiting(participants: Participant[]): boolean {
+	return participants.some((person) => person.status !== 'left' && !person.confirmed)
 }
 
 export function renderSprint(view: SprintView, now: number): string {
 	const stamp = (ms: number) => `<t:${Math.floor(ms / 1000)}:R>`
 	const headline =
 		view.status === 'scheduled'
-			? `Starts ${stamp(view.startsAt)} · ${view.durationMinutes} min`
+			? `Starts ${stamp(view.startsAt)} · ${formatMinutes(view.durationMinutes)}`
 			: view.status === 'running'
-				? `Ends ${stamp(view.endsAt ?? now)} · ${view.durationMinutes} min`
+				? `Ends ${stamp(view.endsAt ?? now)} · ${formatMinutes(view.durationMinutes)}`
 				: view.endsAt == null
 					? 'Cancelled before it started'
-					: `Finished · ${view.durationMinutes} min`
+					: `Finished · ${formatMinutes(view.durationMinutes)}`
 	const lines = [
 		`**Reading sprint**`,
 		headline,

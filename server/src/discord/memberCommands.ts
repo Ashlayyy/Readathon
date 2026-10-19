@@ -34,13 +34,16 @@ import {
 	beginSprint,
 	endChannelSprint,
 	joinSprint,
+	leaveSprint,
 	pauseSprint,
 	resumeSprint,
+	sprintSeat,
 	switchSprintBook,
 	updateSprintPage,
 } from './sprint.js'
+import { parseJoinWait, parseSprintDuration } from './sprintState.js'
 import { card, EPHEMERAL, readerUrl, siteUrl } from './embeds.js'
-import { renderProfileCardPng } from './profileCard.js'
+import { loadSiteCard, renderProfileCardPng } from './profileCard.js'
 import { getConfig } from '../services/prompts.js'
 
 type MemberInteraction = ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction
@@ -48,7 +51,7 @@ type MemberInteraction = ChatInputCommandInteraction | ButtonInteraction | Modal
 const HELP = [
 	'`/sprint` — start a reading sprint in this channel',
 	'`/join` — join the sprint that is already there',
-	'On the sprint message: Update Progress, Pause, Resume, Switch book',
+	'On the sprint message: Update progress, Pause, Resume, Switch, Leave',
 	'`/register` — email and team, then a link to the website',
 	'`/profile` — pages, time, and your team',
 	'`/searchbook` `/library` `/review` `/recommend`',
@@ -58,11 +61,11 @@ const HELP = [
 ].join('\n')
 
 const GUIDE = [
-	'1. Run `/sprint` and say how many minutes.',
-	'2. Other people run `/join`, or press **Join Sprint**.',
-	'3. Press **Update Progress** when you turn pages.',
-	'4. **Pause** stops the clock. **Resume** starts it again. **Switch book** keeps the pages you already read.',
-	'5. When time is up, you have 5 minutes to set your last page. Those pages land on `/profile`.',
+	'1. Run `/sprint` with a duration. Under 12 is hours, otherwise minutes. `5m` is 5 minutes and `2h` is 2 hours. Joining wait defaults to 60s, and can be `90s` or `2m`, up to 5 minutes.',
+	'2. Press **Join**, or run `/join`. Starting a sprint does not add you.',
+	'3. Press **Update progress** when you turn pages. The card keeps your start page.',
+	'4. **Pause** stops the clock. **Resume** starts it again. **Leave** asks for your page and takes you out. **Join** puts you back where you left off.',
+	'5. When time is up, everyone still in the sprint gets 5 minutes to set a last page. The leaderboard is posted as soon as everyone has updated.',
 ].join('\n')
 
 function displayName(user: { globalName?: string | null; username: string }): string {
@@ -70,12 +73,32 @@ function displayName(user: { globalName?: string | null; username: string }): st
 }
 
 async function reply(interaction: MemberInteraction, content: string, title = 'Book Baddies'): Promise<void> {
-	const payload = { embeds: [card(title, content)], flags: EPHEMERAL }
-	if (interaction.deferred || interaction.replied) {
-		await interaction.followUp(payload)
+	const embeds = [card(title, content)]
+	if (interaction.isButton() && (interaction.deferred || interaction.replied)) {
+		await interaction.followUp({ embeds, flags: EPHEMERAL })
 		return
 	}
-	await interaction.reply(payload)
+	if (interaction.deferred && !interaction.replied) {
+		await interaction.editReply({ embeds })
+		return
+	}
+	if (interaction.replied) {
+		await interaction.followUp({ embeds, flags: EPHEMERAL })
+		return
+	}
+	await interaction.reply({ embeds, flags: EPHEMERAL })
+}
+
+async function deferProfile(
+	interaction: ChatInputCommandInteraction | ModalSubmitInteraction,
+): Promise<void> {
+	await interaction.deferReply({ flags: 'IsComponentsV2' as unknown as 'Ephemeral' })
+}
+
+async function ackButton(interaction: ButtonInteraction): Promise<void> {
+	if (!interaction.deferred && !interaction.replied) {
+		await interaction.deferUpdate()
+	}
 }
 
 async function requireMember(interaction: MemberInteraction) {
@@ -108,12 +131,47 @@ function parseOptionalPage(raw: string | null, fallback: number): number | null 
 	return page
 }
 
+const KEEP_CURRENT = 'Leave empty to keep what you already have.'
+
 function sprintModal(customId: string, title: string, fields: TextInputBuilder[]) {
 	const modal = new ModalBuilder().setCustomId(customId).setTitle(title)
 	for (const field of fields) {
 		modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(field))
 	}
 	return modal
+}
+
+function textLabel(
+	customId: string,
+	label: string,
+	value: string,
+	style: TextInputStyle,
+	maxLength: number,
+) {
+	const component: {
+		type: 4
+		custom_id: string
+		style: TextInputStyle
+		required: false
+		max_length: number
+		placeholder: string
+		value?: string
+	} = {
+		type: 4,
+		custom_id: customId,
+		style,
+		required: false,
+		max_length: maxLength,
+		placeholder: KEEP_CURRENT,
+	}
+	const current = value.trim()
+	if (current) component.value = current.slice(0, maxLength)
+	return {
+		type: 18 as const,
+		label,
+		description: KEEP_CURRENT,
+		component,
+	}
 }
 
 function discordAvatar(user: { displayAvatarURL: (options: { extension: 'png'; size: 256 }) => string }): string {
@@ -133,10 +191,14 @@ async function replyWithCard(
 		bio?: string | null
 		totalPages?: number | null
 		totalMinutes?: number | null
+		sprintsCompleted?: number | null
 		siteUserId?: string | null
+		discordUserId?: string | null
 		library?: Iterable<{ author?: string | null }> | null
 	},
 	fallbackAvatar: string,
+	page: 0 | 1 = 0,
+	editable?: boolean,
 ): Promise<void> {
 	const libraryAuthors = [...(member.library ?? [])]
 		.map((book) => book.author?.trim() || '')
@@ -153,20 +215,76 @@ async function replyWithCard(
 		bio: member.bio ?? null,
 		pages: member.totalPages ?? 0,
 		minutes: member.totalMinutes ?? 0,
+		sprintsDone: member.sprintsCompleted ?? 0,
+		page,
+		site: page === 1 ? await loadSiteCard(member.siteUserId) : null,
 	})
+	if (page === 0 && member.discordUserId) {
+		const other = {
+			name: member.username,
+			nametag: member.nametag ?? null,
+			color: member.color ?? null,
+			backgroundUrl: member.backgroundUrl ?? null,
+			avatarUrl: member.avatarUrl || fallbackAvatar,
+			genres: member.genres ?? null,
+			authors,
+			bio: member.bio ?? null,
+			pages: member.totalPages ?? 0,
+			minutes: member.totalMinutes ?? 0,
+			sprintsDone: member.sprintsCompleted ?? 0,
+			page: 1 as const,
+			site: null as Awaited<ReturnType<typeof loadSiteCard>> | null,
+		}
+		void loadSiteCard(member.siteUserId).then((site) => renderProfileCardPng({ ...other, site }))
+	}
 	const link = member.siteUserId ? readerUrl(member.siteUserId) : siteUrl()
+	const titleName = member.nametag || member.username
 	const files = [new AttachmentBuilder(png, { name: 'profile.png' })]
+	const profileId = member.discordUserId || ''
+	const canEdit = editable ?? interaction.user.id === profileId
+	const accent = member.color ? Number.parseInt(member.color.slice(1), 16) : 0x6d28d9
+	const cardParts: Array<Record<string, unknown>> = [
+		{ type: 10, content: `**${titleName}'s Profile**\nPage ${page + 1}/2` },
+		{ type: 12, items: [{ media: { url: 'attachment://profile.png' } }] },
+	]
+	if (canEdit) {
+		cardParts.push({
+			type: 9,
+			components: [{ type: 10, content: '**Customize**\nEdit and customize your profile' }],
+			accessory: {
+				type: 2,
+				style: 3,
+				label: 'Edit',
+				custom_id: `pf:edit:${profileId}`,
+			},
+		})
+	}
 	const components = [
+		{
+			type: 17,
+			accent_color: accent,
+			components: cardParts,
+		},
 		new ActionRowBuilder<ButtonBuilder>().addComponents(
-			new ButtonBuilder().setCustomId('pf:edit').setLabel('Edit').setStyle(ButtonStyle.Success),
-			new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(link).setLabel('Open the website'),
+			new ButtonBuilder()
+				.setCustomId(`pf:pg:0:${profileId}:${canEdit ? '1' : '0'}`)
+				.setLabel('◀')
+				.setStyle(ButtonStyle.Secondary)
+				.setDisabled(page === 0 || !profileId),
+			new ButtonBuilder()
+				.setCustomId(`pf:pg:1:${profileId}:${canEdit ? '1' : '0'}`)
+				.setLabel('▶')
+				.setStyle(ButtonStyle.Primary)
+				.setDisabled(page === 1 || !profileId),
+			new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(link).setLabel('Open profile on website'),
 		),
 	]
+	const payload = { components, files, flags: 'IsComponentsV2' as const }
 	if (interaction.deferred || interaction.replied) {
-		await interaction.editReply({ files, components })
+		await interaction.editReply(payload)
 		return
 	}
-	await interaction.reply({ files, components })
+	await interaction.reply(payload)
 }
 
 function shortInput(customId: string, label: string, required: boolean) {
@@ -181,33 +299,26 @@ function shortInput(customId: string, label: string, required: boolean) {
 export const sprintCommand = new SlashCommandBuilder()
 	.setName('sprint')
 	.setDescription('Start a reading sprint in this channel')
-	.addIntegerOption((option) =>
+	.addStringOption((option) =>
 		option
-			.setName('minutes')
-			.setDescription('How long the sprint lasts')
+			.setName('duration')
+			.setDescription('Under 12 is hours. 12 or more is minutes. Or write 5m or 2h.')
 			.setRequired(true)
-			.setMinValue(5)
-			.setMaxValue(1440),
+			.setMaxLength(20),
 	)
-	.addIntegerOption((option) =>
+	.addRoleOption((option) =>
 		option
-			.setName('in_minutes')
-			.setDescription('Start later. Leave empty to start now')
-			.setMinValue(1)
-			.setMaxValue(10080),
+			.setName('ping_role')
+			.setDescription('Role to mention when the sprint is announced.'),
 	)
 	.addStringOption((option) =>
-		option.setName('book').setDescription('The book you are starting with').setMaxLength(200),
-	)
-	.addIntegerOption((option) =>
 		option
-			.setName('start_page')
-			.setDescription('The page you are on now')
-			.setMinValue(0)
-			.setMaxValue(1_000_000),
+			.setName('joining_wait_time')
+			.setDescription('Wait before reading starts. 60s or 2m. Max 5 minutes. Default 60s.')
+			.setMaxLength(20),
 	)
 	.addStringOption((option) =>
-		option.setName('goal').setDescription('Optional goal, shown on the sprint').setMaxLength(200),
+		option.setName('custom_title').setDescription('Optional title for the sprint.').setMaxLength(100),
 	)
 	.addChannelOption((option) =>
 		option
@@ -422,17 +533,28 @@ async function handleSprint(interaction: ChatInputCommandInteraction): Promise<v
 		await reply(interaction, 'Run this in a channel, or pick one.', 'Sprint')
 		return
 	}
+	const parsed = parseSprintDuration(interaction.options.getString('duration', true))
+	if (!parsed.ok) {
+		await reply(interaction, parsed.error, 'Sprint')
+		return
+	}
+	const waitRaw = interaction.options.getString('joining_wait_time')
+	const wait = waitRaw ? parseJoinWait(waitRaw) : { ok: true as const, seconds: 60 }
+	if (!wait.ok) {
+		await reply(interaction, wait.error, 'Sprint')
+		return
+	}
 	await interaction.deferReply({ flags: EPHEMERAL })
 	const result = await beginSprint({
 		guildId: interaction.guildId!,
 		channelId,
 		hostId: interaction.user.id,
 		hostName: displayName(interaction.user),
-		durationMinutes: interaction.options.getInteger('minutes', true),
-		bookTitle: interaction.options.getString('book') ?? '',
-		startPage: interaction.options.getInteger('start_page') ?? 0,
-		goal: interaction.options.getString('goal'),
-		inMinutes: interaction.options.getInteger('in_minutes') ?? 0,
+		durationMinutes: parsed.minutes,
+		goal: null,
+		title: interaction.options.getString('custom_title'),
+		pingRoleId: interaction.options.getRole('ping_role')?.id ?? null,
+		waitSeconds: wait.seconds,
 	})
 	await interaction.editReply({ embeds: [card('Reading sprint', result.reply)] })
 }
@@ -504,7 +626,7 @@ export async function handleMemberCommand(interaction: ChatInputCommandInteracti
 			record.avatarUrl = image.url
 			await record.save()
 		}
-		await interaction.deferReply()
+		await deferProfile(interaction)
 		await replyWithCard(interaction, record, discordAvatar(user))
 		return
 	}
@@ -525,12 +647,12 @@ export async function handleMemberCommand(interaction: ChatInputCommandInteracti
 			teamId: team.id,
 			teamName: team.name,
 		})
-		await interaction.deferReply()
+		await deferProfile(interaction)
 		await replyWithCard(interaction, result.member, discordAvatar(interaction.user))
 		return
 	}
 	if (name === 'profile') {
-		await interaction.deferReply()
+		await deferProfile(interaction)
 		const user = interaction.options.getUser('user') ?? interaction.user
 		const member = await findDiscordMember(user.id)
 		if (!member) {
@@ -660,7 +782,7 @@ export async function handleMemberCommand(interaction: ChatInputCommandInteracti
 		if (interaction.options.getBoolean('clear')) {
 			member.backgroundUrl = null
 			await member.save()
-			await interaction.deferReply()
+			await deferProfile(interaction)
 			await replyWithCard(interaction, member, discordAvatar(interaction.user))
 			return
 		}
@@ -671,7 +793,7 @@ export async function handleMemberCommand(interaction: ChatInputCommandInteracti
 		}
 		member.backgroundUrl = url
 		await member.save()
-		await interaction.deferReply()
+		await deferProfile(interaction)
 		await replyWithCard(interaction, member, discordAvatar(interaction.user))
 		return
 	}
@@ -685,7 +807,7 @@ export async function handleMemberCommand(interaction: ChatInputCommandInteracti
 		}
 		member.color = hex.toLowerCase()
 		await member.save()
-		await interaction.deferReply()
+		await deferProfile(interaction)
 		await replyWithCard(interaction, member, discordAvatar(interaction.user))
 		return
 	}
@@ -694,7 +816,7 @@ export async function handleMemberCommand(interaction: ChatInputCommandInteracti
 		if (interaction.options.getBoolean('clear')) {
 			member.nametag = null
 			await member.save()
-			await interaction.deferReply()
+			await deferProfile(interaction)
 			await replyWithCard(interaction, member, discordAvatar(interaction.user))
 			return
 		}
@@ -705,7 +827,7 @@ export async function handleMemberCommand(interaction: ChatInputCommandInteracti
 		}
 		member.nametag = text
 		await member.save()
-		await interaction.deferReply()
+		await deferProfile(interaction)
 		await replyWithCard(interaction, member, discordAvatar(interaction.user))
 		return
 	}
@@ -722,23 +844,98 @@ export async function handleMemberCommand(interaction: ChatInputCommandInteracti
 export async function handleMemberComponent(
 	interaction: ButtonInteraction | ModalSubmitInteraction,
 ): Promise<void> {
-	if (interaction.isButton() && interaction.customId === 'pf:edit') {
+	if (interaction.isButton() && interaction.customId.startsWith('pf:pg:')) {
+		const [, , pageRaw, userId, ownRaw] = interaction.customId.split(':')
+		const page = pageRaw === '1' ? 1 : 0
+		const editable = ownRaw === undefined ? userId === interaction.user.id : ownRaw === '1'
+		await interaction.deferUpdate()
+		const record = userId ? await findDiscordMember(userId) : null
+		if (!record) {
+			await interaction.followUp({
+				flags: EPHEMERAL,
+				embeds: [card('Profile', 'That profile could not be opened.')],
+			})
+			return
+		}
+		const avatar = userId === interaction.user.id ? discordAvatar(interaction.user) : record.avatarUrl || ''
+		await replyWithCard(interaction, record, avatar, page, editable)
+		return
+	}
+	if (interaction.isButton() && /^pf:edit(?::\d+)?$/.test(interaction.customId)) {
+		const ownerId = interaction.customId.slice('pf:edit:'.length)
+		if (ownerId && ownerId !== interaction.user.id) {
+			await reply(interaction, 'You can only edit your own profile.')
+			return
+		}
 		const member = await requireMember(interaction)
 		if (!member) return
-		await interaction.showModal(
-			sprintModal('pf:edit:m', 'Edit your profile', [
-				shortInput('nametag', 'Display name', false).setValue(member.nametag ?? ''),
-				shortInput('genres', 'Preferred genres', false).setValue(member.genres ?? ''),
-				shortInput('authors', 'Favorite authors', false).setValue(member.authors ?? ''),
-				new TextInputBuilder()
-					.setCustomId('bio')
-					.setLabel('Bio')
-					.setStyle(TextInputStyle.Paragraph)
-					.setRequired(false)
-					.setMaxLength(300)
-					.setValue(member.bio ?? ''),
-			]),
+		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+			new ButtonBuilder()
+				.setCustomId('pf:edit:look')
+				.setLabel('Color and avatar')
+				.setStyle(ButtonStyle.Primary),
+			new ButtonBuilder()
+				.setCustomId('pf:edit:text')
+				.setLabel('Name, genres, and bio')
+				.setStyle(ButtonStyle.Secondary),
 		)
+		await interaction.reply({
+			flags: EPHEMERAL,
+			embeds: [
+				card(
+					'Edit profile',
+					[
+						'Choose what to change.',
+						'',
+						'**Color and avatar** sets the card color and picture.',
+						'**Name, genres, and bio** opens the profile form.',
+						'',
+						KEEP_CURRENT,
+					].join('\n'),
+				),
+			],
+			components: [row],
+		})
+		return
+	}
+	if (interaction.isButton() && interaction.customId === 'pf:edit:text') {
+		const member = await requireMember(interaction)
+		if (!member) return
+		await interaction.showModal({
+			custom_id: 'pf:edit:m',
+			title: 'Edit your profile',
+			components: [
+				textLabel('nametag', 'Display name', member.nametag ?? '', TextInputStyle.Short, 32),
+				textLabel('genres', 'Preferred genres', member.genres ?? '', TextInputStyle.Short, 200),
+				textLabel('authors', 'Favorite authors', member.authors ?? '', TextInputStyle.Short, 200),
+				textLabel('bio', 'Bio', member.bio ?? '', TextInputStyle.Paragraph, 300),
+			],
+		})
+		return
+	}
+	if (interaction.isButton() && interaction.customId === 'pf:edit:look') {
+		const member = await requireMember(interaction)
+		if (!member) return
+		await interaction.showModal({
+			custom_id: 'pf:edit:look:m',
+			title: 'Color and avatar',
+			components: [
+				textLabel('color', 'Color', member.color ?? '', TextInputStyle.Short, 7),
+				{
+					type: 18,
+					label: 'Avatar',
+					description: 'Leave empty to keep your current picture.',
+					component: {
+						type: 19,
+						custom_id: 'avatar',
+						required: false,
+						min_values: 0,
+						max_values: 1,
+						file_types: ['image'],
+					},
+				},
+			],
+		})
 		return
 	}
 	if (interaction.isModalSubmit() && interaction.customId === 'pf:edit:m') {
@@ -748,12 +945,68 @@ export async function handleMemberComponent(
 		const genres = interaction.fields.getTextInputValue('genres').trim()
 		const authors = interaction.fields.getTextInputValue('authors').trim()
 		const bio = interaction.fields.getTextInputValue('bio').trim()
-		member.nametag = nametag.slice(0, 32) || null
-		member.genres = genres.slice(0, 200) || null
-		member.authors = authors.slice(0, 200) || null
-		member.bio = bio.slice(0, 300) || null
+		let changed = false
+		if (nametag && nametag.slice(0, 32) !== (member.nametag ?? '')) {
+			member.nametag = nametag.slice(0, 32)
+			changed = true
+		}
+		if (genres && genres.slice(0, 200) !== (member.genres ?? '')) {
+			member.genres = genres.slice(0, 200)
+			changed = true
+		}
+		if (authors && authors.slice(0, 200) !== (member.authors ?? '')) {
+			member.authors = authors.slice(0, 200)
+			changed = true
+		}
+		if (bio && bio.slice(0, 300) !== (member.bio ?? '')) {
+			member.bio = bio.slice(0, 300)
+			changed = true
+		}
+		if (!changed) {
+			await reply(interaction, `Nothing changed. ${KEEP_CURRENT}`)
+			return
+		}
 		await member.save()
-		await interaction.deferReply()
+		await deferProfile(interaction)
+		await replyWithCard(interaction, member, discordAvatar(interaction.user))
+		return
+	}
+	if (interaction.isModalSubmit() && interaction.customId === 'pf:edit:look:m') {
+		const member = await requireMember(interaction)
+		if (!member) return
+		const raw = interaction.fields.getTextInputValue('color').trim()
+		let nextColor: string | null = null
+		if (raw) {
+			const hex = raw.startsWith('#') ? raw : `#${raw}`
+			if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+				await reply(interaction, 'Use a color like `#c45c26`. Leave it empty to keep your current color.')
+				return
+			}
+			nextColor = hex.toLowerCase()
+		}
+		let nextAvatar: string | null = null
+		try {
+			const file = interaction.fields.getUploadedFiles('avatar')?.first()
+			if (file) {
+				if (!file.contentType?.startsWith('image/') || !file.url.startsWith('https://')) {
+					await reply(interaction, 'Attach an image, or leave it empty to keep your current picture.')
+					return
+				}
+				nextAvatar = file.url
+			}
+		} catch {
+			nextAvatar = null
+		}
+		if (nextColor && nextColor !== (member.color ?? '')) member.color = nextColor
+		else nextColor = null
+		if (nextAvatar && nextAvatar !== (member.avatarUrl ?? '')) member.avatarUrl = nextAvatar
+		else nextAvatar = null
+		if (!nextColor && !nextAvatar) {
+			await reply(interaction, `Nothing changed. ${KEEP_CURRENT}`)
+			return
+		}
+		await member.save()
+		await deferProfile(interaction)
 		await replyWithCard(interaction, member, discordAvatar(interaction.user))
 		return
 	}
@@ -778,17 +1031,39 @@ export async function handleMemberComponent(
 	}
 
 	if (!customId.startsWith('sp:')) return
-	const member = await requireMember(interaction)
-	if (!member) return
-	const name = displayName(interaction.user)
 	const channelId = interaction.channelId
 
 	if (interaction.isButton() && customId === 'sp:join') {
+		const seat = await sprintSeat(channelId, interaction.user.id)
+		if (seat === 'left') {
+			await ackButton(interaction)
+			const member = await requireMember(interaction)
+			if (!member) return
+			const result = await joinSprint({
+				channelId,
+				userId: interaction.user.id,
+				username: displayName(interaction.user),
+				bookTitle: '',
+				startPage: 0,
+			})
+			await interaction.followUp({ embeds: [card('Sprint', result.reply)], flags: EPHEMERAL })
+			return
+		}
+		if (seat === 'in') {
+			await reply(interaction, 'You are already in this sprint.')
+			return
+		}
 		await interaction.showModal(
 			sprintModal('sp:join:m', 'Join the sprint', [
 				shortInput('book', 'Book', false),
 				shortInput('start_page', 'Starting page', false),
 			]),
+		)
+		return
+	}
+	if (interaction.isButton() && customId === 'sp:leave') {
+		await interaction.showModal(
+			sprintModal('sp:leave:m', 'Leave the sprint', [shortInput('page', 'Current page', true)]),
 		)
 		return
 	}
@@ -807,23 +1082,36 @@ export async function handleMemberComponent(
 		)
 		return
 	}
+	if (interaction.isButton() && (customId === 'sp:pause' || customId === 'sp:resume' || customId === 'sp:end')) {
+		await ackButton(interaction)
+	}
+
+	const member = await requireMember(interaction)
+	if (!member) return
+	const name = displayName(interaction.user)
+
 	if (interaction.isButton() && customId === 'sp:pause') {
 		const result = await pauseSprint({ channelId, userId: interaction.user.id, username: name })
-		await reply(interaction, result.reply)
+		await interaction.followUp({ embeds: [card('Sprint', result.reply)], flags: EPHEMERAL })
 		return
 	}
 	if (interaction.isButton() && customId === 'sp:resume') {
 		const result = await resumeSprint({ channelId, userId: interaction.user.id, username: name })
-		await reply(interaction, result.reply)
+		await interaction.followUp({ embeds: [card('Sprint', result.reply)], flags: EPHEMERAL })
 		return
 	}
 	if (interaction.isButton() && customId === 'sp:end') {
 		const result = await endChannelSprint(channelId, interaction.user.id)
-		await reply(interaction, result.reply)
+		if (!result.ok || !result.quiet) {
+			await interaction.followUp({ embeds: [card('Sprint', result.reply)], flags: EPHEMERAL })
+		}
 		return
 	}
 
 	if (!interaction.isModalSubmit()) return
+	if (!interaction.deferred && !interaction.replied) {
+		await interaction.deferReply({ flags: EPHEMERAL })
+	}
 	if (customId === 'sp:join:m') {
 		const startPage = parseOptionalPage(interaction.fields.getTextInputValue('start_page'), 0)
 		if (startPage == null) {
@@ -847,6 +1135,21 @@ export async function handleMemberComponent(
 			return
 		}
 		const result = await updateSprintPage({
+			channelId,
+			userId: interaction.user.id,
+			username: name,
+			page,
+		})
+		await reply(interaction, result.reply)
+		return
+	}
+	if (customId === 'sp:leave:m') {
+		const page = parseOptionalPage(interaction.fields.getTextInputValue('page'), -1)
+		if (page == null || page < 0) {
+			await reply(interaction, 'Enter a page number.')
+			return
+		}
+		const result = await leaveSprint({
 			channelId,
 			userId: interaction.user.id,
 			username: name,

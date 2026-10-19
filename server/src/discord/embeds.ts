@@ -8,7 +8,6 @@ import {
 } from 'discord.js'
 import { type ProfileInput } from './profileText.js'
 import {
-	activeMinutes,
 	formatMinutes,
 	pagesRead,
 	type SprintView,
@@ -32,88 +31,88 @@ export function readerUrl(userId: string): string {
 	return `${siteUrl()}/readers/${userId}`
 }
 
+function heading(view: SprintView, fallback: string): string {
+	return view.title?.trim().slice(0, 256) || fallback
+}
+
 function stamp(ms: number): string {
 	const sec = Math.floor(ms / 1000)
 	return `<t:${sec}:F> (<t:${sec}:R>)`
 }
 
-function participantLines(view: SprintView, now: number): string {
-	if (view.participants.length === 0) return 'Nobody has joined yet.'
-	return view.participants
-		.slice(0, 20)
-		.map((person) => {
-			const book = person.bookTitle || 'No book yet'
-			const paused = person.status === 'paused' ? ' · paused' : ''
-			return `**${person.username}** — page ${person.currentPage} of ${book} · ${pagesRead(person)} read${paused}`
-		})
-		.join('\n')
-		.slice(0, 1024)
+function readerLine(person: SprintView['participants'][number]): string {
+	const book = person.bookTitle.trim()
+	const read = pagesRead(person)
+	const parts = [book, `started on page ${person.startPage}`].filter(Boolean)
+	if (read === 1) parts.push('1 page read')
+	else if (read > 1) parts.push(`${read} pages read`)
+	if (person.status === 'paused') parts.push('paused 💤')
+	return `📖 **${person.username}** — ${parts.join(' · ')}`
 }
 
-function leaderboard(view: SprintView): string {
-	const end = view.endsAt ?? Date.now()
-	const ranked = [...view.participants].sort((a, b) => pagesRead(b) - pagesRead(a))
-	if (ranked.length === 0) return 'Nobody joined this sprint.'
-	return ranked
-		.slice(0, 15)
-		.map((person, index) => {
-			const minutes = formatMinutes(activeMinutes(person, view.startsAt, end))
-			const book = person.bookTitle ? `\n${person.bookTitle}` : ''
-			return `**#${index + 1} — ${person.username}**${book}\nRead **${pagesRead(person)}** pages\nStarted on page **${person.startPage}**\nTook part for **${minutes}**`
-		})
-		.join('\n\n')
-		.slice(0, 4000)
+function participantLines(view: SprintView): string {
+	const people = view.participants.filter((person) => person.status !== 'left')
+	if (people.length === 0) return 'Nobody is in the sprint right now 🌱'
+	return people.slice(0, 20).map(readerLine).join('\n').slice(0, 1024)
 }
 
-export function sprintMessage(view: SprintView, now = Date.now()): {
+export function sprintMessage(
+	view: SprintView,
+	now = Date.now(),
+	separateClose = false,
+): {
 	content: string
 	embeds: EmbedBuilder[]
 	components: APIActionRowComponent<APIButtonComponent>[]
 } {
 	const endAt = view.endsAt ?? view.startsAt + view.durationMinutes * 60_000
+	const length = formatMinutes(view.durationMinutes)
 	const embed = new EmbedBuilder()
 	const rows: ActionRowBuilder<ButtonBuilder>[] = []
 
 	if (view.status === 'scheduled') {
 		embed
 			.setColor(COLOR_OK)
-			.setTitle('READING SPRINT ANNOUNCED')
+			.setTitle(heading(view, 'Sprint scheduled'))
 			.addFields(
-				{ name: 'Start time', value: stamp(view.startsAt), inline: false },
-				{ name: 'End time', value: stamp(endAt), inline: false },
-				{ name: 'Host', value: view.hostName, inline: false },
-				{ name: 'Sprint participants', value: participantLines(view, now) },
+				{ name: '⏱️ Length', value: length, inline: true },
+				{ name: '🌱 Starts at', value: stamp(view.startsAt) },
+				{ name: '🏁 Ends', value: stamp(endAt) },
+				{ name: '📚 Readers', value: participantLines(view) },
 			)
 		rows.push(
 			new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder()
 					.setCustomId('sp:join')
-					.setLabel('Join Sprint')
+					.setLabel('Join')
 					.setStyle(ButtonStyle.Success),
+				new ButtonBuilder().setCustomId('sp:leave').setLabel('Leave').setStyle(ButtonStyle.Secondary),
 				new ButtonBuilder().setCustomId('sp:end').setLabel('Cancel').setStyle(ButtonStyle.Danger),
 			),
 		)
 	} else if (view.status === 'running') {
 		embed
 			.setColor(COLOR_INFO)
-			.setTitle('READING TIME STARTED')
-			.setDescription('Time to read.')
+			.setTitle(heading(view, 'Reading sprint'))
 			.addFields(
-				{ name: 'The sprint will run until', value: stamp(endAt) },
-				{ name: 'Sprint participants', value: participantLines(view, now) },
+				{ name: '⏱️ Length', value: length, inline: true },
+				{ name: '🌱 Starts at', value: stamp(view.startsAt) },
+				{ name: '🏁 Runs until', value: stamp(endAt) },
+				{ name: '📚 Readers', value: participantLines(view) },
 			)
 		rows.push(
 			new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder()
 					.setCustomId('sp:page')
-					.setLabel('Update Progress')
+					.setLabel('Update progress')
 					.setStyle(ButtonStyle.Primary),
+				new ButtonBuilder().setCustomId('sp:leave').setLabel('Leave').setStyle(ButtonStyle.Secondary),
 			),
 			new ActionRowBuilder<ButtonBuilder>().addComponents(
 				new ButtonBuilder().setCustomId('sp:join').setLabel('Join').setStyle(ButtonStyle.Success),
 				new ButtonBuilder().setCustomId('sp:pause').setLabel('Pause').setStyle(ButtonStyle.Secondary),
 				new ButtonBuilder().setCustomId('sp:resume').setLabel('Resume').setStyle(ButtonStyle.Secondary),
-				new ButtonBuilder().setCustomId('sp:switch').setLabel('Switch book').setStyle(ButtonStyle.Secondary),
+				new ButtonBuilder().setCustomId('sp:switch').setLabel('Switch').setStyle(ButtonStyle.Secondary),
 				new ButtonBuilder().setCustomId('sp:end').setLabel('End').setStyle(ButtonStyle.Danger),
 			),
 		)
@@ -121,45 +120,102 @@ export function sprintMessage(view: SprintView, now = Date.now()): {
 		const graceEnd = endAt + GRACE_MS
 		embed
 			.setColor(COLOR_END)
-			.setTitle('READING SPRINT ENDED')
-			.setDescription('You have 5 minutes to update your page numbers.\nPress Update Progress with the page you finished on.')
-			.addFields(
-				{ name: 'Update window', value: stamp(graceEnd) },
-				{ name: 'Sprint participants', value: participantLines(view, now) },
+			.setTitle(heading(view, 'Time is up'))
+			.setDescription(
+				separateClose
+					? 'Set your last page on the message below. The leaderboard is posted once everyone has updated, or after 5 minutes.'
+					: 'You have 5 minutes to set your last page.',
 			)
-		rows.push(
-			new ActionRowBuilder<ButtonBuilder>().addComponents(
-				new ButtonBuilder()
-					.setCustomId('sp:page')
-					.setLabel('Update Progress')
-					.setStyle(ButtonStyle.Primary),
-			),
-		)
+			.addFields(
+				{ name: '⏳ Closes', value: stamp(graceEnd) },
+				{ name: '📚 Readers', value: participantLines(view) },
+			)
+		if (!separateClose) {
+			rows.push(
+				new ActionRowBuilder<ButtonBuilder>().addComponents(
+					new ButtonBuilder()
+						.setCustomId('sp:page')
+						.setLabel('Update progress')
+						.setStyle(ButtonStyle.Primary),
+					new ButtonBuilder().setCustomId('sp:leave').setLabel('Leave').setStyle(ButtonStyle.Secondary),
+				),
+			)
+		}
 	} else {
 		embed
 			.setColor(COLOR_INFO)
-			.setTitle('Reading Sprint Ended')
-			.setDescription(`The reading sprint has ended.\n**Duration:** ${formatMinutes(view.durationMinutes)}\n\n${leaderboard(view)}`)
+			.setTitle(heading(view, 'Sprint finished'))
+			.setDescription(`${length}. The leaderboard is posted with the results.`)
 	}
 
 	if (view.goal && view.status !== 'ended') {
 		embed.addFields({ name: 'Goal', value: view.goal.slice(0, 1024) })
 	}
-	embed.setFooter({ text: 'Book Baddies' }).setURL(siteUrl())
-
-	const content =
-		view.status === 'scheduled'
-			? '**READING SPRINT ANNOUNCED**'
-			: view.status === 'running'
-				? '**READING TIME STARTED**'
-				: view.status === 'grace'
-					? '**READING SPRINT ENDED**'
-					: '**Reading Sprint Ended**'
+	embed.setFooter({ text: `✨ Hosted by ${view.hostName}` }).setURL(siteUrl())
 
 	return {
-		content,
+		content: '',
 		embeds: [embed],
 		components: rows.map((row) => row.toJSON() as APIActionRowComponent<APIButtonComponent>),
+	}
+}
+
+const COMPONENTS_V2 = 1 << 15
+
+export function graceAnnouncement(userIds: string[]): {
+	flags: number
+	components: unknown[]
+	allowed_mentions: { parse: string[]; users: string[] }
+} {
+	const ids = userIds.slice(0, 40)
+	const mentions = ids.map((id) => `<@${id}>`).join(' ')
+	return {
+		flags: COMPONENTS_V2,
+		allowed_mentions: { parse: [], users: ids },
+		components: [
+			{
+				type: 17,
+				accent_color: COLOR_END,
+				components: [
+					{
+						type: 10,
+						content:
+							'**Sprint ended**\nYou have 5 minutes to update your page. If everyone updates sooner, the leaderboard is posted right away.',
+					},
+					{
+						type: 10,
+						content: mentions ? `**Ping**\n${mentions}` : '**Ping**\nNobody still needs to update.',
+					},
+					{
+						type: 1,
+						components: [
+							{ type: 2, style: 1, label: 'Update progress', custom_id: 'sp:page' },
+							{ type: 2, style: 2, label: 'Leave', custom_id: 'sp:leave' },
+						],
+					},
+				],
+			},
+		],
+	}
+}
+
+export function leaderboardMessage(hasImage: boolean): {
+	content: string
+	flags: number
+	components: unknown[]
+	allowed_mentions: { parse: string[] }
+} {
+	const parts: unknown[] = [
+		{ type: 10, content: '**Reading sprint ended**\nHere is the final leaderboard.' },
+	]
+	if (hasImage) {
+		parts.push({ type: 12, items: [{ media: { url: 'attachment://sprint-results.png' } }] })
+	}
+	return {
+		content: '',
+		flags: COMPONENTS_V2,
+		allowed_mentions: { parse: [] },
+		components: [{ type: 17, accent_color: 0x57f287, components: parts }],
 	}
 }
 

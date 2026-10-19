@@ -6,10 +6,9 @@ function prepareSvgForPng(svg: string): string {
   return outlineSvgText(injectSvgFonts(svg))
 }
 
-/** Rasterize standings SVG to PNG for Discord (SVG uploads are unreliable in webhooks). */
-export function svgToPng(svg: string, width = 1200): Buffer {
+function rasterize(svg: string, width: number): Buffer {
   const fontBuffers = loadBundledFontBuffers()
-  const resvg = new Resvg(prepareSvgForPng(svg), {
+  const resvg = new Resvg(svg, {
     background: '#0f0e14',
     fitTo: { mode: 'width', value: width },
     font: {
@@ -23,6 +22,16 @@ export function svgToPng(svg: string, width = 1200): Buffer {
     } as { loadSystemFonts: boolean; defaultFontFamily: string; sansSerifFamily: string },
   })
   return resvg.render().asPng()
+}
+
+/** Rasterize standings SVG to PNG for Discord (SVG uploads are unreliable in webhooks). */
+export function svgToPng(svg: string, width = 1200): Buffer {
+  return rasterize(prepareSvgForPng(svg), width)
+}
+
+/** Profile cards skip text outlining. Embedded fonts are enough and the page flip stays quick. */
+export function svgToPngFast(svg: string, width = 1100): Buffer {
+  return rasterize(injectSvgFonts(svg), width)
 }
 
 export function isPngBuffer(data: Buffer): boolean {

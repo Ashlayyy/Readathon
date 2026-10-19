@@ -1,15 +1,20 @@
 import { ReadingSprint } from '../db/models/ReadingSprint.js'
-import { editChannelMessage, sendChannelMessage } from './botApi.js'
+import { DiscordMember } from '../db/models/DiscordMember.js'
+import { editChannelFile, editChannelMessage, sendChannelFile, sendChannelMessage } from './botApi.js'
 import { bumpSprintsJoined, creditSprintFinish } from './members.js'
 import { getDiscordChannelConfig } from '../services/siteSettings.js'
-import { sprintMessage } from './embeds.js'
+import { graceAnnouncement, leaderboardMessage, sprintMessage } from './embeds.js'
+import { renderSprintBoardPng } from './sprintBoard.js'
 import {
 	activeMinutes,
+	formatMinutes,
 	joinParticipant,
+	leaveParticipant,
 	pagesRead,
 	pauseParticipant,
 	resumeParticipant,
 	setParticipantPage,
+	stillWaiting,
 	switchParticipantBook,
 	type Participant,
 	type SprintView,
@@ -20,6 +25,7 @@ type SprintDoc = {
 	guildId: string
 	channelId: string
 	messageId?: string | null
+	resultMessageId?: string | null
 	hostId: string
 	hostName: string
 	status: 'scheduled' | 'running' | 'grace' | 'ended'
@@ -27,6 +33,8 @@ type SprintDoc = {
 	startsAt: Date
 	endsAt?: Date | null
 	goal?: string | null
+	title?: string | null
+	pingRoleId?: string | null
 	statsApplied?: boolean
 	participants: Array<{
 		userId: string
@@ -39,6 +47,7 @@ type SprintDoc = {
 		bankedPages?: number
 		pausedMs?: number
 		pausedAt?: Date | null
+		confirmed?: boolean
 	}>
 	markModified: (path: string) => void
 	save: () => Promise<unknown>
@@ -65,13 +74,14 @@ function toParticipant(raw: SprintDoc['participants'][number]): Participant {
 		userId: raw.userId,
 		username: raw.username,
 		bookTitle: raw.bookTitle ?? '',
-		status: raw.status === 'paused' ? 'paused' : 'reading',
+		status: raw.status === 'paused' ? 'paused' : raw.status === 'left' ? 'left' : 'reading',
 		joinedAt: new Date(raw.joinedAt).getTime(),
 		startPage: raw.startPage ?? 0,
 		currentPage: raw.currentPage ?? 0,
 		bankedPages: raw.bankedPages ?? 0,
 		pausedMs: raw.pausedMs ?? 0,
 		pausedAt: raw.pausedAt ? new Date(raw.pausedAt).getTime() : null,
+		confirmed: raw.confirmed === true,
 	}
 }
 
@@ -91,17 +101,19 @@ function viewOf(sprint: SprintDoc): SprintView {
 		startsAt: new Date(sprint.startsAt).getTime(),
 		endsAt: sprint.endsAt ? new Date(sprint.endsAt).getTime() : null,
 		goal: sprint.goal ?? null,
+		title: sprint.title ?? null,
 		participants: sprint.participants.map(toParticipant),
 	}
 }
 
-function messageBody(sprint: SprintDoc, now: number) {
-	const board = sprintMessage(viewOf(sprint), now)
+function messageBody(sprint: SprintDoc, now: number, announce = false) {
+	const board = sprintMessage(viewOf(sprint), now, Boolean(sprint.resultMessageId))
+	const roleId = sprint.pingRoleId?.trim() || ''
 	return {
-		content: board.content,
+		content: roleId ? `<@&${roleId}>` : board.content,
 		embeds: board.embeds.map((embed) => embed.toJSON()),
 		components: board.components,
-		allowed_mentions: { parse: [] as string[] },
+		allowed_mentions: announce && roleId ? { parse: [] as string[], roles: [roleId] } : { parse: [] as string[] },
 	}
 }
 
@@ -149,9 +161,20 @@ async function pingSprintRole(guildId: string, channelId: string): Promise<void>
 	const roleId = getDiscordChannelConfig('production', guildId).roleId
 	if (!roleId) return
 	await sendChannelMessage(channelId, {
-		content: `<@&${roleId}> a reading sprint just started.`,
+		content: `<@&${roleId}> A reading sprint just started.`,
 		allowed_mentions: { parse: [], roles: [roleId] },
 	})
+}
+
+export async function sprintSeat(
+	channelId: string,
+	userId: string,
+): Promise<'none' | 'out' | 'in' | 'left'> {
+	const sprint = await findActive(channelId)
+	if (!sprint) return 'none'
+	const person = sprint.participants.find((row) => row.userId === userId)
+	if (!person) return 'out'
+	return person.status === 'left' ? 'left' : 'in'
 }
 
 async function findActive(channelId: string) {
@@ -168,7 +191,7 @@ export async function liveSprintLine(userId: string): Promise<string | null> {
 	})) as SprintDoc | null
 	if (!sprint) return null
 	const person = sprint.participants.map(toParticipant).find((row) => row.userId === userId)
-	if (!person) return null
+	if (!person || person.status === 'left') return null
 	const book = person.bookTitle || 'No book yet'
 	const when = sprint.status === 'scheduled' ? 'Scheduled' : 'In a sprint now'
 	return `${when}: ${book} — ${pagesRead(person)} pages`
@@ -204,13 +227,86 @@ async function openSprint(sprint: SprintDoc) {
 	sprint.endsAt = new Date(end)
 	await sprint.save()
 	await syncMessage(sprint)
-	await pingSprintRole(sprint.guildId, sprint.channelId)
+	if (!sprint.pingRoleId) await pingSprintRole(sprint.guildId, sprint.channelId)
 	arm(sprint._id.toString(), end, () => {
 		void enterGrace(sprint._id.toString())
 	})
 }
 
-async function enterGrace(sprintId: string): Promise<{ ok: true; reply: string } | { ok: false; reply: string }> {
+async function avatarMap(people: Participant[]): Promise<Record<string, string | null>> {
+	const ids = people.map((person) => person.userId)
+	const avatars: Record<string, string | null> = {}
+	if (ids.length === 0) return avatars
+	const rows = await DiscordMember.find({ discordUserId: { $in: ids } })
+		.select('discordUserId avatarUrl')
+		.lean()
+	for (const row of rows) avatars[String(row.discordUserId)] = row.avatarUrl ?? null
+	return avatars
+}
+
+async function publishBoard(sprint: SprintDoc): Promise<void> {
+	const view = viewOf(sprint)
+	const endsAt = view.endsAt ?? Date.now()
+	let png: Buffer | null = null
+	try {
+		png = await renderSprintBoardPng({
+			durationMinutes: view.durationMinutes,
+			startsAt: view.startsAt,
+			endsAt,
+			participants: view.participants,
+			avatars: await avatarMap(view.participants),
+		})
+	} catch (error) {
+		console.error('[discord] sprint board failed:', error)
+	}
+	const body = leaderboardMessage(Boolean(png))
+	if (png && sprint.resultMessageId) {
+		const edited = await editChannelFile(sprint.channelId, sprint.resultMessageId, {
+			...body,
+			filename: 'sprint-results.png',
+			png,
+		})
+		if (edited.ok) return
+		console.error('[discord] sprint board edit failed:', edited.error)
+	}
+	if (png) {
+		const sent = await sendChannelFile(sprint.channelId, {
+			...body,
+			filename: 'sprint-results.png',
+			png,
+		})
+		if (sent.ok) {
+			sprint.resultMessageId = sent.id
+			await sprint.save()
+			return
+		}
+		console.error('[discord] sprint board send failed:', sent.error)
+	}
+	if (sprint.resultMessageId) {
+		await editChannelMessage(sprint.channelId, sprint.resultMessageId, leaderboardMessage(false))
+	}
+}
+
+async function settle(sprint: SprintDoc, now: number): Promise<void> {
+	clearTimer(sprint._id.toString())
+	await applyFinish(sprint, now)
+	await sprint.save()
+	await syncMessage(sprint)
+	await publishBoard(sprint)
+}
+
+async function announceGrace(sprint: SprintDoc): Promise<void> {
+	const ids = sprint.participants
+		.map(toParticipant)
+		.filter((person) => person.status !== 'left')
+		.map((person) => person.userId)
+	const sent = await sendChannelMessage(sprint.channelId, graceAnnouncement(ids))
+	if (!sent.ok) return
+	sprint.resultMessageId = sent.id
+	await sprint.save()
+}
+
+async function enterGrace(sprintId: string): Promise<{ ok: true; reply: string; quiet?: boolean } | { ok: false; reply: string }> {
 	return withLock(sprintId, async () => {
 		const sprint = (await ReadingSprint.findById(sprintId)) as SprintDoc | null
 		if (!sprint || sprint.status !== 'running') {
@@ -218,12 +314,18 @@ async function enterGrace(sprintId: string): Promise<{ ok: true; reply: string }
 		}
 		sprint.status = 'grace'
 		await sprint.save()
-		await syncMessage(sprint)
+		const people = sprint.participants.map(toParticipant)
 		const end = sprint.endsAt ? new Date(sprint.endsAt).getTime() : Date.now()
+		if (!stillWaiting(people)) {
+			await settle(sprint, end)
+			return { ok: true, reply: 'Sprint ended.', quiet: true }
+		}
+		await announceGrace(sprint)
+		await syncMessage(sprint)
 		arm(sprintId, end + GRACE_MS, () => {
 			void finishSprint(sprintId, sprint.hostId, true)
 		})
-		return { ok: true, reply: 'Sprint ended. You have 5 minutes to update your page.' }
+		return { ok: true, reply: 'Sprint ended.', quiet: true }
 	})
 }
 
@@ -231,7 +333,7 @@ export async function finishSprint(
 	sprintId: string,
 	actorId: string,
 	automatic: boolean,
-): Promise<{ ok: true; reply: string } | { ok: false; reply: string }> {
+): Promise<{ ok: true; reply: string; quiet?: boolean } | { ok: false; reply: string }> {
 	return withLock(sprintId, async () => {
 		const sprint = (await ReadingSprint.findById(sprintId)) as SprintDoc | null
 		if (!sprint || sprint.status === 'ended') {
@@ -240,24 +342,32 @@ export async function finishSprint(
 		if (!automatic && actorId !== sprint.hostId) {
 			return { ok: false, reply: 'Only the host can end this sprint.' }
 		}
-		clearTimer(sprintId)
 		const cancelled = sprint.status === 'scheduled'
-		if (sprint.status === 'grace') {
-			await applyFinish(sprint, Date.now())
-		} else if (!cancelled) {
-			const now = Date.now()
-			sprint.endsAt = new Date(now)
-			await applyFinish(sprint, now)
-		} else {
+		if (cancelled) {
+			clearTimer(sprintId)
 			sprint.status = 'ended'
 			sprint.statsApplied = true
+			await sprint.save()
+			await syncMessage(sprint)
+			return { ok: true, reply: 'Scheduled sprint cancelled.' }
 		}
-		await sprint.save()
-		await syncMessage(sprint)
-		return {
-			ok: true,
-			reply: cancelled ? 'Scheduled sprint cancelled.' : 'Sprint ended. Pages and time are on your `/profile`.',
-		}
+		const now = sprint.status === 'grace' && sprint.endsAt ? new Date(sprint.endsAt).getTime() : Date.now()
+		if (sprint.status !== 'grace') sprint.endsAt = new Date(now)
+		await settle(sprint, now)
+		return { ok: true, reply: 'Sprint ended. Pages and time are on your `/profile`.', quiet: true }
+	})
+}
+
+export async function maybeFinishGrace(channelId: string): Promise<boolean> {
+	const sprint = await findActive(channelId)
+	if (!sprint || sprint.status !== 'grace') return false
+	return withLock(sprint._id.toString(), async () => {
+		const fresh = (await ReadingSprint.findById(sprint._id)) as SprintDoc | null
+		if (!fresh || fresh.status !== 'grace') return false
+		if (stillWaiting(fresh.participants.map(toParticipant))) return false
+		const end = fresh.endsAt ? new Date(fresh.endsAt).getTime() : Date.now()
+		await settle(fresh, end)
+		return true
 	})
 }
 
@@ -270,9 +380,7 @@ async function catchUp(sprint: SprintDoc) {
 		if (now >= plannedEnd + GRACE_MS) {
 			sprint.status = 'running'
 			sprint.endsAt = new Date(plannedEnd)
-			await applyFinish(sprint, plannedEnd)
-			await sprint.save()
-			await syncMessage(sprint)
+			await settle(sprint, plannedEnd)
 			return
 		}
 		if (now >= plannedEnd) {
@@ -296,10 +404,8 @@ async function catchUp(sprint: SprintDoc) {
 	}
 	const end = sprint.endsAt ? new Date(sprint.endsAt).getTime() : plannedEnd
 	if (sprint.status === 'grace') {
-		if (now >= end + GRACE_MS) {
-			await applyFinish(sprint, end)
-			await sprint.save()
-			await syncMessage(sprint)
+		if (now >= end + GRACE_MS || !stillWaiting(sprint.participants.map(toParticipant))) {
+			await settle(sprint, end)
 			return
 		}
 		arm(id, end + GRACE_MS, () => {
@@ -308,9 +414,7 @@ async function catchUp(sprint: SprintDoc) {
 		return
 	}
 	if (now >= end + GRACE_MS) {
-		await applyFinish(sprint, end)
-		await sprint.save()
-		await syncMessage(sprint)
+		await settle(sprint, end)
 		return
 	}
 	if (now >= end) {
@@ -349,12 +453,17 @@ export async function beginSprint(input: {
 	hostId: string
 	hostName: string
 	durationMinutes: number
-	bookTitle: string
-	startPage: number
 	goal: string | null
-	inMinutes?: number
+	title: string | null
+	pingRoleId: string | null
+	waitSeconds: number
 }): Promise<{ ok: true; reply: string } | { ok: false; reply: string }> {
 	return withLock(`channel:${input.channelId}`, () => createSprint(input))
+}
+
+function waitLabel(seconds: number): string {
+	if (seconds < 60) return seconds === 1 ? 'in 1 second' : `in ${seconds} seconds`
+	return `in ${formatMinutes(Math.round(seconds / 60))}`
 }
 
 async function createSprint(input: {
@@ -363,26 +472,19 @@ async function createSprint(input: {
 	hostId: string
 	hostName: string
 	durationMinutes: number
-	bookTitle: string
-	startPage: number
 	goal: string | null
-	inMinutes?: number
+	title: string | null
+	pingRoleId: string | null
+	waitSeconds: number
 }): Promise<{ ok: true; reply: string } | { ok: false; reply: string }> {
 	const busy = await ensureChannelFree(input.channelId)
 	if (busy) return { ok: false, reply: busy }
 	const now = Date.now()
-	const delay = (input.inMinutes ?? 0) * 60_000
+	const delay = Math.max(0, input.waitSeconds) * 1000
 	const startsAt = now + delay
-	const joined = joinParticipant({
-		userId: input.hostId,
-		username: input.hostName,
-		bookTitle: input.bookTitle,
-		startPage: input.startPage,
-		now: startsAt,
-		existing: [],
-	})
-	if (!joined.ok) return { ok: false, reply: joined.error }
+	const length = formatMinutes(input.durationMinutes)
 	const scheduled = delay > 0
+	const title = input.title?.trim().slice(0, 100) || null
 	const sprint = (await ReadingSprint.create({
 		guildId: input.guildId,
 		channelId: input.channelId,
@@ -393,17 +495,18 @@ async function createSprint(input: {
 		startsAt: new Date(startsAt),
 		endsAt: scheduled ? null : new Date(startsAt + input.durationMinutes * 60_000),
 		goal: input.goal,
-		participants: joined.value.map(fromParticipant),
+		title,
+		pingRoleId: input.pingRoleId,
+		participants: [],
 	})) as unknown as SprintDoc
-	await bumpSprintsJoined(input.hostId)
-	const sent = await sendChannelMessage(input.channelId, messageBody(sprint, now))
+	const sent = await sendChannelMessage(input.channelId, messageBody(sprint, now, true))
 	if (!sent.ok) {
 		await ReadingSprint.deleteOne({ _id: sprint._id })
 		return { ok: false, reply: `I couldn't post in that channel. ${sent.error}` }
 	}
 	sprint.messageId = sent.id
 	await sprint.save()
-	if (!scheduled) {
+	if (!scheduled && !input.pingRoleId) {
 		await pingSprintRole(input.guildId, input.channelId)
 		arm(sprint._id.toString(), new Date(sprint.endsAt ?? startsAt).getTime(), () => {
 			void enterGrace(sprint._id.toString())
@@ -419,8 +522,8 @@ async function createSprint(input: {
 	return {
 		ok: true,
 		reply: scheduled
-			? `Sprint scheduled in this channel for ${input.durationMinutes} minutes.`
-			: `Sprint started in this channel for ${input.durationMinutes} minutes.`,
+			? `Sprint announced for ${length}. Reading starts ${waitLabel(input.waitSeconds)}. Press Join before then.`
+			: `Sprint started for ${length}. Press Join when you are ready.`,
 	}
 }
 
@@ -429,7 +532,7 @@ async function mutateParticipant(
 	userId: string,
 	username: string,
 	change: (person: Participant, sprint: SprintDoc) => { ok: true; value: Participant } | { ok: false; error: string },
-	options?: { requireRunning?: boolean; allowGrace?: boolean },
+	options?: { requireRunning?: boolean; allowGrace?: boolean; allowLeft?: boolean },
 ): Promise<{ ok: true; reply: string } | { ok: false; reply: string }> {
 	const sprint = await findActive(channelId)
 	if (!sprint) return { ok: false, reply: 'There is no sprint in this channel.' }
@@ -450,6 +553,9 @@ async function mutateParticipant(
 		const people = fresh.participants.map(toParticipant)
 		const person = people.find((row) => row.userId === userId)
 		if (!person) return { ok: false, reply: 'Join the sprint first.' }
+		if (person.status === 'left' && !options?.allowLeft) {
+			return { ok: false, reply: 'You left this sprint. Press Join to pick up where you left off.' }
+		}
 		person.username = username
 		const next = change(person, fresh)
 		if (!next.ok) return { ok: false, reply: next.error }
@@ -471,16 +577,17 @@ export async function joinSprint(input: {
 	startPage: number
 }): Promise<{ ok: true; reply: string } | { ok: false; reply: string }> {
 	const sprint = await findActive(input.channelId)
-	if (!sprint) return { ok: false, reply: 'There is no sprint in this channel. Start one with `/sprint start`.' }
+	if (!sprint) return { ok: false, reply: 'There is no sprint in this channel. Start one with `/sprint`.' }
 	return withLock(sprint._id.toString(), async () => {
 		const fresh = (await ReadingSprint.findById(sprint._id)) as SprintDoc | null
 		if (!fresh || fresh.status === 'ended') {
 			return { ok: false, reply: 'That sprint is already over.' }
 		}
-		if (fresh.status === 'grace') {
-			return { ok: false, reply: 'That sprint has ended. Update your page with the button if the window is still open.' }
-		}
 		const people = fresh.participants.map(toParticipant)
+		const prior = people.find((person) => person.userId === input.userId)
+		if (fresh.status === 'grace' && prior?.status !== 'left') {
+			return { ok: false, reply: 'That sprint has ended. Update your page on the sprint message if you are still in it.' }
+		}
 		const joined = joinParticipant({
 			userId: input.userId,
 			username: input.username,
@@ -493,8 +600,9 @@ export async function joinSprint(input: {
 		fresh.participants = joined.value.map(fromParticipant) as SprintDoc['participants']
 		fresh.markModified('participants')
 		await fresh.save()
-		await bumpSprintsJoined(input.userId)
+		if (!joined.rejoined) await bumpSprintsJoined(input.userId)
 		await syncMessage(fresh)
+		if (joined.rejoined) return { ok: true, reply: 'You are back in. It picks up where you left off.' }
 		const when = fresh.status === 'scheduled' ? 'You are in. It has not started yet.' : 'You joined the sprint.'
 		return { ok: true, reply: when }
 	})
@@ -510,11 +618,45 @@ export async function updateSprintPage(input: {
 		input.channelId,
 		input.userId,
 		input.username,
-		(person) => setParticipantPage(person, input.page),
+		(person, sprint) => {
+			const next = setParticipantPage(person, input.page, { allowPaused: sprint.status === 'grace' })
+			if (!next.ok) return next
+			if (sprint.status === 'grace') next.value.confirmed = true
+			return next
+		},
 		{ requireRunning: true, allowGrace: true },
 	)
 	if (!result.ok) return result
-	return { ok: true as const, reply: `Page set to ${input.page}.` }
+	const finished = await maybeFinishGrace(input.channelId)
+	return {
+		ok: true as const,
+		reply: finished
+			? `Page set to ${input.page}. Everyone has updated, so the leaderboard is posted.`
+			: `Page set to ${input.page}.`,
+	}
+}
+
+export async function leaveSprint(input: {
+	channelId: string
+	userId: string
+	username: string
+	page: number
+}) {
+	const result = await mutateParticipant(
+		input.channelId,
+		input.userId,
+		input.username,
+		(person) => leaveParticipant(person, input.page, Date.now()),
+		{ allowLeft: true },
+	)
+	if (!result.ok) return result
+	const finished = await maybeFinishGrace(input.channelId)
+	return {
+		ok: true as const,
+		reply: finished
+			? 'You left. Everyone still in has updated, so the leaderboard is posted.'
+			: 'You left the sprint. Press Join to pick up where you left off.',
+	}
 }
 
 export async function pauseSprint(input: { channelId: string; userId: string; username: string }) {

@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 
 const rootPkg = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8'),
@@ -17,7 +18,14 @@ export default defineConfig(({ mode }) => ({
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
   },
-  plugins: [vue(), ...(mode === 'development' ? [vueDevTools()] : [])],
+  build: {
+    sourcemap: true, // Source map generation must be turned on
+  },
+  plugins: [vue(), ...(mode === 'development' ? [vueDevTools()] : []), sentryVitePlugin({
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      org: "bookbaddies",
+      project: "readathon",
+    }),],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

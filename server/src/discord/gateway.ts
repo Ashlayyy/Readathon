@@ -140,7 +140,7 @@ async function startDiscordGatewayInner(): Promise<void> {
 			}
 			if (interaction.isButton() || interaction.isModalSubmit()) {
 				const id = interaction.customId
-				if (id.startsWith('sp:') || id.startsWith('bk:')) {
+				if (id.startsWith('sp:') || id.startsWith('bk:') || id.startsWith('pf:')) {
 					await handleMemberComponent(interaction)
 				}
 			}

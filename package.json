@@ -25,6 +25,7 @@
 		"concurrently": "^9.2.4"
 	},
 	"dependencies": {
+		"@sentry/vite-plugin": "^11.8.0",
 		"@sentry/vue": "^11.8.0"
 	}
 }
