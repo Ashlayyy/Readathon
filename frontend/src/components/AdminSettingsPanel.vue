@@ -1907,9 +1907,11 @@ function openWrapPreview() {
 							<p class="discord-step">Step 3</p>
 							<h4>Slash command roles (primary only)</h4>
 							<p class="hint">
-								<code>/readathon</code> is admin-only and registered only on
+								<code>/bookbaddies</code> is admin-only and registered only on
 								<strong>{{ guildLabel(discordPrimaryGuildId) }}</strong
-								>. Configure these roles while that server is selected under
+								>. Member commands such as <code>/sprint</code> and
+								<code>/profile</code> are open to everyone on that server.
+								Configure these roles while that server is selected under
 								<strong>Editing</strong>, then Save.
 							</p>
 						</div>

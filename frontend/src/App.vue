@@ -19,8 +19,13 @@ function prefetchProfile() {
 }
 
 const { user, logout } = useAuth();
-const { config, configLoading, configError, loadConfig, exitMonthlyThemePreview } =
-	useConfig();
+const {
+	config,
+	configLoading,
+	configError,
+	loadConfig,
+	exitMonthlyThemePreview,
+} = useConfig();
 const { previewActive, previewTitle } = useMonthlyThemePreview();
 const { admin } = useAdminCopy();
 const route = useRoute();
@@ -40,6 +45,16 @@ const downtimeActive = computed(
 
 const nav = computed(() => config.value?.copy.nav ?? {});
 
+const teamLabel = computed(() => {
+	if (!user.value) return '';
+	const team = config.value?.teams?.find(
+		(item) => item.id === user.value?.teamId,
+	);
+	if (team) return `${team.icon} ${team.name}`.trim();
+	if (user.value.status === 'pending') return 'Awaiting realm';
+	return 'No realm';
+});
+
 const playNavItems = computed(() => [
 	{ to: '/prompts', label: nav.value.prompts ?? 'Prompts' },
 	{ to: '/standings', label: nav.value.standings ?? 'Standings' },
@@ -57,15 +72,15 @@ const aboutNavItems = computed(() => {
 		{ to: '/shelf', label: nav.value.shelf ?? 'Shelf' },
 		{ to: '/hall-of-fame', label: nav.value.hallOfFame ?? 'Hall of Fame' },
 		{ to: '/faq', label: nav.value.faq ?? 'FAQ' },
-	]
-	const slug = config.value?.site?.seasonArchive?.slug?.trim()
+	];
+	const slug = config.value?.site?.seasonArchive?.slug?.trim();
 	if (slug) {
 		items.splice(3, 0, {
 			to: `/archive/${slug}`,
 			label: nav.value.archive ?? 'Archive',
-		})
+		});
 	}
-	return items
+	return items;
 });
 
 watch(
@@ -235,7 +250,7 @@ function closeMenu() {
 										user.unreadAnswers
 									}}</span>
 								</span>
-								<span class="profile-email">{{ user.email }}</span>
+								<span class="profile-email">{{ teamLabel }}</span>
 							</span>
 						</RouterLink>
 						<button
@@ -332,7 +347,7 @@ function closeMenu() {
 										user.unreadAnswers
 									}}</span>
 								</span>
-								<span class="profile-email">{{ user.email }}</span>
+								<span class="profile-email">{{ teamLabel }}</span>
 							</span>
 						</RouterLink>
 						<button
@@ -424,7 +439,11 @@ function closeMenu() {
 					<RouterLink to="/faq">{{ nav.faq ?? 'FAQ' }}</RouterLink>
 					<RouterLink to="/changelog">Changelog</RouterLink>
 				</nav>
-				<RouterLink to="/changelog" class="app-version" :title="`v${APP_VERSION}`">
+				<RouterLink
+					to="/changelog"
+					class="app-version"
+					:title="`v${APP_VERSION}`"
+				>
 					v{{ APP_VERSION }}
 				</RouterLink>
 			</div>
@@ -465,7 +484,10 @@ function closeMenu() {
 
 .site-header {
 	border-bottom: 1px solid var(--realm-border);
-	background: var(--realm-header-bg, color-mix(in srgb, var(--realm-bg) 92%, transparent));
+	background: var(
+		--realm-header-bg,
+		color-mix(in srgb, var(--realm-bg) 92%, transparent)
+	);
 	backdrop-filter: blur(8px);
 	position: sticky;
 	top: 0;
@@ -843,7 +865,11 @@ function closeMenu() {
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 0.65rem;
-	border-color: color-mix(in srgb, var(--realm-accent) 45%, var(--realm-border));
+	border-color: color-mix(
+		in srgb,
+		var(--realm-accent) 45%,
+		var(--realm-border)
+	);
 	background: color-mix(in srgb, var(--realm-accent) 14%, var(--realm-surface));
 }
 

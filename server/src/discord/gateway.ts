@@ -13,6 +13,9 @@ import {
 	handleReadathonCommand,
 	registerGuildCommands,
 } from './commands.js'
+import { card, EPHEMERAL } from './embeds.js'
+import { handleMemberCommand, handleMemberComponent } from './memberCommands.js'
+import { restoreSprintTimers } from './sprint.js'
 
 let client: Client | null = null
 let starting: Promise<void> | null = null
@@ -87,7 +90,7 @@ async function startDiscordGatewayInner(): Promise<void> {
 					guildId: primary,
 				})
 				console.log(
-					`[discord] registered /readathon commands on primary guild ${primary}`,
+					`[discord] registered /bookbaddies and member commands on primary guild ${primary}`,
 				)
 			} catch (e) {
 				console.error(
@@ -101,7 +104,9 @@ async function startDiscordGatewayInner(): Promise<void> {
 			)
 		}
 
-		// Drop leftover /readathon registrations from non-primary configured guilds
+		await restoreSprintTimers()
+
+		// Drop leftover slash commands from non-primary configured guilds
 		const configs = getDiscordGuildConfigs()
 		for (const gId of Object.keys(configs)) {
 			if (!gId || gId === primary) continue
@@ -124,17 +129,36 @@ async function startDiscordGatewayInner(): Promise<void> {
 	})
 
 	next.on(Events.InteractionCreate, async (interaction) => {
-		if (!interaction.isChatInputCommand()) return
-		if (interaction.commandName !== 'readathon') return
 		try {
-			await handleReadathonCommand(interaction)
+			if (interaction.isChatInputCommand()) {
+				if (interaction.commandName === 'bookbaddies') {
+					await handleReadathonCommand(interaction)
+				} else {
+					await handleMemberCommand(interaction)
+				}
+				return
+			}
+			if (interaction.isButton() || interaction.isModalSubmit()) {
+				const id = interaction.customId
+				if (id.startsWith('sp:') || id.startsWith('bk:')) {
+					await handleMemberComponent(interaction)
+				}
+			}
 		} catch (e) {
 			console.error('[discord] command handler error:', e)
+			if (
+				!interaction.isChatInputCommand() &&
+				!interaction.isButton() &&
+				!interaction.isModalSubmit()
+			) {
+				return
+			}
 			const msg = 'Something went wrong running that command.'
+			const payload = { embeds: [card('Book Baddies', msg)], flags: EPHEMERAL }
 			if (interaction.deferred || interaction.replied) {
-				await interaction.followUp({ content: msg, ephemeral: true }).catch(() => {})
+				await interaction.followUp(payload).catch(() => {})
 			} else {
-				await interaction.reply({ content: msg, ephemeral: true }).catch(() => {})
+				await interaction.reply(payload).catch(() => {})
 			}
 		}
 	})
